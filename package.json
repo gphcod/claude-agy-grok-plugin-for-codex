@@ -1,0 +1,24 @@
+{
+  "name": "claude-agy-grok-plugin-for-codex",
+  "version": "0.1.0",
+  "description": "Council for Codex: one Codex plugin that calls Claude Code, Gemini (agy) and Grok for questions, discussions, reviews and authorized tasks.",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18.20.8 <19 || >=22.19.0"
+  },
+  "scripts": {
+    "test": "node scripts/run-tests.mjs",
+    "test:live": "node scripts/run-tests.mjs --live",
+    "test:e2e": "node tests/e2e-codex-skill.mjs",
+    "validate": "npm test && node scripts/validate-plugin.mjs",
+    "measure": "node scripts/measure.mjs",
+    "core:check": "node scripts/core-check.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gphcod/claude-agy-grok-plugin-for-codex.git"
+  },
+  "homepage": "https://github.com/gphcod/claude-agy-grok-plugin-for-codex"
+}

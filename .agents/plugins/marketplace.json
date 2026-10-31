@@ -1,0 +1,20 @@
+{
+  "name": "council-for-codex",
+  "interface": {
+    "displayName": "Council for Codex"
+  },
+  "plugins": [
+    {
+      "name": "council",
+      "source": {
+        "source": "local",
+        "path": "./plugins/council"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

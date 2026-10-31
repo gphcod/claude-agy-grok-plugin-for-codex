@@ -1,0 +1,40 @@
+{
+  "name": "council",
+  "version": "0.1.0",
+  "description": "Ask Claude Code, Gemini (agy) or Grok from Codex: questions, discussions, structured reviews and user-authorized tasks, with provider, model and effort chosen per call.",
+  "author": {
+    "name": "gphcod"
+  },
+  "homepage": "https://github.com/gphcod/claude-agy-grok-plugin-for-codex",
+  "repository": "https://github.com/gphcod/claude-agy-grok-plugin-for-codex",
+  "license": "Apache-2.0",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "gemini",
+    "grok",
+    "code-review",
+    "second-opinion",
+    "delegation"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Council",
+    "shortDescription": "Second opinions, reviews and authorized tasks from Claude Code, Gemini and Grok",
+    "longDescription": "One $council skill runs the local claude, agy and grok CLIs: one call per exchange, read-only by default, delta replies with stable finding ids, hash-checked batched reviews, and user-authorized tasks. Codex stays in charge.",
+    "developerName": "gphcod",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/gphcod/claude-agy-grok-plugin-for-codex",
+    "defaultPrompt": [
+      "Ask Claude for a second opinion on this design",
+      "Have Grok review this change",
+      "Fan this question out to Claude, Gemini and Grok"
+    ],
+    "brandColor": "#2F6F8F"
+  }
+}

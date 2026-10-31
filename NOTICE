@@ -1,0 +1,56 @@
+Council for Codex
+Copyright 2026 gphcod
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This plugin ports code and behaviour from the following sources (PLAN.md S0.1).
+Each entry names the repository, the version and commit read, its license, and
+the files taken from it with their SHA-256 at the source. "Adapted" means the
+file was copied and then changed; the retained notice text follows each entry.
+
+1. CLAUDEX: claude_plugin_for_codex
+   https://github.com/gphcod/claude_plugin_for_codex (fork of https://github.com/yanchuk/claude-plugin-for-codex)
+   Version 0.5.0, commit be9fe54, plugin under plugins/claude-code-advisor
+   License: MIT. Retained notice:
+     MIT License. Copyright (c) 2026 Yanchuk
+     Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+     associated documentation files (the "Software"), to deal in the Software without restriction,
+     including without limitation the rights to use, copy, modify, merge, publish, distribute,
+     sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+     furnished to do so, subject to the following conditions: The above copyright notice and this
+     permission notice shall be included in all copies or substantial portions of the Software.
+     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+   Files taken: (none in S0; S1 and later steps append entries below)
+
+2. GROKX: grok_plugin_for_codex
+   https://github.com/gphcod/grok_plugin_for_codex (original by stdevMac, https://github.com/stdevMac)
+   Version 1.1.0, commit 148bc55, plugin under plugins/grok
+   License: Apache-2.0 (no NOTICE file in the source).
+   Files taken: (none in S0)
+
+3. AGYX: gemini-plugin-for-codex
+   https://github.com/gphcod/gemini-plugin-for-codex
+   Version 0.1.2, commit ba24910, skill under skills/agy
+   License: MIT. Copyright (c) 2026 gphcod. Its NOTICE credits the transport and packaging design of
+   https://github.com/gphcod/gemini-plugin-4-dual-hosts-codex-and-cc (cc-gemini-plugin 2.0.0, MIT;
+   thepushkarp, wicojan, creatrco) and the handbook at https://github.com/gphcod/handbook.
+   Files taken: (none in S0)
+
+4. CODEXCC: codex-plugin-cc (Codex for Claude Code)
+   https://github.com/gphcod/codex-plugin-cc, installed cache ~/.claude/plugins/cache/gphcod-codex/codex/2.3.2
+   Version 2.3.2 (cache; no Git commit available locally)
+   License: Apache-2.0. Retained notice: "Copyright 2026 OpenAI. Licensed under the Apache License,
+   Version 2.0." Author field: "OpenAI (original); gphcod (fork)".
+   Files taken: (none in S0; S2.3 reads jobs.mjs:56,109-124 and lifecycle.mjs for pruning, 16-char ids and
+   the held-pipe wait)
+
+5. GEMINICC: gemini-plugin-cc
+   Installed cache ~/.claude/plugins/cache/gemini-plugin-cc/gemini/2.1.0 (author Momin Abrar Ghalib)
+   Version 2.1.0. No LICENSE file is present in the cache, so per S0.1 nothing is copied from it:
+   its review templates and review-output.mjs behaviour are reimplemented, not copied.
+
+6. COUNCILCC: codex-agy-grok-plugin-for-claude (the twin plan)
+   https://github.com/gphcod/codex-agy-grok-plugin-for-claude, PLAN.md read for shared wording.
+   Files taken: none (its core is not implemented yet; docs/shared-core.md tracks the comparison).
+
+Files taken, with source SHA-256 (appended by the step that takes them):

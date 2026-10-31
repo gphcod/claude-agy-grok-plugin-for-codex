@@ -1,0 +1,4 @@
+interface:
+  display_name: "Council"
+  short_description: "Ask Claude Code, Gemini or Grok from Codex"
+  default_prompt: "Use $council to ask Claude, Gemini or Grok for an independent view, a review or an authorized task, and summarize the answer."
