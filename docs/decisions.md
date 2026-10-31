@@ -59,3 +59,8 @@ Rulings on the S1 questions, applied to Part A and Part B:
 - **F8:** `docs/test-port.md` enumerates every donor and twin case by source file and test name.
 - **F9:** `tests/skill.test.mjs` uses `\r?\n`; `.gitattributes` sets `* text=auto eol=lf`.
 - **Settings-merge evidence:** cited from the twin (above) instead of a new paid probe.
+
+## 2026-10-31 S2.1: null adapter and fake child
+
+- `core/host.mjs` (the mapping table's "new" row, listed under S2.2) is created in S2.1 with constants only, because the null adapter sets the five guard variables from it; S2.2 adds nothing else to it. No other deviation.
+- The fake child's protocol (`start`/`text`/`tool`/`end` NDJSON) is council's own; the twin's S2.1 names the same scenarios and profiles. `fail-then-success` counts attempts through `COUNCIL_FAKE_LOG`, so the scenario needs a log file.
