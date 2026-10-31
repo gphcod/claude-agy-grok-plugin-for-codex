@@ -120,6 +120,16 @@ test("fake-claude refuses a non-conforming launch with exit 99 and no output", (
     ["hooks not disabled", claudeArgs().map((a) => (a === '{"disableAllHooks":true}' ? "{}" : a)), claudeStdin("x"), DEPTH],
     ["draft 2020-12 schema", claudeArgs({ schema: true }).map((a) => a.replace("http://json-schema.org/draft-07/schema#", "https://json-schema.org/draft/2020-12/schema")), claudeStdin("x"), DEPTH],
     ["web tool without --allowedTools", claudeArgs({ web: true }).filter((a, i, all) => a !== "--allowedTools" && all[i - 1] !== "--allowedTools"), claudeStdin("x"), DEPTH],
+    ["--tools Read alone", claudeArgs().map((a) => (a === "Read,Glob,Grep" ? "Read" : a)), claudeStdin("x"), DEPTH],
+    ["unknown flag --dangerously-skip-permissions", claudeArgs().concat(["--dangerously-skip-permissions"]), claudeStdin("x"), DEPTH],
+    ["--allowedTools wider than the web tools", claudeArgs({ web: true }).map((a) => (a === "WebFetch,WebSearch" ? "WebFetch,WebSearch,Bash" : a)), claudeStdin("x"), DEPTH],
+    ["--allowedTools on a plain read-only turn", claudeArgs().concat(["--allowedTools", "Read"]), claudeStdin("x"), DEPTH],
+    ["task tools missing NotebookEdit", claudeArgs({ task: true }).map((a) => (a === "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash" ? "Read,Glob,Grep,Edit,Write,MultiEdit,Bash" : a)), claudeStdin("x"), DEPTH],
+    ["schema with only $schema", claudeArgs().concat(["--json-schema", '{"$schema":"http://json-schema.org/draft-07/schema#"}']), claudeStdin("x"), DEPTH],
+    ["schema with one property changed", claudeArgs().concat(["--json-schema", fs.readFileSync(SCHEMA, "utf8").replace('"minimum": 0', '"minimum": 0.5')]), claudeStdin("x"), DEPTH],
+    ["two stdin lines", claudeArgs(), claudeStdin("a") + claudeStdin("b"), DEPTH],
+    ["stdin without the trailing LF plus junk", claudeArgs(), claudeStdin("a").trimEnd() + " trailing", DEPTH],
+    ["value option without a value", claudeArgs().concat(["--model"]), claudeStdin("x"), DEPTH],
   ];
   for (const [label, args, stdin, env] of cases) {
     const r = run("fake-claude.mjs", args, { stdin, env });
@@ -182,7 +192,23 @@ test("fake-agy answers its probes and plays every scenario", () => {
   assert.equal(slow.status, 0);
 });
 
+test("fake-agy accepts task settings that keep a global write_file/edit_file deny and plays the denial (A5.1 keeps the global lists)", () => {
+  const retained = path.join(dir, "settings-task-global-deny.json");
+  fs.writeFileSync(retained, JSON.stringify({ permissions: { allow: ["command(git status)"], ask: [], deny: ["write_file(*)", "edit_file(*)"] }, toolPermission: "always-proceed" }));
+  const r = run("fake-agy.mjs", agyArgs({ task: true }).map((a) => (a === taskSettings ? retained : a)), { stdin: agyStdin("edit value.txt"), env: DEPTH, scenario: "denied" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.events.some((e) => e.step_update?.state === "ERROR" && e.step_update.tool_name === "write_file"), "the retained deny produces the denial");
+  const plain = run("fake-agy.mjs", agyArgs({ task: true }).map((a) => (a === taskSettings ? retained : a)), { stdin: agyStdin("x"), env: DEPTH, scenario: "task" });
+  assert.equal(plain.status, 0, "a task without --allow-command keeps the global always-proceed");
+});
+
 test("fake-agy refuses a non-conforming launch", () => {
+  const emptySchema = path.join(dir, "schema-empty.json");
+  fs.writeFileSync(emptySchema, "");
+  const wrongSchema = path.join(dir, "schema-wrong.json");
+  fs.writeFileSync(wrongSchema, fs.readFileSync(SCHEMA, "utf8").replace('"needs-attention"', '"changes"'));
+  const proceedSettings = path.join(dir, "settings-task-proceed.json");
+  fs.writeFileSync(proceedSettings, JSON.stringify({ permissions: { allow: ["command(node check.mjs)", "unsandboxed(node check.mjs)"], ask: [], deny: [] }, toolPermission: "always-proceed" }));
   const badSettings = path.join(dir, "settings-bad.json");
   fs.writeFileSync(badSettings, JSON.stringify({ permissions: { allow: ["run_command(*)"], ask: [], deny: ["write_file(*)"] }, agentMode: "", toolPermission: "request-review" }));
   const cases = [
@@ -193,6 +219,11 @@ test("fake-agy refuses a non-conforming launch", () => {
     ["no --sandbox", agyArgs().filter((a) => a !== "--sandbox"), DEPTH],
     ["guard variable missing", agyArgs(), { ...DEPTH, COUNCIL_DEPTH: "" }],
     ["two stdin lines", agyArgs(), DEPTH, agyStdin("a") + agyStdin("b")],
+    ["unknown flag", agyArgs().concat(["--dangerously-skip-permissions"]), DEPTH],
+    ["bare positional", agyArgs().concat(["hello"]), DEPTH],
+    ["empty schema file", agyArgs({ schema: true }).map((a) => (a === SCHEMA ? emptySchema : a)), DEPTH],
+    ["schema file with a changed enum", agyArgs({ schema: true }).map((a) => (a === SCHEMA ? wrongSchema : a)), DEPTH],
+    ["task allow pair under always-proceed", agyArgs({ task: true }).map((a) => (a === taskSettings ? proceedSettings : a)), DEPTH],
   ];
   for (const [label, args, env, stdin = agyStdin("x")] of cases) {
     const r = run("fake-agy.mjs", args, { stdin, env });
@@ -253,9 +284,14 @@ test("fake-grok refuses a non-conforming launch", () => {
     ["rules enabled on a read-only turn", grokArgs(), { ...grokEnv(), GROK_CLAUDE_RULES_ENABLED: "1" }],
     ["--add-dir", grokArgs().concat(["--add-dir", dir]), grokEnv()],
     ["effort max outside the error scenario", grokArgs({ effort: "max" }), grokEnv()],
+    ["bare positional prompt", grokArgs().concat(["hello"]), grokEnv()],
+    ["unknown flag", grokArgs().concat(["--dangerously-skip-permissions"]), grokEnv()],
+    ["inline schema {}", grokArgs({ review: true }).map((a) => (a.startsWith("{") && a.includes("$schema") ? "{}" : a)), grokEnv()],
+    ["inline schema with a changed severity enum", grokArgs({ review: true }).map((a) => (a.startsWith("{") && a.includes("$schema") ? a.replace('"critical"', '"blocker"') : a)), grokEnv()],
+    ["non-empty stdin", grokArgs(), grokEnv(), "hello\n"],
   ];
-  for (const [label, args, env] of cases) {
-    const r = run("fake-grok.mjs", args, { env });
+  for (const [label, args, env, stdin = ""] of cases) {
+    const r = run("fake-grok.mjs", args, { env, stdin });
     assert.equal(r.status, 99, `${label}: ${r.stderr}`);
     assert.equal(r.stdout, "", label);
   }

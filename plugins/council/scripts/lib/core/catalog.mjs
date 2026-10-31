@@ -78,22 +78,34 @@ export function resolveModel(provider, input, catalog) {
   const alias = Object.hasOwn(catalog.aliases, input) ? input : null;
   const id = alias ? catalog.aliases[input] : input;
   if (provider === "claude" && id === "default") return { id: null, verified: true, alias: "default" };
-  const known = Object.hasOwn(catalog.models, id);
-  return { id, verified: known || alias !== null, alias };
+  // Verified means the resolved id is in the (static or refreshed) model table; an alias whose target a refreshed
+  // listing no longer carries is unverified, so the footer says so and no clamp list is assumed.
+  return { id, verified: Object.hasOwn(catalog.models, id), alias };
+}
+
+/** The effort suffix of a Gemini id, only when the family offers that effort; `gemini-4-argon-xhigh` has none. */
+export function effortSuffix(id, catalog) {
+  if (!catalog.suffixed || typeof id !== "string") return null;
+  const m = SUFFIX.exec(id);
+  if (!m) return null;
+  const family = id.slice(0, -m[0].length);
+  return catalog.models[family]?.includes(m[1]) ? m[1] : null;
 }
 
 /**
  * `--effort` resolution (A3.3): downward clamp against the model's own effort list, the lowest offered when the request
- * is below all; Gemini's suffixed id is an explicit effort (passed unchanged; a conflicting --effort exits 2); an unknown
- * model passes the request through unclamped; no request yields no effort.
+ * is below all; Gemini's suffixed id is an explicit effort (passed unchanged): only an explicit `--effort` on argv may
+ * conflict with it (exit 2), while a tier default or an inherited thread effort yields to the suffix (`explicit: false`);
+ * a suffix the family does not offer makes the id unknown; an unknown model passes the request through unclamped; no
+ * request yields no effort.
  */
-export function resolveEffort(provider, id, requested, catalog) {
+export function resolveEffort(provider, id, requested, catalog, { explicit = true } = {}) {
   if (requested !== undefined && !EFFORTS.includes(requested)) throw new UsageError(`unknown effort ${requested}; use ${EFFORTS.join(", ")}`);
   if (id === null) return { effort: requested, requested, clamped: false }; // Claude `default`: the CLI's model, all five accepted
-  const suffix = catalog.suffixed ? SUFFIX.exec(id)?.[1] : undefined;
+  const suffix = effortSuffix(id, catalog);
   if (suffix) {
-    if (requested !== undefined && requested !== suffix) throw new UsageError(`--model ${id} conflicts with --effort ${requested}`);
-    return { effort: suffix, requested: requested ?? suffix, clamped: false, suffixed: true };
+    if (explicit && requested !== undefined && requested !== suffix) throw new UsageError(`--model ${id} conflicts with --effort ${requested}`);
+    return { effort: suffix, requested: suffix, clamped: false, suffixed: true };
   }
   const offered = catalog.models[id];
   if (!offered || requested === undefined) return { effort: requested, requested, clamped: false };

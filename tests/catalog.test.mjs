@@ -38,6 +38,31 @@ test("Gemini: clamp, suffix conflict, suffixed id alone, family verified, alias"
   assert.deepEqual(resolve("gemini", "gemini-9-unknown", "xhigh"), { id: "gemini-9-unknown", verified: false, alias: null, effort: "xhigh", requested: "xhigh", clamped: false });
 });
 
+test("Gemini suffix versus tier or inherited effort: only an explicit --effort conflicts; a foreign suffix is unknown", () => {
+  const catalog = cat("gemini");
+  const tier = resolveTier("gemini", "consult", { model: "gemini-4-argon-low" });
+  assert.deepEqual([tier.model, tier.effort, tier.explicit.effort], ["gemini-4-argon-low", "high", false]);
+  const m = resolveModel("gemini", tier.model, catalog);
+  assert.deepEqual(resolveEffort("gemini", m.id, tier.effort, catalog, { explicit: tier.explicit.effort }),
+    { effort: "low", requested: "low", clamped: false, suffixed: true }, "the tier's high yields to the suffix");
+  assert.deepEqual(resolveEffort("gemini", "gemini-4-argon-low", "high", catalog, { explicit: false }).effort, "low", "an inherited thread effort yields too");
+  assert.throws(() => resolveEffort("gemini", "gemini-4-argon-low", "high", catalog, { explicit: true }), UsageError, "argv --effort conflicts");
+  assert.throws(() => resolveEffort("gemini", "gemini-4-argon-low", "high", catalog), UsageError, "explicit is the default");
+  const foreign = resolve("gemini", "gemini-4-argon-xhigh");
+  assert.deepEqual(foreign, { id: "gemini-4-argon-xhigh", verified: false, alias: null, effort: undefined, requested: undefined, clamped: false });
+  const foreignRequested = resolve("gemini", "gemini-4-argon-xhigh", "xhigh");
+  assert.deepEqual([foreignRequested.verified, foreignRequested.effort, foreignRequested.suffixed], [false, "xhigh", undefined], "never effort xhigh verified");
+  assert.equal(resolve("gemini", "gemini-9-new-high").verified, false, "a suffix on an unknown family is not an effort");
+});
+
+test("an alias whose target left a refreshed catalog is unverified and gets no clamp", async () => {
+  const h = home();
+  await refreshCatalog(h, "grok", async () => "Available models:\n  * grok-5 (default)\n  - grok-4.7\n");
+  const refreshed = loadCatalog(h, "grok");
+  assert.deepEqual(resolve("grok", "4.6", "max", refreshed), { id: "grok-4.6", verified: false, alias: "4.6", effort: "max", requested: "max", clamped: false });
+  assert.deepEqual(resolve("grok", "4.7", "max", refreshed), { id: "grok-4.7", verified: true, alias: "4.7", effort: "xhigh", requested: "max", clamped: true });
+});
+
 test("Grok: max clamps to xhigh, low stays low, aliases, unknown id passes through", () => {
   assert.deepEqual(resolve("grok", "grok-4.7", "max"), { id: "grok-4.7", verified: true, alias: null, effort: "xhigh", requested: "max", clamped: true });
   assert.equal(resolve("grok", "grok-4.7", "low").effort, "low");

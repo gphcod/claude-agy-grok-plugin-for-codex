@@ -5,8 +5,8 @@
 // COUNCIL_FAKE_SCENARIO: ok, resume, denied, effort-error, review-findings, review-malformed, large-review, slow, hold-pipes.
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
-import { UUID, batchOf, emitJson, expect, fileExists, flagValue, flagValues, holdPipes, log, mismatch, requireDepth, scenario,
-  sleep, spikeText, streams, SLOW_MS } from "./fake-common.mjs";
+import { UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, flagValues, holdPipes, log, mismatch, readStdin, repoSchema,
+  requireDepth, scenario, sleep, spikeText, streams, SLOW_MS } from "./fake-common.mjs";
 
 const argv = process.argv.slice(2);
 const which = scenario();
@@ -21,6 +21,8 @@ if (argv[0] === "models") {
 }
 if (argv.includes("--help")) { log({ probe: "help", argv }); process.stdout.write(spikeText("grok-help.txt")); process.exit(0); }
 
+checkArgv(argv, { boolean: ["--no-auto-update", "--always-approve", "--no-subagents", "--disable-web-search"],
+  value: ["--prompt-file", "--output-format", "--model", "--effort", "--agent", "--disallowed-tools", "--deny", "--rules", "--json-schema", "--session-id", "-r", "--resume", "--add-dir"] });
 const promptFile = flagValue(argv, "--prompt-file");
 expect(fileExists(promptFile), "--prompt-file names an existing file", promptFile);
 const prompt = fs.readFileSync(promptFile, "utf8");
@@ -49,7 +51,10 @@ if (sessionId) expect(UUID.test(sessionId), "--session-id is a uuid", sessionId)
 if (which === "resume") expect(resumeId, "resume needs -r");
 const schemaText = flagValue(argv, "--json-schema");
 let schema = null;
-if (schemaText !== undefined) { try { schema = JSON.parse(schemaText); } catch { mismatch("--json-schema must be inline JSON"); } }
+if (schemaText !== undefined) {
+  try { schema = JSON.parse(schemaText); } catch { mismatch("--json-schema must be inline JSON"); }
+  expect(deepEqual(schema, repoSchema()), "--json-schema must be the repository review schema");
+}
 if (schema) expect(!argv.includes("--rules"), "reviews carry --json-schema and no --rules");
 else expect(fileExists(flagValue(argv, "--rules")), "non-review turns carry --rules <contract file>", flagValue(argv, "--rules"));
 if (which.startsWith("review") || which === "large-review") expect(schema, `${which} needs --json-schema`);
@@ -58,6 +63,8 @@ for (const [k, v] of Object.entries({ GROK_DISABLE_AUTOUPDATER: "1", GROK_CLAUDE
   expect(process.env[k] === v, `compatEnv sets ${k}=${v}`, process.env[k]);
 }
 requireDepth();
+const stdin = await readStdin();
+expect(stdin.length === 0, "grok reads no stdin: the prompt is the --prompt-file operand", stdin.length);
 const session = sessionId ?? resumeId;
 log({ argv, cwd: process.cwd(), prompt, session, agent: explore ? "explore" : "default", readOnly, web, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^GROK_|DEPTH$/.test(k))) });
 

@@ -34,10 +34,28 @@ Decisions the gate asks for:
 Deviations and additions:
 
 - **Accidental paid call.** `claude models` was run to confirm the absence of a listing; Claude has no such subcommand and treated the word as a prompt (one paid turn). The `--help` Commands list is the only safe check; the fakes exit 99 on `models`.
-- **S1.2 settings probes substituted.** "Session `deny` array replaces the global one" and "global `allow: ["run_command(*)"]` still denied" would have required editing `~/.gemini/antigravity-cli/settings.json`, which has no `deny` array. Instead the existing global `allow: ["command(which)"]` and `toolPermission: "always-proceed"` served: with a session file lacking that allow and carrying `command(*)` in `deny`, `which node` was denied and `init.permission_mode` read `request-review`; session lists and `toolPermission` replace the global ones. A5.1's merge rule stands.
+- **S1.2 settings probes substituted.** "Session `deny` array replaces the global one" and "global `allow: ["run_command(*)"]` still denied" would have required editing `~/.gemini/antigravity-cli/settings.json`, which has no `deny` array. The existing global `allow: ["command(which)"]` and `toolPermission: "always-proceed"` showed that a session file's `allow` and `toolPermission` replace the global ones (`which node` denied; `init.permission_mode` `request-review`). The `deny`-replacement fact itself is taken from the twin's scratch-HOME probe (codex-agy-grok-plugin-for-claude 1d7c661: `docs/spike/agy.md`, `tests/fixtures/streams/agy/merge-1-global-deny-only.jsonl`, `merge-2-session-replaces.jsonl`, `merge-3-session-merged.jsonl`), cited in `docs/spike/agy.md` instead of running another paid probe. A5.1's merge rule stands.
 - **S1.3 batch probe at `--effort low`** through GROKX with an isolated `GROK_CODEX_PLUGIN_STATE`; one `review` and one `reply --next-input` (batches u1–u2, u3–u4 of 552 KB; pending 4 → 2). Synthesis was not reached (two more paid calls); the delivery mechanism is recorded.
 - **Grok cancel probe retried once**: the first attempt used `--add-dir` and failed before any model call.
 - **Fake scenarios beyond the S1.5 list**, each with provenance in the stream fixture: Claude `tool-absent`, `task`; agy `denied-prompt`, `effort-conflict`, `print-timeout`, `task`, `web`. Claude `denied` is the donor's fixture (not observed live).
 - **`core/args.mjs` created in S1** with only `UsageError` (catalog and tiers need it); S2.2 ports `parseArgv` into it.
 - **`tests/fixtures/review-output.reference.json`** carries its provenance as a draft-07 `$comment`; `schema.test.mjs` compares the schema with the fixture minus `$comment`.
 - **Claude `permission_denied` fixture** is the donor's; no live probe produced one (see the A2 correction).
+
+## 2026-10-31 S1.9: review fixes (Codex gpt-6.1-sol and Gemini 4 Argon, milestone 1 review)
+
+Rulings on the S1 questions, applied to Part A and Part B:
+
+- **Q1 (S3.3): an edit-tool `tool_use` on a read-only Claude turn followed by an `is_error` tool result → `denied`, exit 10.** `parseEvent` inspects `user` `tool_result` blocks; a failed or read-only `tool_use` is never recorded in `edited`; S3.4 tests `tool-absent` (exit 10, `edited` empty) and an errored Edit on a task (path left out).
+- **Q2 (A5.1, S5.2, S5.5): a Gemini task with `--allow-command` sets `toolPermission: "request-review"` unless the global value is `strict` (kept); a task without `--allow-command` preserves the global value.** Replaces the provisional "preserve global" entry above. fake-agy enforces the rule when the settings carry a `command(X)`/`unsandboxed(X)` pair.
+- **Q3: Gemini read-only turns can always search the web; documented trade-off.** Recorded in A2's Gemini read-only enforcement cell, the agy facts, and the `setup` output requirement (A3.2 setup row: "Gemini read-only turns can search the web; `--web` is not offered for Gemini"; and, under a global `always-proceed`, "Gemini tasks without `--allow-command` run any command").
+- **Q4: Claude `permission_denied` fixture stays the donor's** until a present-but-denied tool case appears live.
+- **F1: agy `denied_actions`.** A non-empty `result.denied_actions` → `denied` (exit 10) is checked before the empty-response → fatal rule (the reader latches the first fatal); A5.1, S5.3 and S5.5 say so; S5.5 lists `denied-prompt`.
+- **F3: Gemini suffix versus tier or inherited effort.** Only an explicit argv `--effort` conflicts with a suffixed id; a tier default or inherited thread effort yields to the suffix (`resolveEffort(..., {explicit})`, fed by `resolveTier().explicit.effort`). A suffix the family does not offer (`gemini-4-argon-xhigh`) makes the id unknown: pass-through, `verified: false`, never a verified `xhigh`.
+- **F4:** `resolveModel` reports `verified` only when the resolved id is in the model table; an alias whose target left a refreshed listing is unverified and unclamped.
+- **F5:** fake-agy accepts task settings that retain a global `write_file(*)`/`edit_file(*)` deny (A5.1 keeps the global lists); the scenario carries the denial.
+- **F6:** every fake enforces exact argv arity (unknown flags and bare tokens → 99), exact tool sets (Claude read-only exactly Read,Glob,Grep plus the web pair under `--web`, `--allowedTools` bounded to the web tools; tasks exactly the eight tools and the five allowed), stdin shape (Claude and agy exactly one LF-terminated NDJSON line, Grok none), and every schema carrier deep-equals `schemas/review-output.schema.json`.
+- **F7:** NOTICE carries the complete MIT texts of CLAUDEX and AGYX.
+- **F8:** `docs/test-port.md` enumerates every donor and twin case by source file and test name.
+- **F9:** `tests/skill.test.mjs` uses `\r?\n`; `.gitattributes` sets `* text=auto eol=lf`.
+- **Settings-merge evidence:** cited from the twin (above) instead of a new paid probe.

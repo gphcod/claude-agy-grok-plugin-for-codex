@@ -53,3 +53,26 @@ export function batchOf(text) {
   return m ? { index: Number(m[1]), total: Number(m[2]) } : null;
 }
 export const fileExists = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
+/** The repository review schema; every schema carrier a fake receives must deep-equal it. */
+export const repoSchema = () => JSON.parse(fs.readFileSync(path.join(ROOT, "plugins", "council", "schemas", "review-output.schema.json"), "utf8"));
+export function deepEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a).sort(), kb = Object.keys(b).sort();
+  return ka.length === kb.length && ka.every((k, i) => k === kb[i] && deepEqual(a[k], b[k]));
+}
+/**
+ * Exact argv arity: every token is a known boolean flag, a known value option followed by its value, or a known variadic
+ * option followed by its values; anything else (unknown flag, bare positional) is a contract violation.
+ */
+export function checkArgv(argv, { boolean = [], value = [], variadic = [] }) {
+  const b = new Set(boolean), v = new Set(value), vv = new Set(variadic);
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (b.has(token)) continue;
+    if (v.has(token)) { expect(i + 1 < argv.length && !(b.has(argv[i + 1]) || v.has(argv[i + 1]) || vv.has(argv[i + 1])), `${token} needs a value`); i += 1; continue; }
+    if (vv.has(token)) { while (i + 1 < argv.length && !argv[i + 1].startsWith("-")) i += 1; continue; }
+    mismatch(token.startsWith("-") ? "unknown flag on argv" : "bare token on argv: the prompt never travels on argv", token);
+  }
+}
+export const sameSet = (a, b) => a.length === b.length && new Set(a).size === a.length && b.every((x) => a.includes(x));

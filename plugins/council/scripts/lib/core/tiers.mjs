@@ -14,6 +14,8 @@ export function loadTiers(file = path.join(PLUGIN_ROOT, "tiers.json")) {
 /**
  * The model and effort a tier names for a provider, with explicit `--model`/`--effort` overrides winning (A3.3).
  * `tier` undefined means no tier: only the overrides apply, and a missing model or effort stays undefined.
+ * `explicit.effort` tells `resolveEffort` whether the effort came from argv (may conflict with a Gemini suffix) or from
+ * the tier or an inherited thread (yields to the suffix).
  */
 export function resolveTier(provider, tier, overrides = {}, tiers = loadTiers()) {
   const table = tiers[provider];

@@ -5,12 +5,12 @@
 // COUNCIL_FAKE_SCENARIO: ok, resume, denied, tool-absent, effort-error, review-findings, review-malformed, large-review,
 // task, slow, hold-pipes, missing-result, duplicate-result, wrong-session, is-error, turn-limit.
 import fs from "node:fs";
-import { UUID, batchOf, emitJson, expect, fileExists, flagValue, holdPipes, log, mismatch, readStdin, requireDepth,
-  scenario, sleep, spikeText, streams, SLOW_MS } from "./fake-common.mjs";
+import { UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, holdPipes, log, mismatch, readStdin, repoSchema,
+  requireDepth, sameSet, scenario, sleep, spikeText, streams, SLOW_MS } from "./fake-common.mjs";
 
 const argv = process.argv.slice(2);
 const which = scenario();
-const READ_ONLY_TOOLS = new Set(["Read", "Glob", "Grep", "WebFetch", "WebSearch"]);
+const READ_TOOLS = ["Read", "Glob", "Grep"], WEB_TOOLS = ["WebFetch", "WebSearch"];
 const EDIT_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"];
 
 // Cold preflight probes (A1): --version, auth status --json, --help, the missing-file capability probe.
@@ -54,29 +54,25 @@ const variadic = (name) => { const i = argv.indexOf(name); if (i < 0) return [];
 const disallowed = variadic("--disallowedTools");
 const allowed = variadic("--allowedTools");
 if (mode === "dontAsk") {
-  expect(tools.length > 0 && tools.every((t) => READ_ONLY_TOOLS.has(t)), "read-only turns carry only Read,Glob,Grep(,WebFetch,WebSearch)", tools);
-  for (const web of ["WebFetch", "WebSearch"]) if (tools.includes(web)) expect(allowed.includes(web), `${web} needs --allowedTools too`);
+  const web = tools.some((t) => WEB_TOOLS.includes(t));
+  expect(sameSet(tools, web ? [...READ_TOOLS, ...WEB_TOOLS] : READ_TOOLS), "read-only turns carry exactly Read,Glob,Grep (plus WebFetch,WebSearch under --web)", tools);
+  expect(sameSet(allowed, web ? WEB_TOOLS : []), "read-only --allowedTools is exactly the web tools under --web, otherwise absent", allowed);
+  expect(disallowed.length === 0, "read-only turns carry no --disallowedTools", disallowed);
 } else {
-  expect(EDIT_TOOLS.every((t) => tools.includes(t)) && ["Read", "Glob", "Grep"].every((t) => tools.includes(t)), "task turns carry Read,Glob,Grep plus the edit tools", tools);
-  expect(EDIT_TOOLS.every((t) => allowed.includes(t)), "task turns allow the edit tools", allowed);
+  expect(sameSet(tools, [...READ_TOOLS, ...EDIT_TOOLS]), "task turns carry exactly Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash", tools);
+  expect(sameSet(allowed, EDIT_TOOLS), "task turns allow exactly the edit tools", allowed);
   for (const rule of ["Bash(git push*)", "Bash(git reset --hard*)", "Bash(rm -rf *)", "Bash(sudo *)"]) expect(disallowed.includes(rule), `task turns disallow ${rule}`, disallowed);
 }
 const schemaText = flagValue(argv, "--json-schema");
 let schema = null;
 if (schemaText !== undefined) {
   try { schema = JSON.parse(schemaText); } catch { mismatch("--json-schema must be inline JSON"); }
-  expect(schema.$schema === "http://json-schema.org/draft-07/schema#", "--json-schema must be draft-07", schema.$schema);
+  expect(deepEqual(schema, repoSchema()), "--json-schema must be the repository review schema (draft-07)");
 }
-// Every bare token must be the value of an option: the prompt never travels on argv.
-const VALUE_OPTIONS = new Set(["--input-format", "--output-format", "--session-id", "--resume", "--system-prompt-snapshot", "--append-system-prompt-file",
-  "--max-turns", "--effort", "--model", "--permission-mode", "--permission-prompts", "--setting-sources", "--tools", "--mcp-config", "--settings", "--json-schema",
-  "--max-budget-usd", "--add-dir"]);
-for (let i = 1; i < argv.length; i += 1) {
-  const token = argv[i];
-  if (token === "--allowedTools" || token === "--disallowedTools") { while (i + 1 < argv.length && !argv[i + 1].startsWith("-")) i += 1; continue; }
-  if (token.startsWith("-")) { if (VALUE_OPTIONS.has(token)) i += 1; continue; }
-  mismatch("bare token on argv: the prompt must travel on stdin", token);
-}
+// Exact arity: only the A5.1 flags, each with its value; unknown flags and bare tokens are violations.
+checkArgv(argv.slice(1), { boolean: ["--verbose", "--strict-mcp-config", "--no-chrome"], variadic: ["--allowedTools", "--disallowedTools"],
+  value: ["--input-format", "--output-format", "--session-id", "--resume", "--system-prompt-snapshot", "--append-system-prompt-file", "--max-turns", "--effort",
+    "--model", "--permission-mode", "--permission-prompts", "--setting-sources", "--tools", "--mcp-config", "--settings", "--json-schema", "--max-budget-usd", "--add-dir"] });
 requireDepth();
 if (which === "resume" || which === "tool-absent") expect(resumeId, `${which} needs --resume`);
 if (which === "task") expect(mode === "acceptEdits", "task scenario needs the acceptEdits launch");
@@ -84,8 +80,8 @@ if (which === "tool-absent") expect(mode === "dontAsk", "tool-absent scenario is
 if (which.startsWith("review") || which === "large-review") expect(schema, `${which} needs --json-schema`);
 
 const stdin = await readStdin();
-const lines = stdin.split("\n").filter(Boolean);
-expect(lines.length === 1, "stdin carries exactly one NDJSON line", lines.length);
+const lines = stdin.split("\n");
+expect(lines.length === 2 && lines[0] && lines[1] === "", "stdin is exactly one NDJSON line ending in LF", stdin.length);
 let input;
 try { input = JSON.parse(lines[0]); } catch { mismatch("stdin line is not JSON"); }
 expect(input.type === "user" && input.session_id === session && input.message?.role === "user" && typeof input.message.content === "string" && input.parent_tool_use_id === null,

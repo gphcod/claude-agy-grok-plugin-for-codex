@@ -6,8 +6,8 @@
 // print-timeout, task, web, slow, hold-pipes.
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
-import { batchOf, emitJson, expect, fileExists, flagValue, holdPipes, log, mismatch, readStdin, requireDepth, scenario, sleep,
-  spikeText, streams, SLOW_MS } from "./fake-common.mjs";
+import { batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, holdPipes, log, mismatch, readStdin, repoSchema, requireDepth,
+  scenario, sleep, spikeText, streams, SLOW_MS } from "./fake-common.mjs";
 
 const argv = process.argv.slice(2);
 const which = scenario();
@@ -34,7 +34,10 @@ if (!edit) {
   expect(allow.every((r) => /^(read_file|read_url)\(.*\)$/.test(r)), "read-only allow list holds only read_file/read_url rules", allow);
   expect(settings.agentMode === "" && ["strict", "request-review"].includes(settings.toolPermission), "read-only settings: agentMode \"\" and toolPermission strict|request-review", settings);
 } else {
-  expect(!deny.some((r) => /^(write_file|edit_file)\(\*\)$/.test(r)), "task settings must not deny edits", deny);
+  // Tasks keep the user's global lists (a global write_file(*)/edit_file(*) deny stays and the scenario carries the
+  // denial). A task with --allow-command (the command(X)/unsandboxed(X) pair) must run under request-review or strict.
+  const pair = allow.some((r) => /^unsandboxed\(.+\)$/.test(r));
+  if (pair) expect(["request-review", "strict"].includes(settings.toolPermission), "a task with an allow pair sets toolPermission request-review (or keeps strict)", settings.toolPermission);
 }
 const model = flagValue(argv, "--model");
 expect(model, "--model is required");
@@ -45,19 +48,21 @@ else expect(["low", "medium", "high"].includes(effort) || which === "effort-erro
 const conversation = flagValue(argv, "--conversation");
 if (which === "resume") expect(conversation, "resume needs --conversation");
 const schemaPath = flagValue(argv, "--json-schema");
-if (schemaPath !== undefined) expect(fileExists(schemaPath), "--json-schema names an existing file", schemaPath);
+if (schemaPath !== undefined) {
+  expect(fileExists(schemaPath), "--json-schema names an existing file", schemaPath);
+  let carried;
+  try { carried = JSON.parse(fs.readFileSync(schemaPath, "utf8")); } catch { mismatch("--json-schema file is not JSON", schemaPath); }
+  expect(deepEqual(carried, repoSchema()), "--json-schema file must be the repository review schema", schemaPath);
+}
 if (which.startsWith("review") || which === "large-review") expect(schemaPath, `${which} needs --json-schema`);
 if (which === "task") expect(edit, "task scenario needs --mode accept-edits");
-const VALUE_OPTIONS = new Set(["--input-format", "--output-format", "--print-timeout", "--settings", "--mode", "--model", "--effort", "--conversation", "--json-schema", "--add-dir"]);
-for (let i = 0; i < argv.length; i += 1) {
-  if (argv[i].startsWith("-")) { if (VALUE_OPTIONS.has(argv[i])) i += 1; continue; }
-  mismatch("bare token on argv: the prompt must travel on stdin", argv[i]);
-}
+checkArgv(argv, { boolean: ["--sandbox", "--disable-slash-commands"],
+  value: ["--input-format", "--output-format", "--print-timeout", "--settings", "--mode", "--model", "--effort", "--conversation", "--json-schema", "--add-dir"] });
 requireDepth();
 
 const stdin = await readStdin();
-const lines = stdin.split("\n").filter(Boolean);
-expect(lines.length === 1, "stdin carries exactly one NDJSON user message", lines.length);
+const lines = stdin.split("\n");
+expect(lines.length === 2 && lines[0] && lines[1] === "", "stdin is exactly one NDJSON user message ending in LF", stdin.length);
 let input;
 try { input = JSON.parse(lines[0]); } catch { mismatch("stdin line is not JSON"); }
 expect(input.event === "user" && typeof input.message?.content === "string", "stdin line is {event:user, message:{content}}");

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { PLUGIN, REQUIRED_TERMS, SKILL_BYTES, DESCRIPTION_BYTES } from "../scripts/validate-plugin.mjs";
 
 const skill = fs.readFileSync(path.join(PLUGIN, "skills", "council", "SKILL.md"), "utf8");
-const [, front, body] = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(skill);
+const [, front, body] = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(skill);
 const description = /^description: (.*)$/m.exec(front)[1];
 
 test("one skill is the whole model-facing surface and it fits the budget", () => {
@@ -19,7 +19,7 @@ test("one skill is the whole model-facing surface and it fits the budget", () =>
 
 test("the skill carries every required term of S0.5 and both call forms", () => {
   for (const term of REQUIRED_TERMS) assert.ok(skill.includes(term), term);
-  assert.match(body, /<<'COUNCIL_EOF'\n<text>\nCOUNCIL_EOF/);
-  assert.match(body, /@'\n<text>\n'@ \| node "<plugin>\\scripts\\council\.mjs" .*--; exit \$LASTEXITCODE/);
+  assert.match(body, /<<'COUNCIL_EOF'\r?\n<text>\r?\nCOUNCIL_EOF/);
+  assert.match(body, /@'\r?\n<text>\r?\n'@ \| node "<plugin>\\scripts\\council\.mjs" .*--; exit \$LASTEXITCODE/);
   assert.doesNotMatch(skill, /run_in_background|\/council:|slash command/, "nothing from the Claude host");
 });

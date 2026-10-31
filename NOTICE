@@ -11,15 +11,28 @@ file was copied and then changed; the retained notice text follows each entry.
 1. CLAUDEX: claude_plugin_for_codex
    https://github.com/gphcod/claude_plugin_for_codex (fork of https://github.com/yanchuk/claude-plugin-for-codex)
    Version 0.5.0, commit be9fe54, plugin under plugins/claude-code-advisor
-   License: MIT. Retained notice:
-     MIT License. Copyright (c) 2026 Yanchuk
-     Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
-     associated documentation files (the "Software"), to deal in the Software without restriction,
-     including without limitation the rights to use, copy, modify, merge, publish, distribute,
-     sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
-     furnished to do so, subject to the following conditions: The above copyright notice and this
-     permission notice shall be included in all copies or substantial portions of the Software.
-     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+   License: MIT. Retained notice text (its LICENSE file, in full):
+     MIT License
+
+     Copyright (c) 2026 Yanchuk
+
+     Permission is hereby granted, free of charge, to any person obtaining a copy
+     of this software and associated documentation files (the "Software"), to deal
+     in the Software without restriction, including without limitation the rights
+     to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+     copies of the Software, and to permit persons to whom the Software is
+     furnished to do so, subject to the following conditions:
+
+     The above copyright notice and this permission notice shall be included in all
+     copies or substantial portions of the Software.
+
+     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+     IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+     FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+     AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+     SOFTWARE.
    Files taken: (none in S0; S1 and later steps append entries below)
 
 2. GROKX: grok_plugin_for_codex
@@ -31,7 +44,29 @@ file was copied and then changed; the retained notice text follows each entry.
 3. AGYX: gemini-plugin-for-codex
    https://github.com/gphcod/gemini-plugin-for-codex
    Version 0.1.2, commit ba24910, skill under skills/agy
-   License: MIT. Copyright (c) 2026 gphcod. Its NOTICE credits the transport and packaging design of
+   License: MIT. Retained notice text (its LICENSE file, in full):
+     MIT License
+
+     Copyright (c) 2026 gphcod
+
+     Permission is hereby granted, free of charge, to any person obtaining a copy
+     of this software and associated documentation files (the "Software"), to deal
+     in the Software without restriction, including without limitation the rights
+     to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+     copies of the Software, and to permit persons to whom the Software is
+     furnished to do so, subject to the following conditions:
+
+     The above copyright notice and this permission notice shall be included in all
+     copies or substantial portions of the Software.
+
+     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+     IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+     FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+     AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+     SOFTWARE.
+   Its NOTICE credits the transport and packaging design of
    https://github.com/gphcod/gemini-plugin-4-dual-hosts-codex-and-cc (cc-gemini-plugin 2.0.0, MIT;
    thepushkarp, wicojan, creatrco) and the handbook at https://github.com/gphcod/handbook.
    Files taken: (none in S0)
