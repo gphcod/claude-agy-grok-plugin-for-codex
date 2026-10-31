@@ -54,3 +54,32 @@ file was copied and then changed; the retained notice text follows each entry.
    Files taken: none (its core is not implemented yet; docs/shared-core.md tracks the comparison).
 
 Files taken, with source SHA-256 (appended by the step that takes them):
+
+  S0 (2026-10-31):
+  - CLAUDEX tests/validate-plugin.mjs (aad2b8f6bc47d6d9cbb123498ccd9b4fce0c6afb2010104b5c8ea8d1e8588074)
+    -> scripts/validate-plugin.mjs, adapted (names, terms, engines parser with `<N` comparators).
+  - CLAUDEX tests/run-tests.mjs (45128a6fe3961fb13512af7e6c164473552b03b24a8b59ec92e3818f96f26b59) and
+    GROKX scripts/run-tests.mjs (a8da4c681c706d2435fa062515ef7e296437bd3e9326380b08b9e1ccb2ca5235)
+    -> scripts/run-tests.mjs, adapted (live/default discovery, --ratio).
+  - GROKX tests/skill.test.mjs (9ea57568763a9b5b6a62447485c305ff73f29c8378e7a4060b2c73ac4e89a8c2)
+    -> tests/skill.test.mjs, adapted.
+  S1 (2026-10-31):
+  - GROKX plugins/grok/schemas/review-output.schema.json (61dfd412fa3e556acb33bbcec04ba1cb4e7d387c745f092f9bea2cca9d55e530)
+    and CLAUDEX plugins/claude-code-advisor/schemas/review-output.schema.json
+    (bfb08813695cd88591d6d3c7e4d9704747222043e92b40f68197a8b1dec1067c)
+    -> plugins/council/schemas/review-output.schema.json and tests/fixtures/review-output.reference.json
+    (GROKX shape in draft-07 plus CLAUDEX's finding `id` and `decision`).
+  - GROKX plugins/grok/scripts/lib/review.mjs `reviewProblem` (b7c921df0d2773cd5c690c12b9d8bcfb9046efddb10cbb1a074bf93d650d5960)
+    -> plugins/council/scripts/lib/core/review-validate.mjs, adapted (id, decision, additionalProperties).
+  - GROKX plugins/grok/scripts/lib/args.mjs `UsageError` (8b7551e6d9e8a25ea91d2e06622a55ec8f0e6014e0f61e12dcad1b59566a119f)
+    -> plugins/council/scripts/lib/core/args.mjs (S2.2 ports the rest).
+  - GROKX plugins/grok/scripts/lib/setup.mjs `parseModels` pattern (59430ba2668da42e1b2dc9a40bb12b1f312de12cc3955aabd06fda3668a9f75a)
+    -> plugins/council/scripts/lib/core/catalog.mjs `parseModelListing("grok")`, reimplemented.
+  - CLAUDEX tests/fixtures/fake-claude.mjs (eadfb451b76d2ba675a1dd3484c2d2b16fdfb7211391de29266104324445a83c) and
+    tests/fixtures/streams.json (e5092073f42d6899a71228f21a2554537b964aa12b7ee82227c2026b30bb7ac7; the `denied` and
+    `limit` fixtures are carried into tests/fixtures/streams/claude.json) -> tests/fixtures/fake-claude.mjs, adapted.
+  - AGYX test/fake-agy.mjs (b98b317d4731e5a6a5cde80f3dd8a53542abffafbf82716151329d30e7440362) -> tests/fixtures/fake-agy.mjs,
+    adapted; the agy-1.4.12 fixtures were read for the event shapes, the committed streams are council's own captures.
+  - GROKX tests/fake-grok.mjs (f68ae519d76c2bfb7f4584048ea3d0876d7dbbd458ef40424ce13430d6b960bc) -> tests/fixtures/fake-grok.mjs,
+    adapted (the `denied` catalogue is its DEFAULT tool list).
+  - GEMINICC: nothing copied (no license file).

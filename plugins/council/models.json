@@ -1,0 +1,37 @@
+{
+  "_note": "Static catalog (S1.6). Recorded on 2026-10-31 from the S1 probes: claude 2.1.314 has no model listing (aliases pass through to the CLI; `default` means no --model flag); `agy models` lists effort-suffixed ids only; `grok models` lists plain ids. A refreshed catalog under <state root>/catalog/<provider>.json overrides the model lists, never the aliases.",
+  "claude": {
+    "listing": false,
+    "sharedEnum": ["low", "medium", "high", "xhigh", "max"],
+    "models": {
+      "default": ["low", "medium", "high", "xhigh", "max"],
+      "fable": ["low", "medium", "high", "xhigh", "max"],
+      "opus": ["low", "medium", "high", "xhigh", "max"],
+      "sonnet": ["low", "medium", "high", "xhigh", "max"],
+      "haiku": ["low", "medium", "high", "xhigh", "max"],
+      "claude-opus-5-5": ["low", "medium", "high", "xhigh", "max"],
+      "claude-sonnet-5-5": ["low", "medium", "high", "xhigh", "max"]
+    },
+    "aliases": { "fable": "fable", "opus": "opus", "sonnet": "sonnet", "haiku": "haiku", "default": "default" }
+  },
+  "gemini": {
+    "listing": true,
+    "suffixed": true,
+    "route": ["gemini-"],
+    "families": {
+      "gemini-4-argon": ["low", "medium", "high"],
+      "gemini-3.8-flash": ["low", "medium", "high"]
+    },
+    "aliases": { "argon": "gemini-4-argon", "flash": "gemini-3.8-flash" }
+  },
+  "grok": {
+    "listing": true,
+    "models": {
+      "grok-4.7": ["low", "medium", "high", "xhigh"],
+      "grok-4.7-build-fast": ["low", "medium", "high", "xhigh"],
+      "grok-4.6": ["low", "medium", "high", "xhigh"],
+      "grok-4.5": ["low", "medium", "high", "xhigh"]
+    },
+    "aliases": { "4.7": "grok-4.7", "4.6": "grok-4.6", "build-fast": "grok-4.7-build-fast" }
+  }
+}

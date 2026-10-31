@@ -1,0 +1,1435 @@
+{
+ "_provenance": {
+  "recorded": "S1.1 live probes, claude 2.1.314, macOS, 2026-10-31; paths under the scratch directory replaced by <SCRATCH>, session ids by <SESSION> (the fake fills in the launched uuid)",
+  "ok": "probe ask (read-only, --effort low --max-turns 2)",
+  "resume": "probe resume (--resume, --model sonnet; snapshot kept MARKER alpha)",
+  "denied": "claude_plugin_for_codex 0.5.0 tests/fixtures/streams.json `denied` (donor fixture; S1.1 observed no permission_denied because read-only turns carry no edit tool)",
+  "tool-absent": "probe task-then-reply (task session resumed read-only; Edit attempted, tool absent)",
+  "effort-error": "probe effort-parse (stderr warning text; the stream is `ok`: Claude ignores an unknown --effort value)",
+  "review-findings": "probe review (--json-schema with the S1.0 schema)",
+  "review-malformed": "synthetic mutation of review-findings: finding ids removed",
+  "task": "probe task (acceptEdits launch; Edit and Bash tool_use blocks)",
+  "large-review": "review-findings for a non-final batch, structured-clean (synthetic) for the last",
+  "missing-result": "synthetic: init and assistant only",
+  "duplicate-result": "synthetic: the ok result twice",
+  "wrong-session": "synthetic: ok with another session id",
+  "is-error": "probe unknown-model (--model gpt-6.1-sol; result.is_error true, terminal_reason api_error, exit 1)",
+  "turn-limit": "claude_plugin_for_codex 0.5.0 streams.json `limit` (donor fixture)",
+  "slow": "ok after a delay",
+  "hold-pipes": "ok, then a grandchild holds stdout"
+ },
+ "ok": [
+  {
+   "type": "system",
+   "subtype": "init",
+   "cwd": "<SCRATCH>/repo",
+   "session_id": "<SESSION>",
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp_servers": [],
+   "model": "claude-opus-5-5",
+   "permissionMode": "dontAsk",
+   "claude_code_version": "2.1.314",
+   "capabilities": [
+    "interrupt_receipt_v1",
+    "interrupt_cancel_queued_v1"
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-opus-5-5",
+    "content": [
+     {
+      "type": "text",
+      "text": "pong"
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "rate_limit_event",
+   "rate_limit_info": {
+    "status": "allowed",
+    "rateLimitType": "five_hour"
+   }
+  },
+  {
+   "duration_api_ms": 1350,
+   "stop_reason": "end_turn",
+   "session_id": "<SESSION>",
+   "total_cost_usd": 0.0272304,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 3312,
+    "cache_read_input_tokens": 3232,
+    "output_tokens": 4,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 3312,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 4,
+      "cache_read_input_tokens": 3232,
+      "cache_creation_input_tokens": 3312,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 3312
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "permission_denials": [],
+   "terminal_reason": "completed",
+   "fast_mode_state": "off",
+   "fast_mode_disabled_reason": "sdk_opt_in_required",
+   "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+     "background": 0,
+     "foreground": 0,
+     "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+     "parent": 0,
+     "user": 0,
+     "system": 0
+    },
+    "refused": {
+     "depth_limit": 0,
+     "concurrency_limit": 0,
+     "budget": 0
+    },
+    "by_type": {}
+   },
+   "safety_stops": 0,
+   "is_error": false,
+   "num_turns": 1,
+   "subtype": "success",
+   "api_error_status": null,
+   "result": "pong",
+   "ttft_ms": 1358,
+   "type": "result",
+   "duration_ms": 1393,
+   "ttft_stream_ms": 862,
+   "time_to_request_ms": 36,
+   "first_content_frame_ms": 863,
+   "queued_turn_count": 0,
+   "result_index": 0,
+   "model_usage_since_last_result": {
+    "claude-opus-5-5": {
+     "inputTokens": 2,
+     "outputTokens": 4,
+     "cacheReadInputTokens": 3232,
+     "cacheCreationInputTokens": 3312,
+     "webSearchRequests": 0,
+     "costUSD": 0.0272304,
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "thinkingTokens": 0,
+     "cacheCreationEphemeral5mInputTokens": 0,
+     "cacheCreationEphemeral1hInputTokens": 3312,
+     "canonicalModel": "claude-opus-5-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    }
+   }
+  }
+ ],
+ "resume": [
+  {
+   "type": "system",
+   "subtype": "init",
+   "cwd": "<SCRATCH>/repo",
+   "session_id": "<SESSION>",
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp_servers": [],
+   "model": "claude-sonnet-5-5",
+   "permissionMode": "dontAsk",
+   "claude_code_version": "2.1.314",
+   "capabilities": [
+    "interrupt_receipt_v1",
+    "interrupt_cancel_queued_v1"
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+     {
+      "type": "thinking",
+      "thinking": "",
+      "signature": "CAQSjAkKEAgTGAI4AUIIdGhpbmtpbmcSDHOcl6RPshEJQgb4fxoMF84CGWIpTSknAl/3IjB8lVbwtezzP4W84cRgh/eG9L1QBEUC/mz3uREB3fVNHEW5DEFtbVb5xWCVDnjCresqqQhIMaYVAy5XjnbyJBbuNdNmNsa/O7wivO1agHB4vbsZZnIau4zB4G5w+jo0ykxkL2Fz+ajuX205DlI0Ea+DnuPjsW39ocQ1x0tPscq7zNfOfqvJAwMRkguykev9DZNiRYKFc+uneYvMBe5y0UxOv4/6TR2R99EgoCbs26ckgaowsByv9QwcpWitflvNAmyue1JvoWIIsyM2qPe7DXxtLBzHht1Lj0mLOn5rUYWFX8ktuR+oZ1c/Wdt15ZFon9vPFImuQOfujsVK3f8BUxUKmb9d1+NSswZ2PF7YWtjpkzcd2eZMnZnfvp0+oF0Hf/U3g+xlc0Zqo1p04Bnl6WzpL02lKH3lazE1gG5VkI5/2q+HcHonAi9JdB34bRSxnG4o4uS00U2XN+vxvz6AWMVVZj1TLXHnog99e2NdwZWR9QH+gkVHxh8FkkcwGNsFhWh2Rx6k9T8r5UIK/bq9zvrARihRqmEFO+uKYv8eeETFJPNwYhL7F1P1MSmSBxMTT1nwc/yIH/a72dXvv7JKB7nxWZcdgZ/6FPeHA08ykKM7RUAX7evHHlre9vO1lBtfJGXpz81OIaooun1UrIuXqbwGaCIrjkdWnNJ88OkG4VvNPSS7aNty4avtA4w0BSM17SWQ2KjGLYrVovnHAgye5C/xTiE1upgZkXYLpRsFN/l87hwViMsEhD2QyM1WSyhMZ1VpiJsYlUwp64GKHqWk/rqxbRju9hzU+S5/kNK469Y3a1/AX4rmeK4BHS+2geikLw9O2uehCxIVa8VUN9sCaBztm2e7jTVokRMf5DXMflLDrvEKMwj2d0V+aFH4euPTDnyRzQjD17yh/PVjsDMWIBjlZpWaRU30M17V8PGAADfg3yeBPPJiUF3quXmrngOQVB4PvJy6gzO44rOBklbJ4pnwO/vito15wZZt+20YfN5CSTAyOzRHfH8RjSdUIjaEO71f8AJ85yUZameZbpXwk1E8+8AsgxBqHdMdw+efajWbUoZTkCX00/qs1HVQ3xpzb0KyABBpQn0CFiD7ED4tHrDGtQeq/44koLK2e7QxI2C8ollNupJZZDaBMy4IryOU2bK3K6wurZ7sx4X12fuTC1d1VmFt20+gLIGrQfgubXnN6pu5Ib4tHcu6JP2tnUNo3Fn+/wBCnHJo7P3iZhykVNsLBZt0klsyC6ipKsRT5Ezs4DMcFeiv86I4jTDP1yZjOgQv+qX8RAbO4p7AYBP9p4FEQOK5AEWqxwFcfwoZL0slphVyc11fhMXSfgUOTCu9M9KpltlvJ1JlC4dIbQNP6lv2hzUNGmP+Kt4/8JPdFUvgt2JfKO/tif2buGyUMHQ4jSOG7nsU/8CRg56AX7pFI13sd9Blvq2/syWc0bLNw2WfnA9zBRWzGTY73ERxAUmk/3TdQuH4zC8legkqQowYAQ=="
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+     {
+      "type": "text",
+      "text": "No line begins with MARKER, but this one ends with it: \"You are a terse assistant used by an automated harness. MARKER alpha\""
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "rate_limit_event",
+   "rate_limit_info": {
+    "status": "allowed",
+    "rateLimitType": "five_hour"
+   }
+  },
+  {
+   "duration_api_ms": 3789,
+   "stop_reason": "end_turn",
+   "session_id": "<SESSION>",
+   "total_cost_usd": 0.043399599999999997,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 3423,
+    "cache_read_input_tokens": 3232,
+    "output_tokens": 215,
+    "output_tokens_details": {
+     "thinking_tokens": 170
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 3423,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 215,
+      "cache_read_input_tokens": 3232,
+      "cache_creation_input_tokens": 3423,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 3423
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "permission_denials": [],
+   "terminal_reason": "completed",
+   "fast_mode_state": "off",
+   "fast_mode_disabled_reason": "sdk_opt_in_required",
+   "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+     "background": 0,
+     "foreground": 0,
+     "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+     "parent": 0,
+     "user": 0,
+     "system": 0
+    },
+    "refused": {
+     "depth_limit": 0,
+     "concurrency_limit": 0,
+     "budget": 0
+    },
+    "by_type": {}
+   },
+   "safety_stops": 0,
+   "is_error": false,
+   "num_turns": 1,
+   "subtype": "success",
+   "api_error_status": null,
+   "result": "No line begins with MARKER, but this one ends with it: \"You are a terse assistant used by an automated harness. MARKER alpha\"",
+   "ttft_ms": 2067,
+   "type": "result",
+   "duration_ms": 2668,
+   "ttft_stream_ms": 1056,
+   "time_to_request_ms": 223,
+   "first_content_frame_ms": 1057,
+   "queued_turn_count": 0,
+   "result_index": 0,
+   "model_usage_since_last_result": {
+    "claude-sonnet-5-5": {
+     "inputTokens": 2,
+     "outputTokens": 215,
+     "cacheReadInputTokens": 3232,
+     "cacheCreationInputTokens": 3423,
+     "webSearchRequests": 0,
+     "costUSD": 0.016169199999999998,
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "thinkingTokens": 170,
+     "cacheCreationEphemeral5mInputTokens": 0,
+     "cacheCreationEphemeral1hInputTokens": 3423,
+     "canonicalModel": "claude-sonnet-5-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    }
+   }
+  }
+ ],
+ "denied": [
+  {
+   "type": "permission_denied",
+   "tool_name": "Read",
+   "tool_input": {
+    "file_path": "/restricted/private.txt"
+   }
+  },
+  {
+   "type": "result",
+   "subtype": "success",
+   "is_error": false,
+   "result": "Partial answer.",
+   "permission_denials": [
+    {
+     "tool_name": "Read",
+     "tool_input": {
+      "file_path": "/restricted/private.txt"
+     }
+    }
+   ],
+   "session_id": "<SESSION>"
+  }
+ ],
+ "tool-absent": [
+  {
+   "type": "system",
+   "subtype": "init",
+   "cwd": "<SCRATCH>/repo",
+   "session_id": "<SESSION>",
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp_servers": [],
+   "model": "claude-sonnet-5-5",
+   "permissionMode": "dontAsk",
+   "claude_code_version": "2.1.314",
+   "capabilities": [
+    "interrupt_receipt_v1",
+    "interrupt_cancel_queued_v1"
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+     {
+      "type": "tool_use",
+      "id": "toolu_01NDZGJ6j91PjDd1EjXqQs5N",
+      "name": "Edit",
+      "input": {
+       "file_path": "<SCRATCH>/repo/value.mjs",
+       "old_string": "value = 2;",
+       "new_string": "value = 3;"
+      },
+      "caller": {
+       "type": "direct"
+      }
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "type": "tool_result",
+      "content": "<tool_use_error>Error: No such tool available: Edit. Edit is disabled for this session, in subagents as well as here.</tool_use_error>",
+      "is_error": true,
+      "tool_use_id": "toolu_01NDZGJ6j91PjDd1EjXqQs5N"
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "rate_limit_event",
+   "rate_limit_info": {
+    "status": "allowed",
+    "rateLimitType": "five_hour"
+   }
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+     {
+      "type": "text",
+      "text": "denied"
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "duration_api_ms": 9715,
+   "stop_reason": "end_turn",
+   "session_id": "<SESSION>",
+   "total_cost_usd": 0.05063929999999999,
+   "usage": {
+    "input_tokens": 6,
+    "cache_creation_input_tokens": 321,
+    "cache_read_input_tokens": 19878,
+    "output_tokens": 193,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 321,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 4,
+      "cache_read_input_tokens": 9975,
+      "cache_creation_input_tokens": 249,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 249
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "permission_denials": [],
+   "terminal_reason": "completed",
+   "fast_mode_state": "off",
+   "fast_mode_disabled_reason": "sdk_opt_in_required",
+   "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+     "background": 0,
+     "foreground": 0,
+     "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+     "parent": 0,
+     "user": 0,
+     "system": 0
+    },
+    "refused": {
+     "depth_limit": 0,
+     "concurrency_limit": 0,
+     "budget": 0
+    },
+    "by_type": {}
+   },
+   "safety_stops": 0,
+   "is_error": false,
+   "num_turns": 2,
+   "subtype": "success",
+   "api_error_status": null,
+   "result": "denied",
+   "ttft_ms": 2804,
+   "type": "result",
+   "duration_ms": 3762,
+   "ttft_stream_ms": 1466,
+   "time_to_request_ms": 118,
+   "first_content_frame_ms": 1466,
+   "queued_turn_count": 0,
+   "result_index": 0,
+   "model_usage_since_last_result": {
+    "claude-sonnet-5-5": {
+     "inputTokens": 6,
+     "outputTokens": 193,
+     "cacheReadInputTokens": 19878,
+     "cacheCreationInputTokens": 321,
+     "webSearchRequests": 0,
+     "costUSD": 0.0052138,
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "thinkingTokens": 0,
+     "cacheCreationEphemeral5mInputTokens": 0,
+     "cacheCreationEphemeral1hInputTokens": 321,
+     "canonicalModel": "claude-sonnet-5-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    }
+   }
+  }
+ ],
+ "effort-error-stderr": "Warning: Unknown --effort value 'ultra' — ignoring it and using the default effort. Valid values: low, medium, high, xhigh, max.",
+ "review-findings": [
+  {
+   "type": "system",
+   "subtype": "init",
+   "cwd": "<SCRATCH>/repo",
+   "session_id": "<SESSION>",
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read",
+    "StructuredOutput"
+   ],
+   "mcp_servers": [],
+   "model": "claude-opus-5-5",
+   "permissionMode": "dontAsk",
+   "claude_code_version": "2.1.314",
+   "capabilities": [
+    "interrupt_receipt_v1",
+    "interrupt_cancel_queued_v1"
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-opus-5-5",
+    "content": [
+     {
+      "type": "tool_use",
+      "id": "toolu_01EitmijMtDrviJqhTJsXCgT",
+      "name": "StructuredOutput",
+      "input": {
+       "verdict": "needs-attention",
+       "summary": "The loop now starts at index 1, so items[0] is never added and sum() gives the wrong result for any non-empty input. It also no longer works with iterables that aren't arrays, such as Set or generators.",
+       "findings": [
+        {
+         "id": "F1",
+         "severity": "high",
+         "title": "Off-by-one: first element skipped",
+         "body": "The loop starts at i = 1, so items[0] is never added. For example, sum([5]) returns 0 and sum([1,2,3]) returns 5.",
+         "file": "sum.mjs",
+         "line_start": 2,
+         "line_end": 2,
+         "confidence": 0.99,
+         "recommendation": "Start the loop at i = 0, or go back to the for...of loop.",
+         "decision": "AGREE"
+        },
+        {
+         "id": "F2",
+         "severity": "medium",
+         "title": "No longer supports non-array iterables",
+         "body": "Indexing with items.length and items[i] fails on Set, Map values, and generators: they have no length, so the loop never runs and sum() silently returns 0. The old for...of loop handled any iterable.",
+         "file": "sum.mjs",
+         "line_start": 2,
+         "line_end": 2,
+         "confidence": 0.8,
+         "recommendation": "Keep for (const x of items).",
+         "decision": "AGREE"
+        }
+       ],
+       "next_steps": [
+        "Revert to the for...of loop",
+        "Add tests for single-element and Set inputs"
+       ]
+      },
+      "caller": {
+       "type": "direct"
+      }
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "tool_use_id": "toolu_01EitmijMtDrviJqhTJsXCgT",
+      "type": "tool_result",
+      "content": "Structured output provided successfully"
+     }
+    ]
+   },
+   "session_id": "<SESSION>",
+   "tool_result_meta": [
+    {
+     "id": "toolu_01EitmijMtDrviJqhTJsXCgT",
+     "permission_decision": {
+      "decision": "accept",
+      "source": "config"
+     }
+    }
+   ]
+  },
+  {
+   "type": "rate_limit_event",
+   "rate_limit_info": {
+    "status": "allowed",
+    "rateLimitType": "five_hour"
+   }
+  },
+  {
+   "duration_api_ms": 4645,
+   "stop_reason": "tool_use",
+   "session_id": "<SESSION>",
+   "total_cost_usd": 0.06848,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 7234,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 530,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 7234,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 530,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 7234,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 7234
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "permission_denials": [],
+   "terminal_reason": "completed",
+   "fast_mode_state": "off",
+   "fast_mode_disabled_reason": "sdk_opt_in_required",
+   "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+     "background": 0,
+     "foreground": 0,
+     "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+     "parent": 0,
+     "user": 0,
+     "system": 0
+    },
+    "refused": {
+     "depth_limit": 0,
+     "concurrency_limit": 0,
+     "budget": 0
+    },
+    "by_type": {}
+   },
+   "safety_stops": 0,
+   "is_error": false,
+   "num_turns": 2,
+   "subtype": "success",
+   "api_error_status": null,
+   "result": "{\"verdict\":\"needs-attention\",\"summary\":\"The loop now starts at index 1, so items[0] is never added and sum() gives the wrong result for any non-empty input. It also no longer works with iterables that aren't arrays, such as Set or generators.\",\"findings\":[{\"id\":\"F1\",\"severity\":\"high\",\"title\":\"Off-by-one: first element skipped\",\"body\":\"The loop starts at i = 1, so items[0] is never added. For example, sum([5]) returns 0 and sum([1,2,3]) returns 5.\",\"file\":\"sum.mjs\",\"line_start\":2,\"line_end\":2,\"confidence\":0.99,\"recommendation\":\"Start the loop at i = 0, or go back to the for...of loop.\",\"decision\":\"AGREE\"},{\"id\":\"F2\",\"severity\":\"medium\",\"title\":\"No longer supports non-array iterables\",\"body\":\"Indexing with items.length and items[i] fails on Set, Map values, and generators: they have no length, so the loop never runs and sum() silently returns 0. The old for...of loop handled any iterable.\",\"file\":\"sum.mjs\",\"line_start\":2,\"line_end\":2,\"confidence\":0.8,\"recommendation\":\"Keep for (const x of items).\",\"decision\":\"AGREE\"}],\"next_steps\":[\"Revert to the for...of loop\",\"Add tests for single-element and Set inputs\"]}",
+   "structured_output": {
+    "verdict": "needs-attention",
+    "summary": "The loop now starts at index 1, so items[0] is never added and sum() gives the wrong result for any non-empty input. It also no longer works with iterables that aren't arrays, such as Set or generators.",
+    "findings": [
+     {
+      "id": "F1",
+      "severity": "high",
+      "title": "Off-by-one: first element skipped",
+      "body": "The loop starts at i = 1, so items[0] is never added. For example, sum([5]) returns 0 and sum([1,2,3]) returns 5.",
+      "file": "sum.mjs",
+      "line_start": 2,
+      "line_end": 2,
+      "confidence": 0.99,
+      "recommendation": "Start the loop at i = 0, or go back to the for...of loop.",
+      "decision": "AGREE"
+     },
+     {
+      "id": "F2",
+      "severity": "medium",
+      "title": "No longer supports non-array iterables",
+      "body": "Indexing with items.length and items[i] fails on Set, Map values, and generators: they have no length, so the loop never runs and sum() silently returns 0. The old for...of loop handled any iterable.",
+      "file": "sum.mjs",
+      "line_start": 2,
+      "line_end": 2,
+      "confidence": 0.8,
+      "recommendation": "Keep for (const x of items).",
+      "decision": "AGREE"
+     }
+    ],
+    "next_steps": [
+     "Revert to the for...of loop",
+     "Add tests for single-element and Set inputs"
+    ]
+   },
+   "ttft_ms": 4784,
+   "type": "result",
+   "duration_ms": 4813,
+   "ttft_stream_ms": 809,
+   "time_to_request_ms": 166,
+   "first_content_frame_ms": 810,
+   "queued_turn_count": 0,
+   "result_index": 0,
+   "model_usage_since_last_result": {
+    "claude-opus-5-5": {
+     "inputTokens": 2,
+     "outputTokens": 530,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 7234,
+     "webSearchRequests": 0,
+     "costUSD": 0.06848,
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "thinkingTokens": 0,
+     "cacheCreationEphemeral5mInputTokens": 0,
+     "cacheCreationEphemeral1hInputTokens": 7234,
+     "canonicalModel": "claude-opus-5-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    }
+   }
+  }
+ ],
+ "task": [
+  {
+   "type": "system",
+   "subtype": "init",
+   "cwd": "<SCRATCH>/repo",
+   "session_id": "<SESSION>",
+   "tools": [
+    "Bash",
+    "Edit",
+    "Glob",
+    "Grep",
+    "NotebookEdit",
+    "Read",
+    "Write"
+   ],
+   "mcp_servers": [],
+   "model": "claude-sonnet-5-5",
+   "permissionMode": "acceptEdits",
+   "claude_code_version": "2.1.314",
+   "capabilities": [
+    "interrupt_receipt_v1",
+    "interrupt_cancel_queued_v1"
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+     {
+      "type": "tool_use",
+      "id": "toolu_01WkscNwrF1qFL2ifXY1FwEM",
+      "name": "Read",
+      "input": {
+       "file_path": "<SCRATCH>/repo/value.mjs"
+      },
+      "caller": {
+       "type": "direct"
+      }
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "rate_limit_event",
+   "rate_limit_info": {
+    "status": "allowed",
+    "rateLimitType": "five_hour"
+   }
+  },
+  {
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "tool_use_id": "toolu_01WkscNwrF1qFL2ifXY1FwEM",
+      "type": "tool_result",
+      "content": "1\texport const value = 1;\n2\t"
+     }
+    ]
+   },
+   "session_id": "<SESSION>",
+   "tool_result_meta": [
+    {
+     "id": "toolu_01WkscNwrF1qFL2ifXY1FwEM",
+     "permission_decision": {
+      "decision": "accept",
+      "source": "config",
+      "reason_type": "mode"
+     }
+    }
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+     {
+      "type": "tool_use",
+      "id": "toolu_01KUE2RkdHpbpsDu54j1e2g6",
+      "name": "Edit",
+      "input": {
+       "replace_all": false,
+       "file_path": "<SCRATCH>/repo/value.mjs",
+       "old_string": "value = 1;",
+       "new_string": "value = 2;"
+      },
+      "caller": {
+       "type": "direct"
+      }
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "tool_use_id": "toolu_01KUE2RkdHpbpsDu54j1e2g6",
+      "type": "tool_result",
+      "content": "The file <SCRATCH>/repo/value.mjs has been updated successfully. (file state is current in your context — no need to Read it back)"
+     }
+    ]
+   },
+   "session_id": "<SESSION>",
+   "tool_result_meta": [
+    {
+     "id": "toolu_01KUE2RkdHpbpsDu54j1e2g6",
+     "permission_decision": {
+      "decision": "accept",
+      "source": "config",
+      "reason_type": "rule"
+     }
+    }
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+     {
+      "type": "tool_use",
+      "id": "toolu_01UYeVHYP1sN7JMBbE6D74V3",
+      "name": "Bash",
+      "input": {
+       "command": "node -e \"process.exit(0)\"; echo $?"
+      },
+      "caller": {
+       "type": "direct"
+      }
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "tool_use_id": "toolu_01UYeVHYP1sN7JMBbE6D74V3",
+      "type": "tool_result",
+      "content": "0",
+      "is_error": false
+     }
+    ]
+   },
+   "session_id": "<SESSION>",
+   "tool_result_meta": [
+    {
+     "id": "toolu_01UYeVHYP1sN7JMBbE6D74V3",
+     "permission_decision": {
+      "decision": "accept",
+      "source": "config",
+      "reason_type": "rule"
+     }
+    }
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+     {
+      "type": "text",
+      "text": "edited and ran 0"
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "duration_api_ms": 6086,
+   "stop_reason": "end_turn",
+   "session_id": "<SESSION>",
+   "total_cost_usd": 0.045425499999999994,
+   "usage": {
+    "input_tokens": 6,
+    "cache_creation_input_tokens": 9903,
+    "cache_read_input_tokens": 18815,
+    "output_tokens": 392,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 9903,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 9,
+      "cache_read_input_tokens": 9483,
+      "cache_creation_input_tokens": 420,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 420
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "permission_denials": [],
+   "terminal_reason": "completed",
+   "fast_mode_state": "off",
+   "fast_mode_disabled_reason": "sdk_opt_in_required",
+   "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+     "background": 0,
+     "foreground": 0,
+     "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+     "parent": 0,
+     "user": 0,
+     "system": 0
+    },
+    "refused": {
+     "depth_limit": 0,
+     "concurrency_limit": 0,
+     "budget": 0
+    },
+    "by_type": {}
+   },
+   "safety_stops": 0,
+   "is_error": false,
+   "num_turns": 4,
+   "subtype": "success",
+   "api_error_status": null,
+   "result": "edited and ran 0",
+   "ttft_ms": 2313,
+   "type": "result",
+   "duration_ms": 6393,
+   "ttft_stream_ms": 1153,
+   "time_to_request_ms": 189,
+   "first_content_frame_ms": 1153,
+   "queued_turn_count": 0,
+   "result_index": 0,
+   "model_usage_since_last_result": {
+    "claude-sonnet-5-5": {
+     "inputTokens": 6,
+     "outputTokens": 392,
+     "cacheReadInputTokens": 18815,
+     "cacheCreationInputTokens": 9903,
+     "webSearchRequests": 0,
+     "costUSD": 0.045425499999999994,
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "thinkingTokens": 0,
+     "cacheCreationEphemeral5mInputTokens": 0,
+     "cacheCreationEphemeral1hInputTokens": 9903,
+     "canonicalModel": "claude-sonnet-5-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    }
+   }
+  }
+ ],
+ "is-error": [
+  {
+   "type": "system",
+   "subtype": "init",
+   "cwd": "<SCRATCH>/repo",
+   "session_id": "<SESSION>",
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp_servers": [],
+   "model": "gpt-6.1-sol",
+   "permissionMode": "dontAsk",
+   "claude_code_version": "2.1.314",
+   "capabilities": [
+    "interrupt_receipt_v1",
+    "interrupt_cancel_queued_v1"
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "<synthetic>",
+    "content": [
+     {
+      "type": "text",
+      "text": "There's an issue with the selected model (gpt-6.1-sol). It may not exist or you may not have access to it. Run --model to pick a different model."
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "duration_api_ms": 0,
+   "stop_reason": "stop_sequence",
+   "session_id": "<SESSION>",
+   "total_cost_usd": 0,
+   "usage": {
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 0,
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "permission_denials": [],
+   "terminal_reason": "api_error",
+   "fast_mode_state": "off",
+   "fast_mode_disabled_reason": "sdk_opt_in_required",
+   "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+     "background": 0,
+     "foreground": 0,
+     "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+     "parent": 0,
+     "user": 0,
+     "system": 0
+    },
+    "refused": {
+     "depth_limit": 0,
+     "concurrency_limit": 0,
+     "budget": 0
+    },
+    "by_type": {}
+   },
+   "safety_stops": 0,
+   "is_error": true,
+   "num_turns": 1,
+   "subtype": "success",
+   "api_error_status": 404,
+   "result": "There's an issue with the selected model (gpt-6.1-sol). It may not exist or you may not have access to it. Run --model to pick a different model.",
+   "type": "result",
+   "duration_ms": 585,
+   "queued_turn_count": 0,
+   "result_index": 0,
+   "model_usage_since_last_result": {}
+  }
+ ],
+ "turn-limit": [
+  {
+   "type": "result",
+   "subtype": "error_max_turns",
+   "is_error": true,
+   "terminal_reason": "max_turns",
+   "num_turns": 1,
+   "session_id": "<SESSION>"
+  }
+ ],
+ "review-malformed": [
+  {
+   "type": "system",
+   "subtype": "init",
+   "cwd": "<SCRATCH>/repo",
+   "session_id": "<SESSION>",
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read",
+    "StructuredOutput"
+   ],
+   "mcp_servers": [],
+   "model": "claude-opus-5-5",
+   "permissionMode": "dontAsk",
+   "claude_code_version": "2.1.314",
+   "capabilities": [
+    "interrupt_receipt_v1",
+    "interrupt_cancel_queued_v1"
+   ]
+  },
+  {
+   "type": "assistant",
+   "message": {
+    "role": "assistant",
+    "model": "claude-opus-5-5",
+    "content": [
+     {
+      "type": "tool_use",
+      "id": "toolu_01EitmijMtDrviJqhTJsXCgT",
+      "name": "StructuredOutput",
+      "input": {
+       "verdict": "needs-attention",
+       "summary": "The loop now starts at index 1, so items[0] is never added and sum() gives the wrong result for any non-empty input. It also no longer works with iterables that aren't arrays, such as Set or generators.",
+       "findings": [
+        {
+         "id": "F1",
+         "severity": "high",
+         "title": "Off-by-one: first element skipped",
+         "body": "The loop starts at i = 1, so items[0] is never added. For example, sum([5]) returns 0 and sum([1,2,3]) returns 5.",
+         "file": "sum.mjs",
+         "line_start": 2,
+         "line_end": 2,
+         "confidence": 0.99,
+         "recommendation": "Start the loop at i = 0, or go back to the for...of loop.",
+         "decision": "AGREE"
+        },
+        {
+         "id": "F2",
+         "severity": "medium",
+         "title": "No longer supports non-array iterables",
+         "body": "Indexing with items.length and items[i] fails on Set, Map values, and generators: they have no length, so the loop never runs and sum() silently returns 0. The old for...of loop handled any iterable.",
+         "file": "sum.mjs",
+         "line_start": 2,
+         "line_end": 2,
+         "confidence": 0.8,
+         "recommendation": "Keep for (const x of items).",
+         "decision": "AGREE"
+        }
+       ],
+       "next_steps": [
+        "Revert to the for...of loop",
+        "Add tests for single-element and Set inputs"
+       ]
+      },
+      "caller": {
+       "type": "direct"
+      }
+     }
+    ]
+   },
+   "session_id": "<SESSION>"
+  },
+  {
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "tool_use_id": "toolu_01EitmijMtDrviJqhTJsXCgT",
+      "type": "tool_result",
+      "content": "Structured output provided successfully"
+     }
+    ]
+   },
+   "session_id": "<SESSION>",
+   "tool_result_meta": [
+    {
+     "id": "toolu_01EitmijMtDrviJqhTJsXCgT",
+     "permission_decision": {
+      "decision": "accept",
+      "source": "config"
+     }
+    }
+   ]
+  },
+  {
+   "type": "rate_limit_event",
+   "rate_limit_info": {
+    "status": "allowed",
+    "rateLimitType": "five_hour"
+   }
+  },
+  {
+   "duration_api_ms": 4645,
+   "stop_reason": "tool_use",
+   "session_id": "<SESSION>",
+   "total_cost_usd": 0.06848,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 7234,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 530,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 7234,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 530,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 7234,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 7234
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "permission_denials": [],
+   "terminal_reason": "completed",
+   "fast_mode_state": "off",
+   "fast_mode_disabled_reason": "sdk_opt_in_required",
+   "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+     "background": 0,
+     "foreground": 0,
+     "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+     "parent": 0,
+     "user": 0,
+     "system": 0
+    },
+    "refused": {
+     "depth_limit": 0,
+     "concurrency_limit": 0,
+     "budget": 0
+    },
+    "by_type": {}
+   },
+   "safety_stops": 0,
+   "is_error": false,
+   "num_turns": 2,
+   "subtype": "success",
+   "api_error_status": null,
+   "structured_output": {
+    "verdict": "needs-attention",
+    "summary": "The loop now starts at index 1, so items[0] is never added and sum() gives the wrong result for any non-empty input. It also no longer works with iterables that aren't arrays, such as Set or generators.",
+    "findings": [
+     {
+      "severity": "high",
+      "title": "Off-by-one: first element skipped",
+      "body": "The loop starts at i = 1, so items[0] is never added. For example, sum([5]) returns 0 and sum([1,2,3]) returns 5.",
+      "file": "sum.mjs",
+      "line_start": 2,
+      "line_end": 2,
+      "confidence": 0.99,
+      "recommendation": "Start the loop at i = 0, or go back to the for...of loop.",
+      "decision": "AGREE"
+     },
+     {
+      "severity": "medium",
+      "title": "No longer supports non-array iterables",
+      "body": "Indexing with items.length and items[i] fails on Set, Map values, and generators: they have no length, so the loop never runs and sum() silently returns 0. The old for...of loop handled any iterable.",
+      "file": "sum.mjs",
+      "line_start": 2,
+      "line_end": 2,
+      "confidence": 0.8,
+      "recommendation": "Keep for (const x of items).",
+      "decision": "AGREE"
+     }
+    ],
+    "next_steps": [
+     "Revert to the for...of loop",
+     "Add tests for single-element and Set inputs"
+    ]
+   },
+   "ttft_ms": 4784,
+   "type": "result",
+   "duration_ms": 4813,
+   "ttft_stream_ms": 809,
+   "time_to_request_ms": 166,
+   "first_content_frame_ms": 810,
+   "queued_turn_count": 0,
+   "result_index": 0,
+   "model_usage_since_last_result": {
+    "claude-opus-5-5": {
+     "inputTokens": 2,
+     "outputTokens": 530,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 7234,
+     "webSearchRequests": 0,
+     "costUSD": 0.06848,
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "thinkingTokens": 0,
+     "cacheCreationEphemeral5mInputTokens": 0,
+     "cacheCreationEphemeral1hInputTokens": 7234,
+     "canonicalModel": "claude-opus-5-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    }
+   }
+  }
+ ],
+ "structured-clean": [
+  {
+   "type": "system",
+   "subtype": "init",
+   "cwd": "<SCRATCH>/repo",
+   "session_id": "<SESSION>",
+   "tools": [
+    "Glob",
+    "Grep",
+    "Read"
+   ],
+   "mcp_servers": [],
+   "model": "claude-opus-5-5",
+   "permissionMode": "dontAsk",
+   "claude_code_version": "2.1.314",
+   "capabilities": [
+    "interrupt_receipt_v1",
+    "interrupt_cancel_queued_v1"
+   ]
+  },
+  {
+   "type": "result",
+   "subtype": "success",
+   "is_error": false,
+   "session_id": "<SESSION>",
+   "num_turns": 1,
+   "total_cost_usd": 0.01,
+   "usage": {
+    "input_tokens": 1,
+    "output_tokens": 1
+   },
+   "result": "{\"verdict\":\"approve\",\"summary\":\"Clean.\",\"findings\":[],\"next_steps\":[]}",
+   "structured_output": {
+    "verdict": "approve",
+    "summary": "Clean.",
+    "findings": [],
+    "next_steps": []
+   }
+  }
+ ]
+}

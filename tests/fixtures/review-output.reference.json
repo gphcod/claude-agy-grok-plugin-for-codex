@@ -1,0 +1,101 @@
+{
+  "$comment": "Provenance (PLAN.md S1.0): the shape of grok_plugin_for_codex v1.1.0 commit 148bc55 plugins/grok/schemas/review-output.schema.json (sha256 61dfd412fa3e556acb33bbcec04ba1cb4e7d387c745f092f9bea2cca9d55e530), with: $schema changed from draft 2020-12 to draft-07 (the only draft claude --json-schema accepts); finding `id` (string, minLength 1) added as required and `decision` (AGREE|CHANGE|REJECT) added as optional, both taken from claude_plugin_for_codex v0.5.0 commit be9fe54 plugins/claude-code-advisor/schemas/review-output.schema.json (sha256 bfb08813695cd88591d6d3c7e4d9704747222043e92b40f68197a8b1dec1067c); additionalProperties false kept at the root and the item level. gemini-plugin-cc 2.1.0 contributed nothing (no license file). tests/schema.test.mjs deep-equals the repository schema with this document minus $comment.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verdict",
+    "summary",
+    "findings",
+    "next_steps"
+  ],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "needs-attention"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "severity",
+          "title",
+          "body",
+          "file",
+          "line_start",
+          "line_end",
+          "confidence",
+          "recommendation"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line_start": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "line_end": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "recommendation": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "AGREE",
+              "CHANGE",
+              "REJECT"
+            ]
+          }
+        }
+      }
+    },
+    "next_steps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
