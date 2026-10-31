@@ -2,7 +2,7 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It is the Codex-hosted twin of Council for Claude Code, planned in github.com/gphcod/codex-agy-grok-plugin-for-claude (`PLAN.md`): same verbs, flags, footer, state model and adapter interface, with the host differences isolated and listed.
 
-Status: procedure version, 2026-10-31. Reviewed over two rounds by Codex gpt-6.1-sol (xhigh) and Gemini 4 Argon (high); every finding is resolved in the text (Part C). One owner decision is open: the Claude `exec` tier (A2).
+Status: procedure version, 2026-10-31. Reviewed over two rounds by Codex gpt-6.1-sol (xhigh) and Gemini 4 Argon (high); every finding is resolved in the text (Part C). The one owner decision, the Claude `exec` tier (A2), was decided on 2026-10-31: `sonnet`. No open items.
 
 ## 0. How to use this document
 
@@ -73,7 +73,7 @@ Tiers (`tiers.json`, family and effort stored separately; `default` means the us
 | grok | grok-4.7 / high | grok-4.7-build-fast / xhigh | grok-4.7 / xhigh |
 | gemini | gemini-4-argon / high | gemini-3.8-flash / high | gemini-4-argon / high |
 
-Gemini has no effort above high, so its consult and deep tiers coincide; the skill says so. The Claude `exec` tier is an owner decision: Argon keeps `sonnet` as the cheaper execution model (parallel to luna and build-fast); Codex prefers `default` for every tier so the configured model is never silently replaced. `sonnet` stands until the owner decides (Part C).
+Gemini has no effort above high, so its consult and deep tiers coincide; the skill says so. The Claude `exec` tier is `sonnet`, decided by the owner on 2026-10-31: the cheaper execution model, parallel to luna and build-fast (Argon's position). Codex preferred `default` for every tier so the configured model is never silently replaced; that view is recorded in Part C and answered by the footer, which always prints the model actually used.
 
 ## A3. Call surface
 
@@ -474,7 +474,7 @@ The draft went to Codex gpt-6.1-sol (xhigh) and Gemini 4 Argon (high) with eight
 |---|---|---|---|
 | Q1 naming | keep `council`/`$council`/`council-for-codex`/`~/.codex/council` | same | kept; prose says "Council for Codex" and "Council for Claude Code" |
 | Q2 Claude task mode | `dontAsk` plus an explicit edit-capable tool set and approved Bash patterns; acceptance unproved until tested | `acceptEdits --permission-prompts none` with explicit `--tools` and `--allowedTools` incl. Bash and a disallow list | S1.1 probes Argon's set first, Codex's second; decision logged (A5.1) |
-| Q3 Claude tiers | `default` for all three | keep `sonnet` for exec | disagreement recorded; `sonnet` stands pending the owner (A2) |
+| Q3 Claude tiers | `default` for all three | keep `sonnet` for exec | owner decided `sonnet` on 2026-10-31 (A2) |
 | Q4 fan-out | sequential; concurrent only if the host probe proves it; defer `panel` | same | kept (A6) |
 | Q5 batching for all three | keep, with schema, ledger and lifecycle contracts | keep | kept (A5.2) |
 | Q6 preflight contract | yes, with replay before preflight and real resource checks | yes, with adapter-level `preflight` for Grok and Gemini | kept (A1, A2, S2.6) |
@@ -527,7 +527,7 @@ The draft went to Codex gpt-6.1-sol (xhigh) and Gemini 4 Argon (high) with eight
 | F14 | MINOR | Validator gate before README and skill terms exist; engines regex | as Codex F8; terms skeleton in S0.5 |
 | F15 | MINOR | `</dev/null` and `[user]` marks | S6.6 commands need no stdin by A3.1; S8 chat check marked |
 
-Where the reviewers disagreed: the Claude `exec` tier (Codex `default`, Argon `sonnet`); recorded in A2 for the owner. Both reviewers also asked that the twin plan receive the shared corrections: `--no-commit-id` on `diff-tree`, the optional lifecycle hooks, the explicit-tier-overrides-inheritance rule, and merged global permission lists for Gemini; applied to the twin the same day.
+Where the reviewers disagreed: the Claude `exec` tier (Codex `default`, Argon `sonnet`); the owner chose `sonnet` on 2026-10-31, recorded in A2. Both reviewers also asked that the twin plan receive the shared corrections: `--no-commit-id` on `diff-tree`, the optional lifecycle hooks, the explicit-tier-overrides-inheritance rule, and merged global permission lists for Gemini; applied to the twin the same day.
 
 ## Round 2
 
