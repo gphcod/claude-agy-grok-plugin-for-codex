@@ -31,17 +31,17 @@ function option(token, spec, next) {
 export function parseOptions(argv, spec = SPEC) {
   const options = {};
   const positionals = [];
-  let hasDashDash = false;
+  let hasDashDash = false, leading = 0;
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
-    if (token === "--") { hasDashDash = true; positionals.push(...argv.slice(i + 1)); break; }
+    if (token === "--") { hasDashDash = true; leading = positionals.length; positionals.push(...argv.slice(i + 1)); break; }
     if (!token.startsWith("--")) { positionals.push(token); continue; }
     const found = option(token, spec, () => argv[i + 1]);
     if (found.repeat) options[found.key] = [...(options[found.key] ?? []), found.value];
     else options[found.key] = found.value;
     i += found.used;
   }
-  return { options, positionals, hasDashDash };
+  return { options, positionals, hasDashDash, leading: hasDashDash ? leading : positionals.length };
 }
 
 /**
@@ -55,16 +55,15 @@ export function parseArgv(argv, spec = SPEC) {
   if (!VERBS.includes(verb)) throw new UsageError(verb === undefined ? USAGE : `unknown verb ${JSON.stringify(verb)}. ${USAGE}`);
   const parsed = parseOptions(rest, spec);
   const { options, positionals } = parsed;
-  if (verb === "reply" && !options.thread && !options.last && positionals.length && !parsed.hasDashDash) options.thread = positionals.shift();
-  else if (verb === "reply" && !options.thread && !options.last && positionals.length && parsed.hasDashDash && rest.indexOf("--") > 0 && !rest[0].startsWith("--")) {
-    // `reply k3f9 -- text`: the positional before `--` names the thread; the text after it stays text.
-    options.thread = positionals.shift();
-  }
+  // `reply k3f9 text`, `reply k3f9 -- text`, `reply --json k3f9 -- text`: a positional before any `--` names the thread,
+  // wherever the flags stand; text after `--` stays text.
+  if (verb === "reply" && !options.thread && !options.last && parsed.leading > 0) options.thread = positionals.shift();
   if ((verb === "wait" || verb === "cancel") && positionals.length) {
     if (positionals.length > 1) throw new UsageError(`${verb} accepts one job or thread id`);
     options.job = positionals.shift();
   }
-  return { verb, ...parsed, options, positionals };
+  const { leading, ...shape } = parsed;
+  return { verb, ...shape, options, positionals };
 }
 
 /** Positive integer option. */

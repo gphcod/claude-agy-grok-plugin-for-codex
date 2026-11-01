@@ -5,7 +5,7 @@ import { UsageError, SPEC, VERBS, parseArgv, parseOptions, positiveInt, seconds 
 
 test("options are matched by arity: values take the next token or an inline =value, booleans take none", () => {
   assert.deepEqual(parseOptions(["--tier", "deep", "--json", "--model=grok-x", "--web=false", "k3f9", "--effort", "low", "rest"]), {
-    options: { tier: "deep", json: true, model: "grok-x", web: false, effort: "low" }, positionals: ["k3f9", "rest"], hasDashDash: false,
+    options: { tier: "deep", json: true, model: "grok-x", web: false, effort: "low" }, positionals: ["k3f9", "rest"], hasDashDash: false, leading: 2,
   });
   assert.deepEqual(parseOptions(["--request-id=a=b", "--prompt-file", "C:\\p q.txt"]).options, { "request-id": "a=b", "prompt-file": "C:\\p q.txt" });
   assert.deepEqual(parseOptions(["--to", "claude", "--commit", "abc", "--uncommitted", "--adversarial", "--refresh", "--live", "--confirm-ended", "--next-input"]).options,
@@ -21,9 +21,10 @@ test("--allow-command is repeatable and collects every value in order", () => {
 });
 
 test("everything after -- is text, even tokens that look like options", () => {
-  assert.deepEqual(parseOptions(["--tier", "exec", "--", "--tier", "deep", "--", "x"]), { options: { tier: "exec" }, positionals: ["--tier", "deep", "--", "x"], hasDashDash: true });
-  assert.deepEqual(parseOptions(["--"]), { options: {}, positionals: [], hasDashDash: true });
-  assert.deepEqual(parseOptions(["a", "b"]), { options: {}, positionals: ["a", "b"], hasDashDash: false });
+  assert.deepEqual(parseOptions(["--tier", "exec", "--", "--tier", "deep", "--", "x"]), { options: { tier: "exec" }, positionals: ["--tier", "deep", "--", "x"], hasDashDash: true, leading: 0 });
+  assert.deepEqual(parseOptions(["--"]), { options: {}, positionals: [], hasDashDash: true, leading: 0 });
+  assert.deepEqual(parseOptions(["a", "b"]), { options: {}, positionals: ["a", "b"], hasDashDash: false, leading: 2 });
+  assert.equal(parseOptions(["--json", "a", "--", "b"]).leading, 1, "positionals before -- are counted wherever the flags stand");
 });
 
 test("an unknown option or a value option without its value is a usage error", () => {
@@ -54,6 +55,15 @@ test("reply: a first positional names the thread unless --thread or --last does,
   assert.deepEqual(parseArgv(["reply", "--", "k3f9", "text"]).options, {}, "after -- nothing names a thread");
   assert.deepEqual(parseArgv(["reply", "k3f9", "--next-input"]).options, { thread: "k3f9", "next-input": true });
   assert.deepEqual(parseArgv(["reply", "k3f9", "some", "text"]), { verb: "reply", options: { thread: "k3f9" }, positionals: ["some", "text"], hasDashDash: false });
+});
+
+test("S2.8 F13: a flag before the thread positional keeps the alias: `reply --json abc123 -- \"follow up\"`", () => {
+  const flagged = parseArgv(["reply", "--json", "abc123", "--", "follow up"]);
+  assert.deepEqual([flagged.options, flagged.positionals], [{ json: true, thread: "abc123" }, ["follow up"]]);
+  const between = parseArgv(["reply", "--tier", "deep", "abc123", "--web", "--", "--last"]);
+  assert.deepEqual([between.options.thread, between.options.last, between.positionals], ["abc123", undefined, ["--last"]], "text after -- that looks like a flag stays text");
+  assert.deepEqual(parseArgv(["reply", "--json", "--", "abc123", "text"]).options, { json: true }, "nothing before -- names no thread");
+  assert.equal("leading" in parseArgv(["reply", "x"]), false, "the count stays internal to parsing");
 });
 
 test("wait and cancel take one job or thread id as --job; two is a usage error", () => {

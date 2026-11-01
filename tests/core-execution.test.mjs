@@ -6,7 +6,7 @@ import test from "node:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { processSnapshot, sameIdentity, companionState, selfIdentity, ownsExecution, hasFlagOperand, ownedExecution, stopIdentity, currentIdentity,
+import { processSnapshot, sameIdentity, companionState, selfIdentity, ownsExecution, ownsRecordedInvocation, startTime, hasFlagOperand, ownedExecution, stopIdentity, currentIdentity,
   recordRecoveryEvidence, recoveryEvidence, parseWindowsCommandLine, depthGuard, executionController } from "../plugins/council/scripts/lib/core/execution.mjs";
 import { DEPTH_VARIABLES } from "../plugins/council/scripts/lib/core/host.mjs";
 
@@ -51,31 +51,67 @@ test("ownsExecution delegates to the adapter; without an adapter nothing is owne
   assert.equal(ownsExecution(row(101, { argv: ["grok", "--prompt-file", path.join("/alias/jobs/aaaaaaaaaaaaaaaa", "prompt.md")] }), aliased, "linux", grokLike), false);
 });
 
-test("macOS ownership needs the complete recorded invocation: same launcher or the same native binary, never a mention", () => {
+test("macOS ownership needs the adapter's evidence and the complete recorded invocation: same launcher or the provider's native binary", () => {
   const raw = (text) => ({ pid: 101, argv: null, raw: text });
-  assert.ok(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), job, "darwin", null));
-  assert.ok(ownsExecution(raw(`/Users/me/.grok/bin/grok ${grokArgs.join(" ")}`), job, "darwin", null), "the same native binary under another path");
+  assert.ok(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), job, "darwin", grokLike));
+  assert.ok(ownsExecution(raw(`/Users/me/.grok/bin/grok ${grokArgs.join(" ")}`), job, "darwin", grokLike), "the same native binary under another path");
+  const npm = { ...job, argv: ["node", "/npm/lib/node_modules/grok/bin/grok", ...grokArgs] };
+  assert.ok(ownsExecution(raw(`/Users/me/.grok/bin/grok ${grokArgs.join(" ")}`), npm, "darwin", grokLike), "F2: the native grok behind a multi-element node launcher");
+  assert.ok(ownsRecordedInvocation(raw(`/opt/grok ${grokArgs.join(" ")}`), npm, "grok"), "the binary name is passed explicitly");
+  assert.equal(ownsRecordedInvocation(raw(`/opt/grok ${grokArgs.join(" ")}`), npm, null), false, "without a binary name only the recorded launcher matches");
+  assert.equal(ownsExecution(raw(`/usr/bin/notgrok ${grokArgs.join(" ")}`), npm, "darwin", grokLike), false);
+  assert.equal(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), job, "darwin", null), false, "no adapter, no ownership");
+  assert.equal(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), job, "darwin", { ...grokLike, ownsProcess: () => false }), false, "darwin goes through adapter.ownsProcess too");
   const node = { ...job, argv: ["/Applications/Tools Folder/node", "/project/fake.mjs", ...grokArgs] };
-  assert.ok(ownsExecution(raw(node.argv.join(" ")), node, "darwin", null), "a launcher path with spaces, recorded whole");
-  assert.equal(ownsExecution(raw(`/usr/bin/node /other.mjs ${grokArgs.join(" ")}`), node, "darwin", null), false, "another script under the same node");
+  assert.ok(ownsExecution(raw(node.argv.join(" ")), node, "darwin", grokLike), "a launcher path with spaces, recorded whole");
+  assert.equal(ownsExecution(raw(`/usr/bin/node /other.mjs ${grokArgs.join(" ")}`), node, "darwin", grokLike), false, "another script under the same node");
   for (const text of [`cat ${grokArgs.join(" ")}`, `/usr/bin/notgrok ${grokArgs.join(" ")}`, `grok ${grokArgs.join(" ")} backup`, `node -e "x" -- --prompt-file ${prompt} tail`, `grok --prompt-file ${prompt}`]) {
     assert.equal(ownsExecution(raw(text), job, "darwin", grokLike), false, text);
   }
-  assert.equal(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), { ...job, childArgs: [] }, "darwin", null), false, "a record from before launch owns nothing by text");
+  assert.equal(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), { ...job, childArgs: [] }, "darwin", grokLike), false, "a record from before launch owns nothing by text");
 });
 
-test("macOS: owned descendants are found through pgid, including a member reparented to pid 1", () => {
-  const root = row(201, { argv: null, raw: `grok ${grokArgs.join(" ")}`, pgid: 201, stamp: "Sat Oct 31 12:00:00 2026" });
-  const child = row(202, { ppid: 201, pgid: 201, argv: null, raw: "sh -c sleep 60", stamp: "Sat Oct 31 12:00:01 2026" });
-  const orphan = row(203, { ppid: 1, pgid: 201, argv: null, raw: "node helper.js", stamp: "Sat Oct 31 12:00:02 2026" });
-  const stranger = row(300, { ppid: 1, pgid: 300, argv: null, raw: "node other.js", stamp: "Sat Oct 31 12:00:02 2026" });
-  assert.deepEqual(owned(job, table(root, child, orphan, stranger), "darwin"), ["owned", [201, 202, 203]]);
-  assert.deepEqual(owned(job, table(orphan, stranger), "darwin"), ["gone", []], "a group with no owned row is nobody's");
-  const shared = row(201, { argv: null, raw: `grok ${grokArgs.join(" ")}`, pgid: 77, stamp: "Sat Oct 31 12:00:00 2026" });
+test("startTime: numeric ticks as BigInt, macOS lstart text as local epoch seconds, anything else null", () => {
+  assert.equal(startTime("123"), 123n);
+  assert.equal(startTime("Sat Oct 31 12:00:05 2026"), BigInt(new Date(2026, 9, 31, 12, 0, 5).getTime() / 1000));
+  assert.equal(startTime("Mon Oct 5 09:03:00 2026"), BigInt(new Date(2026, 9, 5, 9, 3, 0).getTime() / 1000), "single-digit day as the snapshot normalizes it");
+  assert.ok(startTime("Sat Oct 31 12:00:05 2026") > startTime("Sat Oct 31 11:59:59 2026"), "compared as times, not text");
+  for (const bad of [undefined, null, "", "0x10", "Sat Foo 31 12:00:00 2026", "Sat Oct 31 12:00 2026"]) assert.equal(startTime(bad), null, String(bad));
+});
+
+test("macOS groups (S2.8 F1): followed under a live owned leader; once the leader is gone only through a persisted identity", () => {
+  const at = (sec, min = 0) => `Sat Oct 31 12:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} 2026`;
+  const ms = (sec, min = 0) => new Date(2026, 9, 31, 12, min, sec).getTime();
+  const base = { ...job, pid: 201, pidWindow: [ms(0), ms(0) + 30], execution: [] };
+  const leader = row(201, { argv: null, raw: `grok ${grokArgs.join(" ")}`, pgid: 201, stamp: at(0) });
+  const child = row(202, { ppid: 201, pgid: 201, argv: null, raw: "sh -c sleep 60", stamp: at(1) });
+  const member = row(203, { ppid: 1, pgid: 201, argv: null, raw: "node helper.js", stamp: at(2) });
+  const stranger = row(300, { ppid: 1, pgid: 300, argv: null, raw: "node other.js", stamp: at(2) });
+  assert.deepEqual(owned(base, table(leader, child, member, stranger), "darwin"), ["owned", [201, 202, 203]], "the live leader's group is followed");
+  const early = row(204, { ppid: 1, pgid: 201, argv: null, raw: "node early.js", stamp: "Sat Oct 31 11:59:00 2026" });
+  assert.deepEqual(owned(base, table(leader, early), "darwin"), ["owned", [201]], "a member born before its leader is not pulled in");
+  // The leader is gone: a real descendant recorded at a heartbeat and reparented to pid 1 is adopted by its identity.
+  const recorded = { ...base, execution: [{ pid: 203, stamp: at(2) }] };
+  assert.deepEqual(owned(recorded, table(member, stranger), "darwin"), ["owned", [203]]);
+  // A replacement leader reusing pid 201 after the job ended spawned an unrelated process and exited: never adopted.
+  const ended = { ...recorded, endedAt: new Date(ms(5)).toISOString() };
+  const unrelated = row(205, { ppid: 1, pgid: 201, argv: null, raw: "node unrelated.js", stamp: at(1, 10) });
+  const replaced = ownedExecution(ended, table(unrelated), "darwin", [], grokLike);
+  assert.deepEqual([replaced.state, replaced.rows, replaced.unverified], ["gone", [], undefined]);
+  // A descendant spawned after the last snapshot, while the job runs: not adopted, reported unverified, so not gone.
+  const late = row(206, { ppid: 1, pgid: 201, argv: null, raw: "node late.js", stamp: at(30) });
+  const pending = ownedExecution(recorded, table(late), "darwin", [], grokLike);
+  assert.deepEqual([pending.state, pending.rows, pending.unverified.map((r) => r.pid)], ["unknown", [], [206]]);
+  // No recorded leader identity at all: any live member of group job.pid without evidence is unverified, never gone.
+  const blind = ownedExecution({ ...job, pid: 201 }, table(late), "darwin", [], grokLike);
+  assert.deepEqual([blind.state, blind.rows, blind.unverified.map((r) => r.pid)], ["unknown", [], [206]]);
+  // The test runner's group: a launched row that shares another group never pulls that group in.
+  const shared = row(201, { argv: null, raw: `grok ${grokArgs.join(" ")}`, pgid: 77, stamp: at(0) });
   const shell = row(78, { ppid: 1, pgid: 77, argv: null, raw: "-zsh", stamp: "Sat Oct 31 11:00:00 2026" });
-  assert.deepEqual(owned(job, table(shared, shell), "darwin"), ["owned", [201]], "a row that does not lead its group never pulls that group (a shell's, a test runner's) in");
-  const linuxRoot = { ...root, argv: job.argv }, linuxChild = { ...child, argv: ["sh", "-c", "sleep 60"] }, linuxOrphan = { ...orphan, argv: ["node", "helper.js"] };
-  assert.deepEqual(owned(job, table(linuxRoot, linuxChild, linuxOrphan), "linux"), ["owned", [201, 202]], "pgid is a darwin rule only: elsewhere a reparented member is not found by group");
+  assert.deepEqual(owned(base, table(shared, shell), "darwin"), ["owned", [201]]);
+  const linuxRoot = { ...leader, argv: job.argv }, linuxChild = { ...child, argv: ["sh", "-c", "sleep 60"] }, linuxMember = { ...member, argv: ["node", "helper.js"] };
+  assert.deepEqual(owned(base, table(linuxRoot, linuxChild, linuxMember), "linux"), ["owned", [201, 202]], "pgid is a darwin rule only");
+  assert.deepEqual(ownedExecution(base, table(leader), "darwin", [], null), { state: "unknown", rows: [], error: "ownership evidence unavailable: the provider module is not loaded" }, "F3: no adapter, unknown");
 });
 
 test("a Windows row with an inaccessible command line is unknown only when it could be ours; unreadable names are unknown", () => {

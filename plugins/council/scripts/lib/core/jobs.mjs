@@ -15,8 +15,11 @@ export const KEEP_FINISHED = 100;
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 export const JOB_ID = /^[a-z0-9]{1,16}$/;
 export const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-/** Output and scope options; every other option changes what runs, so it is part of the request fingerprint. */
-const NOT_INPUTS = new Set(["json", "request-id", "timeout"]);
+/**
+ * Output, scope and timing options; every other option changes what runs, so it is part of the request fingerprint. The
+ * timers are not inputs (as the twin): a retry with a longer --deadline or --inactivity-timeout replays the first call.
+ */
+const NOT_INPUTS = new Set(["json", "request-id", "timeout", "deadline", "inactivity-timeout"]);
 const BUSY = ["EBUSY", "EPERM", "EACCES"];
 /** A fatal condition outside the user's input (exit 1), such as a state root inside the workspace. */
 export class StateError extends Error {}
@@ -84,8 +87,9 @@ export function createJob(home, fields, id = reserveJob(home)) {
 }
 
 // Request lifecycle (A7.4). The record under requests/<key>.json is the lookup index: its key is session, cwd and the
-// request id, so a replay recovers the provider binding before any provider is resolved. The reservation is written at
-// the claim, becomes a tombstone once preparation completes, and is never removed or reused unless nothing ran.
+// request id, provider-neutral, so one exclusive reservation is taken before any provider is resolved (two identical
+// calls whose --last would resolve differently still reserve once). It stores the fingerprint, then the provider and job
+// once bound, becomes a tombstone once preparation completes, and is never removed or reused unless nothing ran.
 export function requestKey(session, cwd, requestId) {
   if (typeof requestId !== "string" || !REQUEST_ID.test(requestId)) throw new UsageError("--request-id needs 1 to 128 letters, digits, '.', '_', ':' or '-', starting with a letter or digit");
   return hash([session ?? null, cwd, requestId]).slice(0, 40);
@@ -109,33 +113,56 @@ export function lookupRequest(home, key, { waitMs = 1000 } = {}) {
     }
     try {
       const record = JSON.parse(text);
-      if (typeof record?.fingerprint === "string" && JOB_ID.test(record.job ?? "") && record.provider) return record;
+      const bound = JOB_ID.test(record?.job ?? "") && record.provider;
+      if (typeof record?.fingerprint === "string" && (bound || (record.state === "reserved" && record.job === null))) return record;
     } catch { /* Not yet complete. */ }
     if (Date.now() >= end) throw new Error(`request ${key} has an unreadable record (${file}); nothing was started. Retry with a new request id`);
   }
 }
 /**
  * Exclusive reservation: one job ever holds a request id. Returns {fresh: true, record} when this call owns it, else
- * {fresh: false, record} with the existing record. The job directory is claimed in the same step.
+ * {fresh: false, record} with the existing record. Without a provider and job id the reservation is unbound until
+ * `bindRequest`; with them the job directory is claimed in the same step.
  */
-export function claimRequest(home, { key, requestId, provider, session, cwd, fingerprint, jobId, companionPid = process.pid, companionIdentity = null }) {
+export function claimRequest(home, { key, requestId, provider = null, session, cwd, fingerprint, jobId = null, companionPid = process.pid, companionIdentity = null }) {
   const file = requestFile(home, key);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  let fd;
-  try { fd = fs.openSync(file, "wx"); }
-  catch (error) {
-    if (error.code !== "EEXIST") throw error;
+  const existing = () => {
     const record = lookupRequest(home, key);
     if (!record) throw new Error(`request ${requestId}: its record disappeared; nothing was started`);
     return { fresh: false, record };
-  }
+  };
+  if (fs.existsSync(file)) return existing();
   const record = { state: "reserved", id: requestId, key, provider, job: jobId, session: session ?? null, cwd, fingerprint, companionPid, companionIdentity, reservedAt: new Date().toISOString() };
+  // The reservation appears whole or not at all: written to a private file, then linked into place exclusively. No reader
+  // sees an empty or partial reservation, and a failed write (ENOSPC) leaves nothing behind, so an identical retry runs.
+  // An unparseable record can then only be damage; it is never treated as abandoned (lookupRequest reports it).
+  const temp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+  let claimedDir = false;
   try {
-    if (!claimDir(home, jobId)) throw new Error(`request ${requestId}: its job directory ${jobId} already exists`);
-    fs.writeSync(fd, `${JSON.stringify(record)}\n`);
-  } catch (error) { fs.closeSync(fd); fd = null; fs.rmSync(file, { force: true }); throw error; }
-  finally { if (fd !== null) fs.closeSync(fd); }
+    fs.writeFileSync(temp, `${JSON.stringify(record)}\n`, { flag: "wx" });
+    if (jobId) { if (!claimDir(home, jobId)) throw new Error(`request ${requestId}: its job directory ${jobId} already exists`); claimedDir = true; }
+    try { fs.linkSync(temp, file); }
+    catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      if (claimedDir) { fs.rmSync(path.join(jobsRoot(home), jobId), { recursive: true, force: true }); claimedDir = false; }
+      return existing();
+    }
+  } catch (error) {
+    if (claimedDir) fs.rmSync(path.join(jobsRoot(home), jobId), { recursive: true, force: true });
+    throw error;
+  } finally {
+    try { fs.rmSync(temp, { force: true }); } catch { /* best effort: a published reservation stands; a stray temp file is harmless */ }
+  }
   return { fresh: true, record };
+}
+/** Binds an unbound reservation to the resolved provider and its job, claiming the job directory. */
+export function bindRequest(home, key, { provider, jobId }) {
+  const record = lookupRequest(home, key);
+  if (!record || record.job !== null) throw new Error("request record changed before its provider was bound");
+  if (!claimDir(home, jobId)) throw new Error(`request ${record.id}: its job directory ${jobId} already exists`);
+  writeFileAtomic(requestFile(home, key), `${JSON.stringify({ ...record, provider, job: jobId })}\n`);
+  return { ...record, provider, job: jobId };
 }
 /** Preparation completed: the reservation becomes a tombstone that outlives the job body (`result expired`). */
 export function markRequestPrepared(home, key) {

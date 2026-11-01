@@ -1,7 +1,8 @@
 // Turn lifecycle (S2.4): `runManagedTurn(ctx, adapter, initial, prepare, options, hooks)` and `cancelManaged`, ported from
 // grok_plugin_for_codex 1.1.0 lib/lifecycle.mjs with codex-plugin-cc 2.3.2's 12 s PIPE_WAIT_MS, unattributed-pipe handling
 // and `thread locked`, and claude_plugin_for_codex 0.5.0 process.mjs's held-output lock. One writer owns the job from
-// admission through finalization; the adapter's beforeTurn/afterTurn run once each, afterTurn after verified cleanup.
+// admission through finalization; the adapter's beforeTurn/afterTurn run once each, afterTurn only after verified cleanup
+// (deferred to the `cancel` that confirms it when the turn ends with cleanup pending).
 // The stop path snapshots owned descendants, SIGTERMs the child's group, then SIGKILLs (taskkill /T /F on Windows).
 import fs from "node:fs";
 import path from "node:path";
@@ -93,7 +94,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     Object.assign(job, {
       tier: turn.tier ?? job.tier, model: turn.model ?? job.model, modelInput: turn.modelInput ?? null, effort: turn.effort ?? job.effort, requestedEffort: turn.requestedEffort ?? job.requestedEffort,
       modelVerified: turn.modelVerified !== false, web: Boolean(turn.web), cwd: turn.cwd ?? job.cwd, agent: built.agent ?? null, readOnly: built.readOnly !== false,
-      target: turn.target ?? null, unreviewed: turn.unreviewed ?? [], admitted: true, admittedAt: new Date().toISOString(),
+      target: turn.target ?? null, unreviewed: turn.unreviewed ?? [],
       reviewState: turn.reviewState ?? null, reviewStateBase: turn.reviewState ?? null, nextInput: Boolean(turn.nextInput), batch: turn.batch ?? null,
       round: turn.round ?? 0, rounds: turn.rounds ?? job.rounds, roundsSet: Boolean(turn.roundsSet),
       childArgs: built.args, promptFile: built.promptFile ?? null, answerFile: built.answerFile ?? null,
@@ -108,7 +109,11 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
       io.writeFileSync(path.join(root, "review.data"), turn.reviewFiles.snapshot.data);
     }
     save(job);
-    if (options.requestKey) markRequestPrepared(ctx.home, options.requestKey); // Preparation complete: the reservation is a tombstone.
+    // Preparation complete (every prompt and review-input write done): the reservation becomes a tombstone, and only
+    // then is the job admitted; a failure before this point leaves it unadmitted, so the entry frees the request id.
+    if (options.requestKey) markRequestPrepared(ctx.home, options.requestKey);
+    Object.assign(job, { admitted: true, admittedAt: new Date().toISOString() });
+    save(job);
     if (adapter.beforeTurn) await adapter.beforeTurn({ job, request: turn, cwd: job.cwd, env: ctx.env });
     await hooks.beforeSpawn?.(job);
     if (cancelled()) {
@@ -124,6 +129,17 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
       const graceMs = hooks.graceMs ?? Math.min(GRACE_MS, retryMs);
       const drainMs = hooks.drainMs ?? DRAIN_MS;
       const pipeWaitMs = hooks.pipeWaitMs ?? PIPE_WAIT_MS;
+      const beatMs = hooks.beatMs ?? BEAT_MS;
+      // Every heartbeat persists the identities (pid + creation time) of the owned descendants, so recovery can adopt a
+      // group member reparented after the leader exits only by a recorded identity (A7.5). Not on Windows (no groups;
+      // its query costs most of a second); a failed query changes nothing.
+      const persistDescendants = () => {
+        if (platform === "win32" || reason) return;
+        try {
+          const found = control.inspect(job, control.snapshot(queryMs));
+          if (found.rows.length) { job.execution = unique([...job.execution, ...found.rows]); save(job); }
+        } catch { /* the next heartbeat or the stop snapshot records them */ }
+      };
       const stopOwned = () => {
         let found;
         const end = stoppedAt + shutdownMs;
@@ -150,9 +166,8 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
         stoppedAt = killedAt = Date.now();
         stopOwned();
       };
-      const structured = Boolean(turn.structuredReview);
-      const onText = (text) => {
-        if (persistenceFailed || built.answerFile || structured) return;
+      const onText = (text) => { // Spooled whole, structured reviews too; only rendering caps it.
+        if (persistenceFailed || built.answerFile) return;
         try { io.appendFileSync(answerFile, text); }
         catch (error) { persistenceFailed = true; stop(`answer storage failed: ${error.message}`); }
       };
@@ -160,10 +175,13 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
         cwd: job.cwd, expectedThreadId: turn.thread ?? built.requestedThreadId ?? null, onText,
         onFailure: (message) => { streamFailure = message; stop(message); },
         onThread: (id) => {
-          // A discovered id is claimed before it is published; a collision fails the turn.
-          if (job.threadIds.includes(id)) { job.threadId = id; save(job); announce(); return; }
-          try { claim(id); job.threadId = id; save(job); announce(); }
-          catch (error) { streamFailure = error.message; stop(error.message); }
+          // A discovered id is claimed before it is published; a collision fails the turn and the id is never published.
+          try { if (!job.threadIds.includes(id)) claim(id); }
+          catch (error) { streamFailure = error.message; stop(error.message); return false; }
+          job.threadId = id;
+          try { save(job); } catch (error) { persistenceFailed = true; stop(`job storage failed: ${error.message}`); }
+          announce();
+          return true;
         },
       });
       await new Promise((resolve) => {
@@ -175,9 +193,11 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
           for (const [signal, fn] of handlers) process.off(signal, fn);
           resolve();
         };
+        const spawnFrom = Date.now();
         try {
           child = (hooks.spawn ?? spawnChild)(turn.launcher, built.args, { cwd: turn.cwd, env: built.env ?? ctx.env, stdin: built.stdin !== undefined ? "pipe" : "ignore", platform });
         } catch (error) { spawnError = error; cleanupConfirmed = true; finish(); return; }
+        job.pidWindow = [spawnFrom, Date.now()]; // the leader's start lies in here (macOS group rule)
         child.on("error", (error) => { spawnError = error; finish(); });
         child.on("exit", () => {
           exitedAt = Date.now();
@@ -198,8 +218,8 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
         child.stderr.on("data", (chunk) => { job.stderrTail = ((job.stderrTail ?? "") + chunk).slice(-4096); });
         timer = setInterval(() => {
           const now = Date.now();
-          if (now - beatAt >= BEAT_MS) {
-            if (refreshBeat(job, io)) beatAt = now;
+          if (now - beatAt >= beatMs) {
+            if (refreshBeat(job, io)) { beatAt = now; persistDescendants(); }
             else { persistenceFailed = true; stop("heartbeat storage failed"); }
           }
           if (reason) {
@@ -278,8 +298,12 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
   }
 
   const seen = reader?.state;
-  if (seen?.threadId && !seen.failed) job.threadId = seen.threadId;
-  await afterTurn({ cleanupConfirmed, reason, completed: Boolean(seen?.completed), denials: seen?.denials ?? [] });
+  if (seen?.threadId && !seen.failed && job.threadIds.includes(seen.threadId)) job.threadId = seen.threadId;
+  if (seen?.model && (!job.model || job.model === "default")) Object.assign(job, { model: seen.model, modelObserved: true });
+  // afterTurn only after verified cleanup; otherwise the cancel that confirms cleanup runs it (A7.5).
+  const hookInput = { reason, completed: Boolean(seen?.completed), denials: seen?.denials ?? [] };
+  if (cleanupConfirmed) await afterTurn({ cleanupConfirmed, ...hookInput });
+  else if (adapter.afterTurn) job.afterTurnPending = hookInput;
   if (hookOutcome?.edited) for (const p of hookOutcome.edited) seen?.edited.add(p);
   let parsed = null;
   try { parsed = readAnswer(answerFile); answer = parsed.answer; }
@@ -293,29 +317,39 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
   else if (!error && (streamFailure || seen?.failed)) error = streamFailure ?? seen.failed;
   else if (!error && !seen?.completed) error = job.stderrTail?.trim().split(/\r?\n/).at(-1) || `${provider} ended without completing the turn`;
   else if (!error && child?.exitCode !== 0) error = `${provider} exited with code ${child?.exitCode}`;
-  if (!error && outcome === "failed" && turn.structuredReview && turn.finalizeReview) {
-    const review = turn.finalizeReview({ seen, job, answerFile, io });
-    if (review.error) error = review.error;
-    else {
-      Object.assign(job, { verdict: review.verdict ?? null, findings: review.findings ?? null, reviewState: review.reviewState ?? job.reviewState, unreviewed: review.unreviewed ?? job.unreviewed });
-      if (review.text !== undefined) { try { io.writeFileSync(answerFile, review.text); parsed = readAnswer(answerFile); answer = parsed.answer; } catch (failure) { error = `answer storage failed: ${failure.message}`; } }
-      if (review.attention) job.reviewAttention = review.attention;
-    }
-  } else if (!error && outcome === "failed" && turn.finalizeTurn) {
+  if (!error && outcome === "failed" && !turn.structuredReview && turn.finalizeTurn) {
     try { Object.assign(job, turn.finalizeTurn({ seen, job }) ?? {}); } catch (failure) { error = failure.message; }
   }
   if (!error && outcome === "failed") {
     if (!parsed?.nonempty && !turn.structuredReview) error = `${provider} returned no answer`;
     else if (denied.length) { outcome = "attention"; job.denied = denied; }
     else if (incomplete) { outcome = "attention"; job.incomplete = incomplete; }
-    else if (turn.structuredReview) outcome = job.reviewAttention || (job.unreviewed ?? []).length > 0 || job.reviewState?.synthesisPending || job.reviewState?.pending || job.reviewState?.blocking ? "attention" : "ok";
+    else if (turn.structuredReview && job.readOnly && seen?.edited?.size) { outcome = "attention"; job.incomplete = `the read-only review changed the workspace: ${[...seen.edited].slice(0, 5).join(", ")}`; }
+    else if (turn.structuredReview) outcome = "review"; // settled below, after the cleanup check
     else outcome = parsed.questions ? "attention" : "ok";
   }
   if (!cleanupConfirmed) {
-    if (job.unattributedPipes) job.answerComplete = ["ok", "attention"].includes(outcome);
+    if (job.unattributedPipes) job.answerComplete = ["ok", "attention", "review"].includes(outcome);
     outcome = "failed";
     error = job.threadLocked ? `${[reason, queryError].filter(Boolean).join("; ") || "clean exit"}; thread locked: ${provider}'s output stayed open past ${hooks.pipeWaitMs ?? PIPE_WAIT_MS} ms, held by a process this turn cannot identify`
       : `${[reason, queryError].filter(Boolean).join("; ") || "execution ended"}; cleanup pending: ${provider} or a descendant may still be running`;
+  }
+  if (outcome === "review") {
+    // Coverage and the findings ledger are committed only now: the turn completed with no denial, no workspace change,
+    // verified cleanup, and the rendered result is stored. Any failure leaves the admission state (reviewStateBase).
+    outcome = "failed";
+    let answerText = null;
+    try { answerText = io.readFileSync(answerFile, "utf8"); } catch (failure) { if (failure.code !== "ENOENT") error = `answer storage failed: ${failure.message}`; }
+    const review = error ? null : turn.finalizeReview ? turn.finalizeReview({ seen, job, answerText, answerFile }) : { error: "no review finalizer" };
+    if (review?.error) error = review.error;
+    else if (review) {
+      try {
+        if (review.text !== undefined) { io.writeFileSync(answerFile, review.text); parsed = readAnswer(answerFile); answer = parsed.answer; }
+        Object.assign(job, { verdict: review.verdict ?? null, findings: review.findings ?? null, reviewState: review.reviewState ?? job.reviewState, unreviewed: review.unreviewed ?? job.unreviewed });
+        if (review.attention) job.reviewAttention = review.attention;
+        outcome = job.reviewAttention || (job.unreviewed ?? []).length > 0 || job.reviewState?.synthesisPending || job.reviewState?.pending || job.reviewState?.blocking ? "attention" : "ok";
+      } catch (failure) { error = `answer storage failed: ${failure.message}`; }
+    }
   }
   Object.assign(job, {
     status: ["ok", "attention"].includes(outcome) ? "done" : outcome, outcome, code: outcome === "ok" ? 0 : outcome === "attention" ? 10 : 1,
@@ -327,19 +361,34 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
   try {
     beat();
     await hooks.beforeFinalize?.(job);
+    if (["ok", "attention"].includes(job.outcome) && !io.existsSync(answerFile)) io.writeFileSync(answerFile, ""); // a replay finds the body
+    // The thread record is written while the claim is held, before completion is published (A7.6).
+    if (job.threadId && job.admitted) {
+      (hooks.saveThread ?? saveThread)(ctx.home, { provider, threadId: job.threadId, cwd: job.cwd, session: job.session, model: job.model, modelInput: job.modelInput ?? null, effort: job.effort,
+        requestedEffort: job.requestedEffort ?? null, tier: job.tier, round: job.round, rounds: job.rounds, roundsSet: job.roundsSet, agent: job.agent ?? null, web: job.web, readOnly: job.readOnly,
+        policyVersion: turn.policyVersion ?? null, lastJob: job.id });
+    }
     save(job); finishMarker(job);
     if (cleanupConfirmed) releaseClaims(ctx.home, job);
-    if (job.threadId && job.admitted) {
-      saveThread(ctx.home, { provider, threadId: job.threadId, cwd: job.cwd, session: job.session, model: job.model, modelInput: job.modelInput ?? null, effort: job.effort, tier: job.tier,
-        round: job.round, rounds: job.rounds, roundsSet: job.roundsSet, agent: job.agent ?? null, web: job.web, readOnly: job.readOnly, policyVersion: turn.policyVersion ?? null, lastJob: job.id });
-    }
   } catch (failure) {
-    job.code = 1; job.outcome = "failed"; job.cleanupPending = true;
+    Object.assign(job, { code: 1, outcome: "failed", status: "failed", cleanupPending: true, error: `finalization failed: ${failure.message}` });
     if (!job.done && job.reviewStateBase) job.reviewState = job.reviewStateBase;
-    job.error = `finalization failed: ${failure.message}`;
+    if (!job.done) { try { save(job); finishMarker(job); } catch { /* storage is gone: the heartbeat lapses and recovery reads the job as lost */ } }
   }
   announce();
   return { job: jobView(ctx.home, job), answer };
+}
+
+/**
+ * The afterTurn a turn deferred because its cleanup was unverified, run once (an `after-turn` marker, created exclusively)
+ * by the cancel that confirms cleanup; `request` is null there and its result changes no finalized record.
+ */
+async function deferredAfterTurn(ctx, job, adapter, io) {
+  if (!job.afterTurnPending || !adapter?.afterTurn) return null;
+  try { io.writeFileSync(path.join(job.dir, "after-turn"), "", { flag: "wx" }); }
+  catch (error) { return error.code === "EEXIST" ? null : `afterTurn not run: ${error.message}`; }
+  try { await adapter.afterTurn({ job, request: null, cwd: job.cwd, env: ctx.env }, { ...job.afterTurnPending, cleanupConfirmed: true, deferred: true }); return null; }
+  catch (error) { return `afterTurn failed: ${error.message}`; }
 }
 
 /**
@@ -347,7 +396,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
  * `confirmEnded` releases a held-output lock only after the process table shows no owned process and refuses (exit 10)
  * while the owner companion or an identified child is live or the query failed.
  */
-export async function cancelManaged(ctx, job, { timeoutMs = 30000, control = executionController(), io = fs, confirmEnded = false } = {}) {
+export async function cancelManaged(ctx, job, { timeoutMs = 30000, control = executionController(), io = fs, confirmEnded = false, adapter = null } = {}) {
   const view = () => jobView(ctx.home, loadJob(ctx.home, job.id) ?? job);
   if (job.done && !cleanupNeeded(job) && !claimHeld(ctx.home, job)) return { status: label(job), code: 0, job };
   io.writeFileSync(path.join(job.dir, "cancel"), "");
@@ -370,8 +419,9 @@ export async function cancelManaged(ctx, job, { timeoutMs = 30000, control = exe
         if (job.unattributedPipes && !confirmEnded) return { status: "unknown", code: 1, job: view(), error: `an unidentified process held job ${job.id}'s output; the thread stays locked until cancel ${job.id} --confirm-ended after checking the process table` };
         markStopped(job);
         releaseClaims(ctx.home, job);
+        const hookError = await deferredAfterTurn(ctx, job, adapter, io);
         const current = view();
-        return { status: current.claimHeld ? "unknown" : label(job), code: current.claimHeld ? 1 : 0, job: current, ...(confirmEnded ? { released: true } : {}) };
+        return { status: current.claimHeld ? "unknown" : label(job), code: current.claimHeld ? 1 : 0, job: current, ...(confirmEnded ? { released: true } : {}), ...(hookError ? { error: hookError } : {}) };
       } else {
         if (confirmEnded) return { status: "refused", code: 10, job: view(), error: `--confirm-ended refused: ${found.rows.length} owned process${found.rows.length > 1 ? "es are" : " is"} still live (pid ${found.rows.map((r) => r.pid).join(", ")})` };
         try { recordRecoveryEvidence(job, found.rows); }

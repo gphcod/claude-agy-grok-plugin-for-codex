@@ -87,7 +87,7 @@ test("a large review is delivered in batches: batch i/n, --next-input to synthes
   const original = fs.readFileSync(path.join(w.home, "jobs", job, "review-input", "review.data"));
   for (let i = 0; i < 3; i++) fs.writeFileSync(path.join(w.workspace, `part${i}.txt`), "live workspace changed\n");
   const discussion = w.call(["reply", job, "--", "F1 AGREE"]);
-  assert.equal(discussion.status, 0);
+  assert.equal(discussion.status, 10, "a discussion reply is a structured review turn (S2.8 F9): pending batches keep it in attention");
   assert.equal(JSON.parse(w.call(["wait", jobIdOf(discussion.stderr), "--json"]).stdout).coverage.reviewed, 1, "a discussion reply keeps coverage and earns none");
   let last = discussion, ref = jobIdOf(discussion.stderr), rounds = 0, sawSynthesis = false;
   while (rounds++ < 10) {

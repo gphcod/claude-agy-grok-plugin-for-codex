@@ -8,7 +8,7 @@ import { makeWorld, jobIdOf } from "./helpers.mjs";
 import { DEPTH_VARIABLES } from "../plugins/council/scripts/lib/core/host.mjs";
 
 const KEYS = ["verb", "nextInput", "text", "prompt", "instructions", "contractPath", "model", "effort", "resume", "threadId", "cwd", "schemaPath", "structured", "readOnly", "web",
-  "allowCommands", "maxTurns", "maxBudgetUsd", "agent", "jobDir", "envKeys", "policy"].sort();
+  "allowCommands", "maxTurns", "maxBudgetUsd", "agent", "jobDir", "envKeys", "policy", "launcherKind"].sort();
 function world() {
   const w = makeWorld();
   const log = path.join(w.dir, "requests.jsonl");

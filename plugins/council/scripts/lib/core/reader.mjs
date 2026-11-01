@@ -8,15 +8,16 @@ export const LINE_CAP = 1024 * 1024;
 const PATH_CAP = 10000;
 
 /**
- * `callbacks`: onText(delta), onFailure(message), onThread(id) (a discovered id, before it is published), onEvent(line).
- * `state` accumulates: threadId, completed, failed, denials[], incomplete, structured, edited (Set), failedCommands[],
- * costUsd, usage, toolSteps, hasText, lastEvent, adapter (the per-turn scratch object the adapter may use).
+ * `callbacks`: onText(delta), onFailure(message), onThread(id) (a discovered id, before it is published: `false` refuses
+ * it, and `state.threadId` stays null), onEvent(line).
+ * `state` accumulates: threadId, model (the first observed model), completed, failed, denials[], incomplete, structured,
+ * edited (Set), failedCommands[], costUsd, usage, toolSteps, hasText, lastEvent, adapter (the adapter's per-turn scratch).
  */
 export function createReader(adapter, { cwd = process.cwd(), expectedThreadId = null, maxLineBytes = adapter.maxLineBytes ?? LINE_CAP, onText, onFailure, onThread, onEvent } = {}) {
-  const state = { threadId: null, completed: false, failed: null, denials: [], incomplete: null, structured: null, edited: new Set(), failedCommands: [],
+  const state = { threadId: null, model: null, completed: false, failed: null, denials: [], incomplete: null, structured: null, edited: new Set(), failedCommands: [],
     costUsd: null, usage: null, toolSteps: 0, hasText: false, lastEvent: null, events: 0, adapter: {} };
   const decoder = new StringDecoder("utf8");
-  let buffer = "", bytes = 0, broken = false, separate = false;
+  let buffer = "", bytes = 0, broken = false, separate = false, refused = null;
   const fail = (message) => {
     if (broken) return;
     broken = true;
@@ -33,8 +34,12 @@ export function createReader(adapter, { cwd = process.cwd(), expectedThreadId = 
     if (result.fatal) { fail(result.fatal); return; }
     if (result.threadId !== undefined && result.threadId !== null) {
       if (expectedThreadId && String(result.threadId).toLowerCase() !== String(expectedThreadId).toLowerCase()) { fail(`the provider answered on thread ${JSON.stringify(result.threadId)}, expected ${expectedThreadId}`); return; }
-      if (state.threadId === null) { state.threadId = result.threadId; onThread?.(result.threadId); }
+      if (state.threadId === null && refused === null) {
+        if (onThread?.(result.threadId) === false) refused = result.threadId; // never published
+        else state.threadId = result.threadId;
+      }
     }
+    if (typeof result.model === "string" && result.model && state.model === null) state.model = result.model;
     if (result.toolStep) { state.toolSteps += 1; separate = state.hasText; }
     if (typeof result.textDelta === "string" && result.textDelta) {
       if (separate) { onText?.("\n\n"); separate = false; }

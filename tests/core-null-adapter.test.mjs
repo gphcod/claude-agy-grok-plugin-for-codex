@@ -25,7 +25,7 @@ test("the null adapter implements every A5 member with the documented return sha
   assert.deepEqual(adapter.resolveLauncher({}), { command: process.execPath, args: [FAKE_CHILD], path: FAKE_CHILD, kind: "node-script" });
   assert.equal(adapter.trustsCleanExit(adapter.resolveLauncher({})), false);
   const probe = await adapter.probe(adapter.resolveLauncher({}));
-  assert.deepEqual(probe, { version: "null 0.0.1", loggedIn: true, models: [{ id: "null-model", efforts: ["low", "medium", "high", "xhigh"] }, { id: "null-fast", efforts: ["low", "medium", "high"] }] });
+  assert.deepEqual(probe, { version: "null 0.0.1", loggedIn: true, models: [{ id: "null-model", efforts: ["low", "medium", "high", "xhigh"] }, { id: "null-fast", efforts: ["low", "medium", "high"] }], warnings: [] });
   assert.deepEqual(adapter.preflight({ stateRoot: dir }).map((d) => d.kind), ["dir", "exec"]);
   assert.deepEqual(Object.keys(tiers), ["consult", "exec", "deep"]);
   assert.deepEqual(Object.keys(catalog.models), ["null-model", "null-fast"]);
@@ -124,7 +124,7 @@ test("fake child: ok, exit-nonzero, no-completion, fragmented-frames, huge-line,
 test("the frozen interface (S2.7): assertAdapter accepts the null adapter and names every missing or mistyped member", () => {
   assert.equal(assertAdapter(adapter, "null"), adapter);
   assert.deepEqual(Object.keys(ADAPTER_MEMBERS), ["id", "binEnv", "resolveLauncher", "trustsCleanExit", "ownsProcess", "maxLineBytes", "probe", "preflight", "catalog", "buildTurn", "parseEvent", "reviewPlan", "finalizeReview"]);
-  assert.deepEqual(Object.keys(OPTIONAL_MEMBERS), ["beforeTurn", "afterTurn"]);
+  assert.deepEqual(Object.keys(OPTIONAL_MEMBERS), ["checkRequest", "beforeTurn", "afterTurn"]);
   assert.deepEqual(EXIT, { ok: 0, attention: 10, running: 20, failed: 1, usage: 2 });
   const { probe, ...noProbe } = adapter;
   assert.throws(() => assertAdapter(noProbe, "null"), /missing or wrong probe \(function\)$/);

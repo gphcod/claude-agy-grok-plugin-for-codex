@@ -2,7 +2,7 @@
 // The null adapter's child (S2.1): a provider-shaped process with no model behind it. It reads the launch the null
 // adapter builds (see null-adapter.mjs for the profiles), logs it to COUNCIL_FAKE_LOG, and plays COUNCIL_FAKE_SCENARIO:
 // ok, slow, hold-pipes, exit-nonzero, huge-line, fragmented-frames, no-completion, fail-then-success.
-// Protocol (NDJSON on stdout): {type:"start",thread} · {type:"text",data} · {type:"tool",name,path,ok} · {type:"end",thread,cost}.
+// Protocol (NDJSON on stdout): {type:"start",thread,model?} (model from COUNCIL_FAKE_MODEL; reviews stream COUNCIL_FAKE_REVIEW_TEXT) · {type:"text",data} · {type:"tool",name,path,ok} · {type:"end",thread,cost}.
 // The answer-file profile writes the answer to --answer-file and streams start/end only.
 import fs from "node:fs";
 import { spawn } from "node:child_process";
@@ -58,7 +58,7 @@ if (scenario === "exit-nonzero") { out({ type: "start", thread }); process.stder
 else if (scenario === "fail-then-success" && attempts % 2 === 1) { out({ type: "start", thread }); process.stderr.write("fake child: transient failure\n"); leave(3); }
 else await turn();
 async function turn() {
-out({ type: "start", thread });
+out({ type: "start", thread, ...(process.env.COUNCIL_FAKE_MODEL ? { model: process.env.COUNCIL_FAKE_MODEL } : {}) });
 if (scenario === "slow") await sleep(Number(process.env.COUNCIL_FAKE_SLOW_MS ?? 1500));
 for (const end = Date.now() + Number(process.env.COUNCIL_FAKE_SPIN_MS ?? 0); Date.now() < end; await sleep(100)) out({ type: "tool", name: "read", ok: true });
 for (let i = 0; i < Number(process.env.COUNCIL_FAKE_TOOLS ?? 0); i++) out({ type: "tool", name: "edit", path: `f${i}.js`, ok: true });
@@ -67,7 +67,7 @@ for (const file of edits) out({ type: "tool", name: "edit", path: file, ok: true
 if (process.env.COUNCIL_FAKE_FAILED_COMMAND) out({ type: "tool", name: "shell", command: process.env.COUNCIL_FAKE_FAILED_COMMAND, ok: false, exit: 1 });
 if (process.env.COUNCIL_FAKE_DENY) out({ type: "tool", name: "edit", path: process.env.COUNCIL_FAKE_DENY, ok: false, denied: true });
 if (answerFile) fs.writeFileSync(answerFile, answer);
-else if (!review) { const half = Math.ceil(answer.length / 2); out({ type: "text", data: answer.slice(0, half) }); out({ type: "text", data: answer.slice(half) }); }
+else if (!review || process.env.COUNCIL_FAKE_REVIEW_TEXT) { const text = review ? process.env.COUNCIL_FAKE_REVIEW_TEXT : answer; const half = Math.ceil(text.length / 2); out({ type: "text", data: text.slice(0, half) }); out({ type: "text", data: text.slice(half) }); }
 if (scenario === "no-completion") { leave(0); return; }
 if (process.env.COUNCIL_FAKE_HANG) await new Promise(() => setInterval(() => {}, 1000));
 out({ type: "end", thread, cost: 0.001, ...(structured ? { structured } : {}) });

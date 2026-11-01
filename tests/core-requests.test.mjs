@@ -153,7 +153,7 @@ test("a pruned request reports `result expired` (exit 1) and runs nothing; an ab
   fs.writeFileSync(path.join(w.home, "requests", `${key}.json`), JSON.stringify({ ...record, fingerprint: fp }));
   const abandoned = ask(w, "r14");
   assert.equal(abandoned.status, 2);
-  assert.match(abandoned.stderr, /whose call ended before it prepared; nothing ran, so the same request id can run again/);
+  assert.match(abandoned.stderr, /names job [a-z0-9]{16} that ended before it prepared; nothing ran, so the same request id can run again/);
   assert.equal(lookupRequest(w.home, key), null, "the reservation was released");
   assert.equal(ask(w, "r14").status, 0, "and the id runs");
 });

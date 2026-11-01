@@ -7,7 +7,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { writeFileAtomic } from "./fs.mjs";
-import { CHILD_BINARIES, DEPTH_VARIABLES } from "./host.mjs";
+import { BINARIES, CHILD_BINARIES, DEPTH_VARIABLES } from "./host.mjs";
 
 const UNKNOWN = { state: "unknown", rows: [] };
 /** The first WMI query on a cold Windows machine can take several seconds; a query cut short reads as unknown. */
@@ -177,28 +177,50 @@ export function hasFlagOperand(row, flag, operand, platform = process.platform) 
   return false;
 }
 /**
- * macOS gives only the space-joined command line, which cannot tell one argument from several: a row is owned only when
- * it ends with the job's complete recorded child arguments and its program is the recorded launcher, or the same native
- * binary under another path (grok_plugin_for_codex 1.1.0 `ownsExecution`, generalized from `grok` to the launcher's name).
+ * macOS gives only the space-joined command line, which cannot tell one argument from several: a row matches only when
+ * it ends with the job's complete recorded child arguments and its program is the recorded launcher, or the provider's
+ * native binary (`binary`, named explicitly) under any path, as when `node /npm/grok` execs the native grok
+ * (grok_plugin_for_codex 1.1.0 `ownsExecution`, generalized from `grok` to the provider's binary name).
  */
-export function ownsRecordedInvocation(row, job) {
+export function ownsRecordedInvocation(row, job, binary = null) {
   const childArgs = job.childArgs ?? [];
   if (!job.argv?.length || !childArgs.length || typeof row.raw !== "string") return false;
   const suffix = childArgs.join(" ");
   if (!row.raw.endsWith(` ${suffix}`)) return false;
   const program = row.raw.slice(0, -suffix.length - 1);
-  const launcher = job.argv.slice(0, job.argv.length - childArgs.length);
-  if (program === launcher.join(" ")) return true;
-  return launcher.length === 1 && !program.includes(" ") && path.basename(program) === path.basename(launcher[0]);
+  if (program === job.argv.slice(0, job.argv.length - childArgs.length).join(" ")) return true;
+  return Boolean(binary) && !program.includes(" ") && path.basename(program) === binary;
 }
+/** The provider's binary name (host.mjs), or the adapter's own `binary` for a test adapter. */
+export const binaryOf = (adapter) => BINARIES[adapter?.id]?.name ?? adapter?.binary ?? null;
 /**
- * Ownership of one row: the adapter's job-specific argv evidence over `hasFlagOperand` where the platform gives an argument
- * vector (Linux, Windows), and the complete recorded invocation where it gives only text (macOS).
+ * Ownership of one row always goes through the adapter's job-specific evidence (`adapter.ownsProcess` over
+ * `hasFlagOperand`); on macOS, whose rows are text only, the row must also carry the complete recorded invocation.
+ * Without an adapter nothing is owned (and `ownedExecution` reports unknown).
  */
-export function ownsExecution(row, job, platform = process.platform, adapter = null) {
-  if (!row.argv && platform === "darwin") return ownsRecordedInvocation(row, job);
-  if (!adapter?.ownsProcess || !row.argv) return false;
+export function ownsExecution(row, job, platform = process.platform, adapter = null, binary = binaryOf(adapter)) {
+  if (!adapter?.ownsProcess) return false;
+  if (!row.argv && (platform !== "darwin" || !ownsRecordedInvocation(row, job, binary))) return false;
   return Boolean(adapter.ownsProcess(row, job, platform, hasFlagOperand));
+}
+
+const MONTHS = "JanFebMarAprMayJunJulAugSepOctNovDec";
+/**
+ * A creation stamp in comparable form: Linux jiffies and Windows ticks as BigInt, macOS `ps -o lstart` text
+ * ("Sat Oct 31 12:00:00 2026", local time) as epoch seconds; null when unreadable.
+ */
+export function startTime(stamp) {
+  if (/^\d+$/.test(stamp ?? "")) return BigInt(stamp);
+  const m = /^[A-Z][a-z]{2} ([A-Z][a-z]{2}) +(\d{1,2}) (\d{1,2}):(\d{2}):(\d{2}) (\d{4})$/.exec(String(stamp ?? "").trim());
+  const month = m ? MONTHS.indexOf(m[1]) : -1;
+  if (month < 0 || month % 3) return null;
+  return BigInt(Math.floor(new Date(Number(m[6]), month / 3, Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5])).getTime() / 1000));
+}
+/** The recorded start of the launched child (the macOS group leader) in `startTime` units: its captured stamp, else the spawn window's start. */
+function leaderStart(job) {
+  const recorded = (job.execution ?? []).find((r) => r.pid === job.pid && startTime(r.stamp) !== null);
+  if (recorded) return startTime(recorded.stamp);
+  return Array.isArray(job.pidWindow) ? BigInt(Math.floor(job.pidWindow[0] / 1000)) : null;
 }
 
 const EPOCH_TICKS = 621355968000000000n;
@@ -241,11 +263,18 @@ export function recordRecoveryEvidence(job, rows) {
 }
 
 /**
- * Discover owned execution behind dead launchers and retain separately grouped known descendants. On darwin, rows that
- * share an owned row's process group are owned too (a member reparented to pid 1 is still found through pgid).
+ * Discover owned execution behind dead launchers and retain separately grouped known descendants. A descendant counts
+ * only when born at or after its parent; a persisted identity (`job.execution`, refreshed by the lifecycle on every
+ * heartbeat and stop snapshot, plus cancel's evidence) counts by pid and creation time. On darwin, members of a group a
+ * live owned row leads count when born at or after that leader. Once the launched child (the leader of group job.pid)
+ * is gone, a member of its group is adopted only through a persisted identity: any other member born between the
+ * recorded leader start and the job's end is never signalled and is reported in `unverified`, making the state unknown
+ * (a pid reused by a new leader cannot lend its children to this job); with no recorded leader identity, every member of
+ * group job.pid outside the evidence is unverified. Without an adapter ownership is unknown.
  */
 export function ownedExecution(job, snapshot, platform = process.platform, evidence = [], adapter = null) {
   if (snapshot.state !== "ok") return { state: "unknown", rows: [], ...(snapshot.error && { error: snapshot.error }) };
+  if (!adapter?.ownsProcess) return { state: "unknown", rows: [], error: "ownership evidence unavailable: the provider module is not loaded" };
   const rows = snapshot.rows;
   const known = [...(job.execution ?? []), ...evidence];
   const owned = new Map();
@@ -256,23 +285,39 @@ export function ownedExecution(job, snapshot, platform = process.platform, evide
     if (ownsExecution(row, job, platform, adapter) || known.some((p) => sameIdentity(p, row))) owned.set(row.pid, row);
     if (!row.raw && !row.inaccessible && [...CHILD_BINARIES, launched].includes(row.name?.toLowerCase())) unknown = true;
   }
-  const bornAfter = (child, parent) => !/^\d+$/.test(child.stamp ?? "") || !/^\d+$/.test(parent.stamp ?? "") || BigInt(child.stamp) >= BigInt(parent.stamp);
-  // Only a group an owned row leads (the lifecycle spawns the child detached, so its pid is its group id) is ours: a child
-  // that shares its parent's group, as a test's or a shell's does, must never pull that group in.
+  const atOrAfter = (child, from) => { const t = startTime(child.stamp); return from === null || from === undefined || (t !== null && t >= from); };
+  const bornAfter = (child, parent) => startTime(child.stamp) === null || atOrAfter(child, startTime(parent.stamp));
+  // Groups by leader pid → earliest start a member may have. Only a group a live owned row leads is followed: a child
+  // that shares its parent's group, as a test's or a shell's does, never pulls that group in.
+  const groups = new Map();
   const leads = (r) => Number.isInteger(r.pgid) && r.pgid === r.pid && r.pid !== process.pid;
-  const groups = new Set(platform === "darwin" ? [...owned.values()].filter(leads).map((r) => r.pgid) : []);
+  if (platform === "darwin") for (const r of owned.values()) if (leads(r)) groups.set(r.pgid, startTime(r.stamp));
   for (let changed = true; changed;) {
     changed = false;
     for (const row of rows) {
       if (owned.has(row.pid) || row.pid === process.pid) continue;
       const child = owned.has(row.ppid) && bornAfter(row, owned.get(row.ppid));
-      const member = platform === "darwin" && row.pgid && groups.has(row.pgid);
-      if (child || member) { owned.set(row.pid, row); if (platform === "darwin" && leads(row)) groups.add(row.pgid); changed = true; }
+      const member = platform === "darwin" && Number.isInteger(row.pgid) && groups.has(row.pgid) && atOrAfter(row, groups.get(row.pgid));
+      if (child || member) { owned.set(row.pid, row); if (platform === "darwin" && leads(row) && !groups.has(row.pgid)) groups.set(row.pgid, startTime(row.stamp)); changed = true; }
     }
   }
+  // Members of the launched child's group that no evidence covers. With a recorded leader start: once the leader is gone,
+  // those born between that start and the job's end. With no recorded leader identity at all: every such member.
+  const unverified = [];
+  if (platform === "darwin" && Number.isInteger(job.pid) && job.pid > 0 && !owned.has(job.pid)) {
+    const start = leaderStart(job);
+    const end = job.endedAt ? BigInt(Math.ceil(Date.parse(job.endedAt) / 1000)) : null;
+    const leaderLive = rows.some((r) => r.pid === job.pid);
+    for (const r of rows) {
+      if (r.pgid !== job.pid || owned.has(r.pid) || r.pid === process.pid) continue;
+      const t = startTime(r.stamp);
+      if (start === null || (!leaderLive && (t === null || (t >= start && (end === null || t <= end))))) unverified.push(r);
+    }
+  }
+  if (unverified.length) unknown = true;
   if (rows.some((r) => r.inaccessible && (r.pid === job.pid || owned.has(r.pid) || known.some((p) => sameIdentity(p, r))))) unknown = true;
   if ([...owned.values()].some((r) => !r.stamp || r.stamp === "0" || (!r.raw && !r.exiting))) unknown = true;
-  return { state: unknown ? "unknown" : owned.size ? "owned" : "gone", rows: [...owned.values()] };
+  return { state: unknown ? "unknown" : owned.size ? "owned" : "gone", rows: [...owned.values()], ...(unverified.length ? { unverified } : {}) };
 }
 
 const WINDOWS_KILL = `${MODULES}$ErrorActionPreference='Stop';
