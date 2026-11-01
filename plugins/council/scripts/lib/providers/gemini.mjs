@@ -392,7 +392,10 @@ const adapter = {
     return result;
   },
   parseEvent,
-  reviewPlan() { throw new Error("gemini reviews arrive in S5.4"); },
+  /** agy enforces --json-schema (S1.2: the model answers through `finish`; result.structured_output), so the schema travels by path. */
+  reviewPlan(review, request = {}) {
+    return { native: false, batches: review?.batch ?? null, promptTemplate: request.adversarial ? "adversarial-review" : "review", schemaCarrier: "path" };
+  },
   /** result.structured_output, else the response text parsed as JSON; the core validates and maps it (A5.2). */
   finalizeReview({ answerText, structured, unreviewed }) {
     if (!structured && answerText) { try { structured = JSON.parse(answerText); } catch { /* malformed: the validator reports it */ } }

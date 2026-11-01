@@ -357,3 +357,10 @@ test("S5.3 hooks: unavailable snapshots leave coverage unknown; a re-run of afte
   await gemini.beforeTurn(ctx);
   assert.deepEqual(await gemini.afterTurn(ctx, {}), first, "beforeTurn never replaces a stored before snapshot");
 });
+
+// ---------------------------------------------------------------------------------------------------------------- S5.4
+
+test("S5.4 review plan: agy enforces --json-schema (S1.2), so the schema travels by path; --adversarial picks its template", () => {
+  assert.deepEqual(gemini.reviewPlan({ batch: { index: 1, total: 2 } }, { adversarial: false }), { native: false, batches: { index: 1, total: 2 }, promptTemplate: "review", schemaCarrier: "path" });
+  assert.equal(gemini.reviewPlan({ snapshot: null }, { adversarial: true }).promptTemplate, "adversarial-review");
+});
