@@ -38,3 +38,5 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 ## core:check result
 
 At S2.7 and again at S2.8: `local pins: 9 host-neutral modules match docs/shared-core.md` and `comparison deferred` (the twin's core is not implemented and pinned at a commit this repository may read). S6.5 records the result again.
+
+S6.5 (2026-11-01, branch `s6`): `npm run core:check` printed `local pins: 9 host-neutral modules match docs/shared-core.md` and `comparison deferred`, exit 0. `COUNCIL_CC_ROOT` was not set: the twin's core is not pinned for comparison at a commit this repository may read, so no byte comparison was made and none is claimed.
