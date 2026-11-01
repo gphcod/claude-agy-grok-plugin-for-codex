@@ -32,7 +32,7 @@ S4.7. Source: GROKX `/Users/cia/GitCode/grok_plugin_for_codex` at `v1.1.0` (`148
 | `--request-id <id>` | `--request-id <id>` | same | a repeat replays the first result and starts no Grok process; changed input exits 2 |
 | `--prompt-file <f>` | `--prompt-file <f>` | same | UTF-8, BOM dropped, the only text source when given |
 | `--deadline`, `--inactivity-timeout`, `--timeout` | same | same | 14,400 s, 1,200 s, 90 s defaults (GROKX values) |
-| `--json` | `--json` | same | one JSON object; keys per A3.4 (below) |
+| `--json` | `--json` | intentionally different | still one JSON object, but with A3.4's key set: renamed and added fields, and `session` now means the host session, not Grok's (Output, below) |
 | `--thread` on `rescue` | `--thread` on `task` | renamed | resumes the recorded session with the write recipe |
 | stdin idle 10 s | stdin deadline 10 s | same | `COUNCIL_STDIN_DEADLINE_MS` in tests |
 
@@ -59,9 +59,9 @@ S4.7. Source: GROKX `/Users/cia/GitCode/grok_plugin_for_codex` at `v1.1.0` (`148
 | forbidden or MCP (`server__tool`) call on a read-only turn | same | same | |
 | edit paths from `search_replace`/`write` `tool_call_update` completions | same | same | footer `edited N` on tasks; a read-only review that edits is `incomplete` (core) |
 | `end.sessionId` differing from the requested session | same | same | the core reader fails the turn |
-| `end` without a session: unconfirmed, footer `session not confirmed; start a new ask` | fatal `session not confirmed: …`, footer `thread not confirmed; start a new ask` | intentionally different | S4.3's wording made fatal; no unconfirmed thread is recorded (decisions "S4") |
-| stop reason other than `end_turn`; `cancelled` explained | same | same | |
-| `max_turns_reached` | same | same | |
+| `end` without a session: answer kept, footer `session not confirmed; start a new ask` | answer and exit code kept, footer `session not confirmed: start a new ask`; `reply <job>`, `reply --last`, `task --thread` and the native id exit 2 with the hint; a resumed thread's record is marked `resumable: false` | renamed | review Q3 ruling (decisions S4.8, core `unconfirmed`) |
+| stop reason other than `end_turn` fails; `cancelled` explained | `cancelled` (Grok's headless permission refusal) is a denial, exit 10, the answer kept or the refusal named; any other stop keeps the answer, structured output, usage and cost and fails with exit 1 `incomplete: Grok stopped with reason …` | intentionally different | review ruling (decisions S4.8); council's own `cancel` stops Grok by signal (no `end` event) and is unchanged |
+| `max_turns_reached` | fails with `incomplete: Grok stopped: max turns reached`; the streamed text stays the answer | same | |
 | `error` event recorded, failure only without `end` | same | same | message from Grok's stderr line |
 | `total_cost_usd`, `usage` | `costUsd`, `usage` in `--json` | same | |
 | `structuredOutput` | `structured`, else the complete answer parsed | same | `finalizeReview` prefers whichever passes the shared validator |
@@ -87,7 +87,7 @@ S4.7. Source: GROKX `/Users/cia/GitCode/grok_plugin_for_codex` at `v1.1.0` (`148
 | `error: <msg>` | same | same | |
 | `cleanup pending; next: cancel <job>; do not resume` | same | same | plus `thread locked; next: cancel <job> --confirm-ended …` (A7.8) |
 | `next: reply <job>[ --next-input]` | `next: reply <job> --next-input` only while batches are pending | intentionally different | A3.4 hints only recovery and continuation |
-| `--json` `session`, `requestedSession`, `aggregateVerdict`, `reviewRef`, `snapshotId`, `unreviewed` | `thread`, `requestedThread`, `session` (host session), `verdict`, `findings`, `coverage{…}`, `batch`, `modelVerified`, `requestedEffort`, `round`, `rounds`, `failedCommands`, `threadLocked` | renamed | A3.4 key set |
+| `--json` `session`, `requestedSession`, `aggregateVerdict`, `reviewRef`, `snapshotId`, `unreviewed` | `thread`, `requestedThread`, `session` (host session), `verdict`, `findings`, `coverage{…}`, `batch`, `modelVerified`, `requestedEffort`, `round`, `rounds`, `failedCommands`, `threadLocked` | intentionally different | A3.4 key set; `session` changes meaning (Grok's session id is `thread`) |
 | exit codes 0/10/20/1/2 | same | same | malformed or missing review output is 10 `incomplete` (GROKX 1) — core decision S2.5 |
 
 ## Review input

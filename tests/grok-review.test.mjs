@@ -13,7 +13,8 @@ test("finalizeReview prefers a valid structuredOutput, falls back to the complet
   assert.deepEqual(grok.finalizeReview({ answerText: "```json\n" + JSON.stringify(good) + "\n```", structured: { verdict: "lgtm" }, unreviewed: [] }).structured, good);
   assert.deepEqual(grok.finalizeReview({ answerText: "no json", structured: { verdict: "lgtm" }, unreviewed: [] }).structured, { verdict: "lgtm" });
   assert.equal(grok.finalizeReview({ answerText: null, structured: null, unreviewed: [] }).structured, null);
-  assert.deepEqual(grok.reviewPlan({ batch: { index: 1, total: 2 } }, { adversarial: true }), { native: false, batches: { index: 1, total: 2 }, promptTemplate: "adversarial-review", schemaCarrier: "inline" });
+  assert.deepEqual(grok.reviewPlan({ batches: [{ id: "u1" }] }, { adversarial: true }), { native: false, batches: [{ id: "u1" }], promptTemplate: "adversarial-review", schemaCarrier: "inline" });
+  assert.deepEqual(grok.reviewPlan({ batch: { index: 1, total: 2 } }, {}).batches, undefined, "A5's member is `batches`; the core's `batch` position is not it");
 });
 
 test("the chosen answer maps into the A5.2 result through the core's validator and normalizer", () => {

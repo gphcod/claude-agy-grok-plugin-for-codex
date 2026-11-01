@@ -26,9 +26,13 @@ test("parseEvent: catalogue guard, tool calls before the catalogue, MCP calls, e
   assert.deepEqual(p({ type: "text", data: "hi" }, s), { textDelta: "hi", describe: "text" });
   const end = p({ type: "end", stopReason: "end_turn", sessionId: "S", total_cost_usd: 0.5, usage: { a: 1 }, modelUsage: { "grok-4.7-build": {} } }, s);
   assert.deepEqual(end, { completed: true, threadId: "S", costUsd: 0.5, usage: { a: 1 }, describe: "end" }, "no model from modelUsage");
-  assert.equal(p({ type: "end", stopReason: "cancelled", sessionId: "S" }, readOnlyState({ toolChecked: true })).fatal, "Grok cancelled the turn (a tool needed permission headless Grok cannot ask for)");
-  assert.equal(p({ type: "end", stopReason: "max_tokens", sessionId: "S" }, readOnlyState({ toolChecked: true })).fatal, 'Grok stopped with reason "max_tokens"');
-  assert.equal(p({ type: "max_turns_reached" }, s).fatal, "Grok stopped: max turns reached");
+  const cancelled = p({ type: "end", stopReason: "cancelled", sessionId: "S", total_cost_usd: 0.1 }, readOnlyState({ toolChecked: true }));
+  assert.deepEqual([cancelled.completed, cancelled.threadId, cancelled.costUsd, cancelled.denied.stopReason, cancelled.fatal], [true, "S", 0.1, "cancelled", undefined]);
+  assert.equal(cancelled.textDelta, "Grok cancelled the turn (a tool needed permission headless Grok cannot ask for)", "with no text so far, the refusal is the answer");
+  assert.equal(grok.parseEvent(JSON.stringify({ type: "end", stopReason: "cancelled", sessionId: "S" }), { ...readOnlyState({ toolChecked: true }), hasText: true }).textDelta, undefined);
+  const other = p({ type: "end", stopReason: "max_tokens", sessionId: "S", total_cost_usd: 0.2, usage: { o: 1 }, structuredOutput: { verdict: "approve" } }, readOnlyState({ toolChecked: true }));
+  assert.deepEqual(other, { fatal: 'incomplete: Grok stopped with reason "max_tokens"', costUsd: 0.2, usage: { o: 1 }, structured: { verdict: "approve" }, describe: "end" });
+  assert.equal(p({ type: "max_turns_reached" }, s).fatal, "incomplete: Grok stopped: max turns reached");
   assert.equal(p({ type: "error", message: "boom" }, s).fatal, undefined, "an error event is informational until the turn ends without end");
   assert.equal(grok.parseEvent("not json", s), null);
   // A write turn: the catalogue may advertise edit tools; completed edits are reported by path.
@@ -46,9 +50,9 @@ test("parseEvent: catalogue guard, tool calls before the catalogue, MCP calls, e
   assert.match(p({ type: "available_commands", tools: ["write"] }, { adapter: {} }).fatal, /read-only tool guard failed/);
 });
 
-test("end: a missing session is not confirmed, a non-string one is refused; structuredOutput is carried", () => {
+test("end: a missing session completes unconfirmed (no thread id), a non-string one is refused; structuredOutput is carried", () => {
   const ready = () => readOnlyState({ toolChecked: true });
-  assert.equal(grok.parseEvent(JSON.stringify({ type: "end", stopReason: "end_turn" }), ready()).fatal, "session not confirmed: Grok's end event names no session");
+  assert.deepEqual(grok.parseEvent(JSON.stringify({ type: "end", stopReason: "end_turn", total_cost_usd: 0.3 }), ready()), { completed: true, unconfirmed: "session not confirmed: start a new ask", costUsd: 0.3, describe: "end" });
   assert.match(grok.parseEvent(JSON.stringify({ type: "end", stopReason: "end_turn", sessionId: 7 }), ready()).fatal, /^Grok answered on session 7/);
   const structured = { verdict: "approve", summary: "ok", findings: [], next_steps: [] };
   assert.deepEqual(grok.parseEvent(JSON.stringify({ type: "end", stopReason: "end_turn", session_id: "S", structuredOutput: structured }), ready()).structured, structured);
