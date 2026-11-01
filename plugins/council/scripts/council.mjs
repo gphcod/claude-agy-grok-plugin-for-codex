@@ -293,6 +293,7 @@ async function replay(ctx, o, record, fingerprint, out, deps) {
       let snapshot;
       try { snapshot = (deps.snapshot ?? processSnapshot)({ platform: deps.platform ?? process.platform }); } catch { snapshot = { state: "unknown", rows: [] }; }
       if (companionState(current, snapshot) === "gone" && !(current.job && loadJob(ctx.home, current.job))) {
+        await requireWritableRoot(ctx); // the release removes the record: a read-only root is the state-root line, not EACCES
         releaseRequest(ctx.home, current.key, current.job);
         throw new UsageError(`request id ${o["request-id"]} names ${current.job ? `job ${current.job}` : "a call"} that ended before it prepared; nothing ran, so the same request id can run again`);
       }

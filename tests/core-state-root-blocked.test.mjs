@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { makeWorld, until, alive, ROOT } from "./helpers.mjs";
 import { main } from "../plugins/council/scripts/council.mjs";
+import { requestKey } from "../plugins/council/scripts/lib/core/jobs.mjs";
 import { WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
 
 const posixUser = process.platform !== "win32" && process.getuid?.() !== 0;
@@ -101,4 +102,23 @@ test("invalid input still exits 2 when the state root is blocked: an unknown pro
   assert.equal(code, 2, stderr);
   assert.ok(stderr.includes(WINDOWS_UNSUPPORTED), stderr);
   assert.deepEqual(w.fakeCalls(), []);
+});
+
+test("an abandoned reservation is not released from a read-only state root: the replay exits 1 with the state-root line and keeps the record", { skip: !posixUser && "needs POSIX permissions and a non-root user" }, (t) => {
+  const w = makeWorld();
+  const cwd = fs.realpathSync(w.workspace);
+  assert.equal(w.call(["ask", "--to", "null", "--request-id", "done", "--", "q"]).status, 0);
+  const fingerprint = JSON.parse(fs.readFileSync(path.join(w.home, "requests", `${requestKey(null, cwd, "done")}.json`), "utf8")).fingerprint;
+  const key = requestKey(null, cwd, "gone");
+  const file = path.join(w.home, "requests", `${key}.json`);
+  // A reservation whose companion died before it prepared: nothing ran, and a writable root would release it.
+  fs.writeFileSync(file, JSON.stringify({ state: "reserved", id: "gone", key, provider: null, job: null, session: null, cwd, fingerprint,
+    companionPid: 999999, companionIdentity: { pid: 999999, stamp: "1" } }));
+  const before = fs.readFileSync(file, "utf8");
+  lockTree(t, w.home);
+  const r = w.call(["ask", "--to", "null", "--request-id", "gone", "--", "q"]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, blockedLine(w.home));
+  assert.doesNotMatch(r.stderr, /EACCES: permission denied/);
+  assert.equal(fs.readFileSync(file, "utf8"), before, "the reservation stays");
 });
