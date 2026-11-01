@@ -12,7 +12,7 @@ import { depthEnv } from "../../plugins/council/scripts/lib/core/host.mjs";
 
 export const FAKE_CHILD = fileURLToPath(new URL("./fake-child.mjs", import.meta.url));
 const profile = (env = process.env) => ({ id: env.COUNCIL_NULL_ID || "preassigned", input: env.COUNCIL_NULL_INPUT || "stdin", output: env.COUNCIL_NULL_OUTPUT || "stream" });
-const hook = (name, ctx, outcome) => { if (process.env.COUNCIL_FAKE_HOOKS) fs.appendFileSync(process.env.COUNCIL_FAKE_HOOKS, `${JSON.stringify({ hook: name, job: ctx.job?.id ?? null, verb: ctx.request?.verb ?? null, outcome: outcome ?? null })}\n`); };
+const hook = (name, ctx, outcome) => { const file = ctx.env?.COUNCIL_FAKE_HOOKS ?? process.env.COUNCIL_FAKE_HOOKS; if (file) fs.appendFileSync(file, `${JSON.stringify({ hook: name, job: ctx.job?.id ?? null, verb: ctx.request?.verb ?? null, outcome: outcome ?? null })}\n`); };
 
 export const catalog = { listing: true, models: { "null-model": ["low", "medium", "high", "xhigh"], "null-fast": ["low", "medium", "high"] }, aliases: { fast: "null-fast" }, suffixed: false };
 export const tiers = { consult: { model: "null-model", effort: "high" }, exec: { model: "null-fast", effort: "high" }, deep: { model: "null-model", effort: "xhigh" } };
@@ -44,7 +44,7 @@ export default {
   buildTurn(request) {
     const p = profile(request.env);
     const args = [];
-    const thread = request.resume ? request.threadId : p.id === "preassigned" ? randomUUID() : null;
+    const thread = request.threadId ?? (p.id === "preassigned" ? randomUUID() : null);
     if (thread) args.push("--thread", thread);
     args.push("--model", request.model ?? "null-model", "--effort", request.effort ?? "high");
     if (request.verb === "review") args.push("--schema", request.schemaPath ?? "inline");
