@@ -47,11 +47,11 @@ S5.7. Donor: gemini-plugin-for-codex 0.1.2 (AGYX), `skills/agy/scripts/agy.mjs` 
 | 0 completed | 0 ok | same | |
 | 0 warning: only write denials on a review turn | 10 needs attention | intentionally different | Council treats every denial as attention (A3.4) |
 | 10 incomplete: any denial on an edit turn, a non-write denial on review | 10 (`denied`) | same | Both denial signatures: the A2 tool-step regex and a non-empty `result.denied_actions`, the latter checked before the empty-response rule |
-| 10 incomplete: `print_timeout` | 1 failed (`print_timeout: …`) | intentionally different | PLAN A3.3/A5.1: a timed-out turn is a failure, never attention or running; the partial stream stays in `events.jsonl` |
+| 10 incomplete: `print_timeout` | 1 failed, error agy's `[agy] print timeout …` line; the answer agy gave (its response, else the streamed text) is kept and printed | intentionally different | PLAN A3.3/A5.1: a timed-out turn is a failure, never attention or running |
 | 10 incomplete: workspace changed during review | 10 (`incomplete`) | same | Any read-only verb (ask, reply, review) |
-| 10 incomplete: partial Git snapshot on review | 0 with `mutationCoverage: "unknown"` in the job record | intentionally different | PLAN S5.3: an unavailable snapshot reports unknown coverage; a detected change is still 10 (decisions S5.3) |
-| 0 warning: outside Git ("unchecked") | 0 with `mutationCoverage: "unknown"` | same | |
-| 1 failed: missing or malformed result, status ≠ SUCCESS, empty response, non-zero exit | 1 | same | Plus a duplicate result, a malformed line, a frame or partial answer over 4 MiB |
+| 10 incomplete: partial Git snapshot on review | 0, footer hint `coverage unknown` (`mutationCoverage: "unknown"` in the job record) | intentionally different | PLAN S5.3: an unavailable snapshot reports unknown coverage; a detected change is still 10 (decisions S5.3) |
+| 0 warning: outside Git (`coverage=unchecked` in the status prefix) | 0, footer hint `coverage unknown` | intentionally different | Council has no `warning` state; the footer hint names the unverified workspace check (milestone 3 review Q6) |
+| 1 failed: missing or malformed result, status ≠ SUCCESS, empty response, non-zero exit | 1 | same | Plus a duplicate result, a malformed line, a frame or partial answer over 4 MiB. A deny-rule denial earlier in the stream turns an empty result into `denied` (exit 10) with the denial as the answer; a status ≠ SUCCESS result after a denial is parsed the same way, but agy exits 1 then and the core fails a non-zero exit first (exit 1) |
 | stderr "operation not permitted / readonly database / read-only file system / permission denied", or a permission/approval notice, with no denial → incomplete | 10 (`incomplete`) | same | Ported into `afterTurn` (`hostNotice`) |
 | 20 running / unknown (cleanup unverified) | 20 from `wait` only; an unverified cleanup is exit 1 with `cleanup pending; next: cancel <job>` | intentionally different | A3.4: 20 means "still running"; an unverified cleanup is a failure that names its recovery |
 | 2 usage | 2 | same | |

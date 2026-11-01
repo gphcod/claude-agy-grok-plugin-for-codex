@@ -48,6 +48,8 @@ export function recoveryHint(job) {
   if (job.unconfirmed) return oneLine(job.unconfirmed);
   if (job.outcome === "failed" && job.admitted && !job.threadId && job.requestedThreadId) return "thread not confirmed; start a new ask";
   if (job.reviewState?.pending || job.reviewState?.synthesisPending) return `next: reply ${job.id} --next-input`;
+  // An adapter that checks the workspace around a turn (Gemini's snapshots) could not tell whether it changed.
+  if (job.mutationCoverage === "unknown") return "coverage unknown";
   return null;
 }
 export function footer(job, clipped) {
