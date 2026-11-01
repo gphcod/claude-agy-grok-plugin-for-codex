@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { resolveLauncher as findLauncher, runSync } from "../core/launcher.mjs";
 import { depthEnv } from "../core/host.mjs";
+import { stateRootDescriptor } from "../core/preflight.mjs";
 import { loadStatic, parseModelListing } from "../core/catalog.mjs";
 import { writeFileAtomic } from "../core/fs.mjs";
 
@@ -341,8 +342,8 @@ const adapter = {
     const launcher = (() => { try { return this.resolveLauncher(env, ctx.platform); } catch { return null; } })();
     const sandbox = "Run Codex with a sandbox that allows it (danger-full-access), or run the call outside the sandbox; the line grants no escalation.";
     return [
+      stateRootDescriptor(ctx.stateRoot), // first for every provider (S1.4): the action line names council's own directory
       { kind: "dir", target: stateDir(env), access: "write", timeoutMs: 1000, why: "agy backend state (~/.gemini/antigravity-cli)", action: `Grant write access to ${stateDir(env)}. ${sandbox}` },
-      { kind: "dir", target: ctx.stateRoot, access: "write", timeoutMs: 1000, why: "council job records", action: "Set COUNCIL_CODEX_HOME to a writable directory outside the workspace." },
       // COUNCIL_AGY_LISTEN_HOST is a diagnostic seam (tests bind an unassignable address to prove the blocked path).
       { kind: "listener", target: env.COUNCIL_AGY_LISTEN_HOST || "127.0.0.1", timeoutMs: 2000, why: "agy's loopback listener", action: `Allow a loopback listener. ${sandbox}` },
       { kind: "process-table", target: "ps", timeoutMs: 20000, why: "process inspection for cleanup", action: `Allow the process query (ps). ${sandbox}` },

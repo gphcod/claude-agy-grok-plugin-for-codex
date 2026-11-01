@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { pathCandidates, resolveLauncher as resolveBinary, runSync } from "../core/launcher.mjs";
 import { loadStatic, parseModelListing } from "../core/catalog.mjs";
 import { loadTiers } from "../core/tiers.mjs";
+import { stateRootDescriptor } from "../core/preflight.mjs";
 import { reviewProblem } from "../core/review-validate.mjs";
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -188,14 +189,12 @@ export default {
    */
   preflight(ctx) {
     const env = ctx.env ?? process.env, platform = ctx.platform ?? process.platform;
-    const out = [];
+    const out = [stateRootDescriptor(ctx.stateRoot)]; // first for every provider (S1.4): the action line names council's own directory
     if (!env.GROK_API_KEY) {
       const file = loginFile(env, platform);
       out.push({ kind: "file", target: file ?? path.join("~", ".grok", "auth.json"), access: "read", timeoutMs: 1000, why: "Grok login file",
         action: `Grant read access to ${file ?? "~/.grok/auth.json"} (or set GROK_API_KEY); if the host forbids escalation, stop without retrying. If the file is absent, run \`grok\` once and log in.` });
     }
-    out.push({ kind: "dir", target: ctx.stateRoot, access: "write", timeoutMs: 1000, why: "council job records",
-      action: "Grant write access to the council state root, or set COUNCIL_CODEX_HOME to a writable directory outside the workspace." });
     out.push({ kind: "process-table", target: platform === "win32" ? "powershell Win32_Process" : "ps", timeoutMs: 20000, why: "process-table query for cleanup and ownership",
       action: "Allow process inspection (ps, or PowerShell on Windows); without it council cannot confirm cleanup, so it does not start Grok." });
     let launcher = null;

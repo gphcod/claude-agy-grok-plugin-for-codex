@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { resolveLauncher as resolveBinary, runSync } from "../core/launcher.mjs";
 import { depthEnv } from "../core/host.mjs";
+import { stateRootDescriptor } from "../core/preflight.mjs";
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 /** The static catalog (S1.6): aliases plus pass-through; Claude has no model listing. */
@@ -141,7 +142,7 @@ export default {
     const endpoint = env.ANTHROPIC_BASE_URL || "https://api.anthropic.com";
     const exec = (args, extra) => ({ command: launcher?.command ?? "claude", args: [...(launcher?.args ?? []), ...args], ...extra });
     return [
-      { kind: "dir", target: ctx.stateRoot, access: "write", timeoutMs: 1000, why: "council job records", action: "Set COUNCIL_CODEX_HOME to a writable directory outside the workspace." },
+      stateRootDescriptor(ctx.stateRoot), // first for every provider (S1.4): the action line names council's own directory
       { kind: "dir", target: storage, access: "write", timeoutMs: 1000, why: "Claude session storage",
         action: `Grant write access to ${storage}; Claude Code stores every session there (escalate only if the host allows it).` },
       { kind: "exec", target: exec(["--version"], { expectText: "\\d+\\.\\d+\\.\\d+" }), timeoutMs: 15000, why: "claude --version", action: "Install Claude Code, then run setup." },

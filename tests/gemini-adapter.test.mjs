@@ -115,11 +115,11 @@ test("S5.1 probe: --version and models (login evidence) through the fake, Gemini
   assert.deepEqual([out.loggedIn, out.models], [false, null]);
 });
 
-test("S5.1 preflight: agy state (write), state root (write), loopback listener, process table, the two cold probes, network; none on win32", () => {
+test("S5.1 preflight: state root (write, first since S1.4), agy state (write), loopback listener, process table, the two cold probes, network; none on win32", () => {
   const h = home();
   const list = gemini.preflight({ stateRoot: "/state", env: { HOME: h, COUNCIL_AGY_BIN: FAKE }, platform: "darwin", verb: "ask", cwd: h });
   assert.deepEqual(list.map((d) => d.kind), ["dir", "dir", "listener", "process-table", "exec", "exec", "network"]);
-  assert.deepEqual([list[0].target, list[0].access, list[1].target, list[1].access, list[2].target], [path.join(h, ".gemini", "antigravity-cli"), "write", "/state", "write", "127.0.0.1"]);
+  assert.deepEqual([list[0].target, list[0].access, list[1].target, list[1].access, list[2].target], ["/state", "write", path.join(h, ".gemini", "antigravity-cli"), "write", "127.0.0.1"]);
   assert.deepEqual(list[4].target.args, [FAKE, "--version"]);
   assert.deepEqual(list[5].target.args, [FAKE, "models"]);
   for (const d of list) assert.ok(d.why && d.action, `${d.kind} carries why and an action line`);

@@ -31,18 +31,18 @@ test("the module implements the frozen A5 interface", () => {
   assert.deepEqual(Object.keys(grok.catalog.models), ["grok-4.7", "grok-4.7-build-fast", "grok-4.6", "grok-4.5"]);
 });
 
-test("preflight descriptors: login file from the per-call HOME, state root, process table, then the probes", () => {
+test("preflight descriptors: state root (first since S1.4), login file from the per-call HOME, process table, then the probes", () => {
   const env = { HOME: "/home/someone", COUNCIL_GROK_BIN: FAKE };
   const d = grok.preflight({ stateRoot: "/state", env, platform: "darwin", verb: "ask", cwd: "/w" });
-  assert.deepEqual(d.map((x) => [x.kind, x.access ?? null]), [["file", "read"], ["dir", "write"], ["process-table", null], ["exec", null], ["exec", null]]);
-  assert.equal(d[0].target, "/home/someone/.grok/auth.json");
-  assert.equal(d[1].target, "/state");
+  assert.deepEqual(d.map((x) => [x.kind, x.access ?? null]), [["dir", "write"], ["file", "read"], ["process-table", null], ["exec", null], ["exec", null]]);
+  assert.equal(d[0].target, "/state");
+  assert.equal(d[1].target, "/home/someone/.grok/auth.json");
   assert.deepEqual(d[3].target.args.slice(-1), ["--version"]);
   assert.deepEqual(d[4].target.args.slice(-1), ["models"]);
   assert.ok(new RegExp(d[4].target.expectText).test("You are logged in with grok.com.\n"));
   assert.equal(new RegExp(d[4].target.expectText).test("You are not logged in.\n"), false);
   assert.deepEqual(grok.preflight({ stateRoot: "/state", env: { ...env, GROK_API_KEY: "k" }, platform: "darwin" }).map((x) => x.kind), ["dir", "process-table", "exec", "exec"]);
-  assert.equal(grok.preflight({ stateRoot: "C:\\s", env: { USERPROFILE: "C:\\Users\\u", COUNCIL_GROK_BIN: FAKE }, platform: "win32" })[0].target, path.join("C:\\Users\\u", ".grok", "auth.json"));
+  assert.equal(grok.preflight({ stateRoot: "C:\\s", env: { USERPROFILE: "C:\\Users\\u", COUNCIL_GROK_BIN: FAKE }, platform: "win32" })[1].target, path.join("C:\\Users\\u", ".grok", "auth.json"));
 });
 
 test("probe and setup: version, login, models through parseModels; a tier model missing from `grok models` is a warning", async () => {
