@@ -195,3 +195,7 @@ Found while implementing S4 (Grok); a frozen-contract change (S2.7), so it needs
 ## 2026-10-31 core (milestone 3 review F8): probes and exec descriptors carry the guard variables
 
 - A5.1 gives every provider child the five guard variables; `setup` and `models --refresh` probes and the preflight `exec` descriptors ran without them. `host.mjs` `guardedEnv(env)` (the overlay the entry already applied to turn children) is now applied by council.mjs to `probe(launcher, env)` and by preflight.mjs `checkExec` to every exec descriptor, so adapters need no change. host.mjs and preflight.mjs are host-adapted (not pinned). Test: tests/core-guard-env.test.mjs, failing against the previous modules.
+
+## 2026-10-31 core (milestone 3 review, S3 item 3): a denied turn that exits non-zero is attention
+
+- Claude exits 1 on an `is_error` result, including one a denial caused; the lifecycle failed every non-zero exit, so the adapter could not make such a turn exit 10 as the review requires. lifecycle.mjs now skips the non-zero-exit failure when the turn completed and a denial was recorded (a numeric exit code only; a signal or an uncompleted turn still fails). Provider-neutral: any adapter that reports a denial on a completed turn gets exit 10. fake-child gains `COUNCIL_FAKE_EXIT_CODE`. Test: tests/core-denied-exit.test.mjs, failing against the previous lifecycle.
