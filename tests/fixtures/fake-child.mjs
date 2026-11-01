@@ -5,7 +5,7 @@
 // Protocol (NDJSON on stdout): {type:"start",thread,model?} (model from COUNCIL_FAKE_MODEL; reviews stream COUNCIL_FAKE_REVIEW_TEXT) · {type:"text",data} · {type:"tool",name,path,ok} · {type:"end",thread,cost}.
 // The answer-file profile writes the answer to --answer-file and streams start/end only.
 import fs from "node:fs";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const argv = process.argv.slice(2);
 const flag = (k) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : undefined; };
@@ -66,6 +66,12 @@ for (const end = Date.now() + Number(process.env.COUNCIL_FAKE_SPIN_MS ?? 0); Dat
 for (let i = 0; i < Number(process.env.COUNCIL_FAKE_TOOLS ?? 0); i++) out({ type: "tool", name: "edit", path: `f${i}.js`, ok: true });
 if (scenario === "huge-line") { process.stdout.write(`{"type":"text","data":"${"x".repeat(Number(process.env.COUNCIL_FAKE_HUGE_BYTES ?? 2 * 1024 * 1024))}"}\n`); }
 for (const file of edits) out({ type: "tool", name: "edit", path: file, ok: true });
+// COUNCIL_FAKE_WRITES (JSON, path to content, null deletes; `git` runs argv lists afterwards): working-tree changes no event reports, as a shell would make them.
+if (process.env.COUNCIL_FAKE_WRITES) {
+  const { git = [], ...writes } = JSON.parse(process.env.COUNCIL_FAKE_WRITES);
+  for (const [file, content] of Object.entries(writes)) { if (content === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, content); }
+  for (const args of git) spawnSync("git", args, { stdio: "ignore" });
+}
 if (process.env.COUNCIL_FAKE_FAILED_COMMAND) out({ type: "tool", name: "shell", command: process.env.COUNCIL_FAKE_FAILED_COMMAND, ok: false, exit: 1 });
 if (process.env.COUNCIL_FAKE_DENY) out({ type: "tool", name: "edit", path: process.env.COUNCIL_FAKE_DENY, ok: false, denied: true });
 if (answerFile) fs.writeFileSync(answerFile, answer);

@@ -33,6 +33,7 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 | `review.mjs` | the batch prompt, ledger reconciliation and the normalized result carrying `id`, `decision` and `coverage.pending` |
 | `review-validate.mjs` | the draft-07 schema with required `id` and optional `decision` (A5.2) |
 | `catalog.mjs` | Claude has no listing (`listing: false`, `default` → no flag); the twin's Codex catalog has `ultra` |
+| `snapshot.mjs` | moved out of the Gemini adapter at S7.1 so every task counts working-tree changes; the twin makes the same change, not compared byte for byte yet |
 | `types.mjs` | the adapter interface adds `preflight`, a collected-only `reviewPlan` and a `finalizeReview` that takes the batch and ledger; `checkRequest`, the request's `launcher`, `env` on `probe`, ParsedEvent `model` and ProbeResult `warnings` (S2.8) are shared with the twin |
 
 ## core:check result

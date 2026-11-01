@@ -185,7 +185,8 @@ Windows launches never go through `cmd.exe`; process identity and cleanup use th
 - **Gemini tasks without `--allow-command` run any command** when the global agy `toolPermission` is `always-proceed`; `setup` warns in that case.
 - **Gemini on Windows** is unsupported until the S7.2 session qualifies it.
 - **A clean exit is not trusted** on any launcher kind until S7 qualifies one: the post-exit scan costs time, and a held pipe locks the thread until `cancel --confirm-ended`.
-- **Workspace checks around Gemini turns** use bounded Git snapshots: outside Git, or with a partial snapshot and no detected change, the footer says `coverage unknown`; a detected change on a read-only turn is `incomplete` (exit 10).
+- **`edited N` on a task** counts the paths the provider's events name plus the working-tree changes between a Git snapshot before the spawn and one after the turn, so an edit made through a shell counts; a change you make in the same tree during the turn counts too. Outside Git, on a failed git call or past 5,000 dirty paths only the events count, and the turn never fails for it; ignored files are invisible to the snapshot.
+- **Workspace checks around Gemini turns** use the same bounded snapshots: outside Git, or with a partial snapshot and no detected change, the footer says `coverage unknown`; a detected change on a read-only turn is `incomplete` (exit 10).
 - **An unconfirmed Grok session** keeps its answer but cannot be resumed; start a new ask.
 
 ## Differences from the three replaced plugins

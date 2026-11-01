@@ -21,7 +21,7 @@ export const TESTED_VERSION = "2.1.314";
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 export const READ_TOOLS = ["Read", "Glob", "Grep"];
 export const WEB_TOOLS = ["WebFetch", "WebSearch"];
-/** Tools whose `tool_use` blocks name an edited path (A5.1); Bash edits are reported by Claude in its answer. */
+/** Tools whose `tool_use` blocks name an edited path (A5.1); the core's workspace snapshots count Bash edits (S7.1). */
 export const EDIT_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 /** The S1.1 task launch (docs/decisions.md S1). */
 export const TASK_TOOLS = [...READ_TOOLS, ...EDIT_TOOLS, "Bash"];

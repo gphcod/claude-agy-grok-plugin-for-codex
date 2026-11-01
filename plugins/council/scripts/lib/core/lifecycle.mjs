@@ -14,6 +14,7 @@ import { spawnChild } from "./launcher.mjs";
 import { createReader } from "./reader.mjs";
 import { attentionReason, readAnswer } from "./output.mjs";
 import { writeFileAtomic } from "./fs.mjs";
+import { snapshotBefore, workspaceEdits } from "./snapshot.mjs";
 import { UsageError } from "./args.mjs";
 
 /** Production defaults; tests inject shorter ones through hooks. */
@@ -117,6 +118,8 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     if (options.requestKey) markRequestPrepared(ctx.home, options.requestKey);
     Object.assign(job, { admitted: true, admittedAt: new Date().toISOString() });
     save(job);
+    // Every task counts working-tree changes, so an edit made through a shell is counted (S7.1); read-only turns have no such check here.
+    if (job.verb === "task") snapshotBefore(job, job.cwd, ctx.env);
     if (adapter.beforeTurn) await adapter.beforeTurn({ job, request: turn, cwd: job.cwd, env: ctx.env });
     await hooks.beforeSpawn?.(job);
     if (cancelled()) {
@@ -315,9 +318,18 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
   if (seen?.model && (!job.model || job.model === "default")) Object.assign(job, { model: seen.model, modelObserved: true });
   // afterTurn only after verified cleanup; otherwise the cancel that confirms cleanup runs it (A7.5).
   const hookInput = { reason, completed: Boolean(seen?.completed), denials: seen?.denials ?? [] };
+  // One path is one edit, whichever source named it and however (the reader keeps a path outside the cwd as the provider gave it).
+  const addEdited = (paths) => {
+    const known = new Set([...(seen?.edited ?? [])].map((p) => path.resolve(job.cwd, p)));
+    for (const p of paths ?? []) if (!known.has(path.resolve(job.cwd, p))) { known.add(path.resolve(job.cwd, p)); seen?.edited.add(p); }
+  };
+  if (cleanupConfirmed && job.verb === "task" && job.spawnAttempted) {
+    beat();
+    try { addEdited(workspaceEdits(job, job.cwd, ctx.env)); } catch { /* the event-reported edits stand */ }
+  }
   if (cleanupConfirmed) await afterTurn({ cleanupConfirmed, ...hookInput });
   else if (adapter.afterTurn) job.afterTurnPending = hookInput;
-  if (hookOutcome?.edited) for (const p of hookOutcome.edited) seen?.edited.add(p);
+  addEdited(hookOutcome?.edited);
   let parsed = null;
   try { parsed = readAnswer(answerFile); answer = parsed.answer; }
   catch (error) { if (error.code !== "ENOENT") reason ??= `answer storage failed: ${error.message}`; }

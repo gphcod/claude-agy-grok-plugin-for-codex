@@ -1,18 +1,18 @@
 // Gemini adapter (S5): the Antigravity CLI `agy` behind the A5 interface. Ported from gemini-plugin-for-codex 0.1.2
 // (MIT, NOTICE): lib/native.mjs (launch arguments, the `denial` regex, the stdin message, the 4 MiB caps),
 // lib/settings.mjs (`configuredPolicy`, `sessionSettings`), lib/outcome.mjs (`classify`: terminal-result rules) and
-// lib/snapshot.mjs (the bounded before/after Git snapshots, made synchronous here). Process supervision, the run store
+// lib/snapshot.mjs (the bounded before/after Git snapshots, now core/snapshot.mjs). Process supervision, the run store
 // and `result`/`release`/`prune` are council's core. Changes from the donor are listed in docs/parity/gemini.md.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import { resolveLauncher as findLauncher, runSync } from "../core/launcher.mjs";
 import { depthEnv } from "../core/host.mjs";
 import { stateRootDescriptor } from "../core/preflight.mjs";
 import { loadStatic, parseModelListing } from "../core/catalog.mjs";
-import { writeFileAtomic } from "../core/fs.mjs";
+import { changes, snapshotAfter, snapshotBefore, snapshotOf } from "../core/snapshot.mjs";
+
+export { SNAPSHOT, changes, snapshot, workspace } from "../core/snapshot.mjs";
 
 export const BINARY = "agy";
 export const BIN_ENV = "COUNCIL_AGY_BIN";
@@ -29,15 +29,12 @@ const WRITE_TOOLS = /^(write_file|edit_file|write_to_file|replace_file_content|m
 export const READ_ONLY_DENY = ["write_file(*)", "edit_file(*)", "command(*)", "unsandboxed(*)", "mcp(*)", "execute_url(*)"];
 const READ_ONLY_ALLOW = /^(read_file|read_url)\(.*\)$/;
 const SUFFIX = /-(low|medium|high)$/;
-/** Snapshot bounds (AGYX snapshot.mjs defaults). */
-export const SNAPSHOT = Object.freeze({ maxFiles: 500, maxBytes: 4 * 1024 * 1024, timeoutMs: 2500 });
 
 const homeOf = (env = {}) => env.HOME || env.USERPROFILE || os.homedir();
 /** `<HOME>/.gemini/antigravity-cli`: agy's backend state, which it writes even on read-only turns (AGYX docs/P0.md). */
 export const stateDir = (env) => path.join(homeOf(env), ".gemini", "antigravity-cli");
 export const globalSettingsFile = (env) => path.join(stateDir(env), "settings.json");
 const clip = (text, bytes) => { const b = Buffer.from(String(text)); return b.length <= bytes ? String(text) : b.subarray(0, bytes).toString("utf8").replace(/�$/, ""); };
-const sha = (data) => createHash("sha256").update(data).digest("hex");
 const uniq = (list) => [...new Set(list)];
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -94,95 +91,12 @@ export function allowCommandProblem(value) {
   return null;
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Bounded Git snapshots (AGYX snapshot.mjs, synchronous): HEAD, the porcelain status, the staged and unstaged diffs,
-// and the hashes of the changed files, each git call bounded in time and bytes.
-
-function git(root, args, env, { timeoutMs = SNAPSHOT.timeoutMs, cap = SNAPSHOT.maxBytes } = {}) {
-  const r = spawnSync("git", args, { cwd: root, env: { ...env, LC_ALL: "C", TZ: "UTC", GIT_OPTIONAL_LOCKS: "0" }, encoding: null, shell: false, windowsHide: true,
-    timeout: timeoutMs, maxBuffer: cap, stdio: ["ignore", "pipe", "pipe"] });
-  return { code: r.error ? null : r.status, output: r.stdout ?? Buffer.alloc(0), limited: Boolean(r.error) };
-}
-/** The Git scope of a workspace: its realpath and repository root, or `git: false` outside Git. */
-export function workspace(cwd, env = {}) {
-  const real = fs.realpathSync(cwd);
-  const r = git(real, ["rev-parse", "--show-toplevel"], env);
-  return { cwd: real, root: r.code === 0 ? fs.realpathSync(r.output.toString("utf8").trim()) : real, git: r.code === 0 };
-}
-function readBounded(file, remaining) {
-  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
-  const fd = fs.openSync(file, flags);
-  try {
-    const stat = fs.fstatSync(fd);
-    if (!stat.isFile()) return null;
-    const buffer = Buffer.alloc(Math.min(stat.size + 1, remaining + 1));
-    const read = fs.readSync(fd, buffer, 0, buffer.length, 0);
-    const data = buffer.subarray(0, read);
-    return data.length > remaining || data.length !== stat.size || fs.fstatSync(fd).size !== stat.size ? null : data;
-  } finally { fs.closeSync(fd); }
-}
-/** One snapshot: coverage `tracked-and-unignored` (complete), `partial` (a bound was hit) or `unchecked` (outside Git). */
-export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxBytes = SNAPSHOT.maxBytes, timeoutMs = SNAPSHOT.timeoutMs } = {}) {
-  const start = Date.now();
-  if (!scope.git) return { coverage: "unchecked", reason: "outside Git", files: {} };
-  const opts = { timeoutMs, cap: maxBytes };
-  const head = git(scope.root, ["rev-parse", "--verify", "HEAD"], env, opts);
-  const status = git(scope.root, ["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"], env, opts);
-  const staged = git(scope.root, ["diff", "--cached", "--no-ext-diff", "--no-textconv", "--binary"], env, opts);
-  const diff = git(scope.root, ["diff", "--no-ext-diff", "--no-textconv", "--binary", ...(head.code === 0 ? ["HEAD"] : [])], env, opts);
-  let partial = [status, diff, staged].some((r) => r.code !== 0 || r.limited);
-  const entries = status.output.toString("utf8").split("\0");
-  const files = Object.create(null); // a path named __proto__ is an entry, never the prototype (AGYX)
-  let bytes = 0;
-  for (let i = 0; i < entries.length; i += 1) {
-    const entry = entries[i];
-    if (!entry) continue;
-    const state = entry.slice(0, 2), name = entry.slice(3);
-    if (state.includes("R") || state.includes("C")) i += 1;
-    if (Object.keys(files).length >= maxFiles || Date.now() - start > timeoutMs * 4) { partial = true; break; }
-    const file = path.resolve(scope.root, name);
-    if (!file.startsWith(scope.root + path.sep)) { partial = true; continue; }
-    try {
-      const stat = fs.lstatSync(file);
-      if (!stat.isFile() && !stat.isSymbolicLink()) { partial = true; files[name] = { state, kind: "non-file" }; continue; }
-      if (stat.size + bytes > maxBytes) { partial = true; files[name] = { state, hash: null }; continue; }
-      let data;
-      if (stat.isSymbolicLink()) data = Buffer.from(fs.readlinkSync(file));
-      else {
-        data = readBounded(file, maxBytes - bytes);
-        if (!data) { partial = true; files[name] = { state, hash: null }; continue; }
-      }
-      bytes += data.length;
-      files[name] = { state, hash: sha(data), ...(stat.isSymbolicLink() ? { symlink: true } : {}) };
-    } catch (error) {
-      if (error.code === "ENOENT") files[name] = { state, deleted: true };
-      else { partial = true; files[name] = { state, error: error.code }; }
-    }
-  }
-  return { coverage: partial ? "partial" : "tracked-and-unignored", root: scope.root, head: head.code === 0 ? head.output.toString("utf8").trim() : null,
-    diff: sha(diff.output), staged: sha(staged.output), files, bytes, ms: Date.now() - start };
-}
-/** What changed between two snapshots (AGYX `changes`); `coverage` is complete only when both snapshots were. */
-export function changes(before, after) {
-  const names = uniq([...Object.keys(before.files ?? {}), ...Object.keys(after.files ?? {})])
-    .filter((file) => JSON.stringify(before.files?.[file]) !== JSON.stringify(after.files?.[file])).sort();
-  const changed = before.head !== after.head || before.diff !== after.diff || before.staged !== after.staged || names.length > 0;
-  const coverage = before.coverage === "tracked-and-unignored" && after.coverage === "tracked-and-unignored" ? "complete" : "partial";
-  return { changed, files: names, coverage };
-}
 /** AGYX native.mjs: a diagnostic on stderr that reports denied host access or an unclassified permission notice. */
 export function hostNotice(stderr = "") {
   if (/operation not permitted|readonly database|read.only file system|permission denied/i.test(stderr)) return "agy's diagnostics report denied host access (stderr); the turn may not have persisted";
   if (/permission|approval/i.test(stderr) && /denied|not allowed|requires/i.test(stderr)) return "agy's diagnostics report an unclassified permission notice (stderr)";
   return null;
 }
-const snapshotFile = (job, which) => path.join(job.dir, `snapshot-${which}.json`);
-function readJsonFile(file) { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } }
-function takeSnapshot(cwd, env) {
-  try { return snapshot(workspace(cwd, env), env); }
-  catch (error) { return { coverage: "unavailable", reason: error.message, files: {} }; }
-}
-
 // ---------------------------------------------------------------------------------------------------------------------
 // Events (AGYX native.mjs consume, outcome.mjs classify), as ParsedEvent.
 
@@ -381,12 +295,8 @@ const adapter = {
     if (!readOnly) args.push("--mode", "accept-edits");
     return { args, env: { ...env, ...depthEnv() }, stdin: stdinMessage(request), answerFile: null, readOnly, requestedThreadId: null, agent: null, contractCarrier: "stdin" };
   },
-  /** The before snapshot, stored in the job directory so a deferred afterTurn in another process can compare (A7.5). */
-  beforeTurn(ctx) {
-    const file = snapshotFile(ctx.job, "before");
-    if (fs.existsSync(file)) return;
-    try { writeFileAtomic(file, JSON.stringify(takeSnapshot(ctx.cwd ?? ctx.job.cwd, ctx.env ?? {}))); } catch { /* afterTurn reads a missing before snapshot as unknown */ }
-  },
+  /** The before snapshot, stored in the job directory so a deferred afterTurn in another process can compare (A7.5); a task's is already there (the core takes it). */
+  beforeTurn(ctx) { snapshotBefore(ctx.job, ctx.cwd ?? ctx.job.cwd, ctx.env ?? {}); },
   /**
    * The after snapshot (taken once; a re-run reuses it) and the comparison: a task yields its edited paths; a read-only
    * turn whose workspace changed is `incomplete` (exit 10); an unavailable or partial snapshot leaves the mutation
@@ -394,12 +304,8 @@ const adapter = {
    */
   afterTurn(ctx, outcome = {}) {
     const job = ctx.job;
-    const before = readJsonFile(snapshotFile(job, "before"));
-    let after = readJsonFile(snapshotFile(job, "after"));
-    if (!after) {
-      after = takeSnapshot(job.cwd ?? ctx.cwd, ctx.env ?? {});
-      try { writeFileAtomic(snapshotFile(job, "after"), JSON.stringify(after)); } catch { /* recomputed on a re-run */ }
-    }
+    const before = snapshotOf(job, "before");
+    const after = snapshotAfter(job, job.cwd ?? ctx.cwd, ctx.env ?? {});
     const usable = (s) => s && ["tracked-and-unignored", "partial"].includes(s.coverage);
     const diff = usable(before) && usable(after) ? changes(before, after) : null;
     const coverage = !diff ? "unknown" : diff.coverage === "complete" ? "complete" : diff.changed ? "partial" : "unknown";
