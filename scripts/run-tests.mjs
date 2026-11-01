@@ -6,6 +6,7 @@
 //   --ratio : non-blank lines of tests/core-*.test.mjs divided by plugins/council/scripts/lib/core/*.mjs;
 //             prints the ratio and exits 1 below 1.5
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
@@ -64,9 +65,16 @@ function main(argv) {
     return 1;
   }
   const extra = argv.filter((a) => a !== "--live");
-  const result = spawnSync(process.execPath, ["--test", ...files, ...extra], { cwd: ROOT, stdio: "inherit", windowsHide: true });
-  if (result.error) throw result.error;
-  return result.status ?? 1;
+  // One temp root per default run, removed afterwards: the tests make thousands of directories under os.tmpdir().
+  const scratch = live ? null : fs.mkdtempSync(path.join(os.tmpdir(), "council-run-"));
+  const env = scratch ? { ...process.env, TMPDIR: scratch, TMP: scratch, TEMP: scratch } : process.env;
+  try {
+    const result = spawnSync(process.execPath, ["--test", ...files, ...extra], { cwd: ROOT, stdio: "inherit", windowsHide: true, env });
+    if (result.error) throw result.error;
+    return result.status ?? 1;
+  } finally {
+    if (scratch) fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 3 });
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
