@@ -113,6 +113,32 @@ function gitTop(cwd, env) {
   return r.status === 0 ? r.stdout.trim() : null;
 }
 
+// ---- lib/reader.mjs, as parseEvent ----
+const EDIT_TOOLS = new Set(["search_replace", "write"]);
+/** Stop reasons recorded as a finished turn; anything else is a failure. */
+export const NORMAL_STOPS = new Set(["end_turn"]);
+const STOP_TEXT = { cancelled: "Grok cancelled the turn (a tool needed permission headless Grok cannot ask for)" };
+// Grok names MCP tools server__tool; a read-only turn that calls one fails.
+const MCP_TOOL = /__/;
+const nameOf = (ev) => ev.toolName ?? ev.tool_name ?? ev.name ?? ev.tool?.name ?? null;
+const inputOf = (ev) => ev.rawInput ?? ev.input ?? ev.tool?.input ?? {};
+const str = (v) => (typeof v === "string" && v ? v : null);
+const inputPath = (ev) => { const input = inputOf(ev); return str(input?.file_path) ?? str(input?.path); };
+const updatePath = (ev) => str(ev.rawOutput?.EditsApplied?.absolute_path)
+  ?? (Array.isArray(ev.content) ? ev.content.map((c) => (c?.type === "diff" ? str(c.path) : null)).find(Boolean) : null)
+  ?? (Array.isArray(ev.locations) ? ev.locations.map((l) => str(l?.path)).find(Boolean) : null) ?? null;
+const idOf = (ev) => String(ev.toolCallId ?? ev.tool_call_id ?? ev.id ?? "");
+const textOf = (ev) => (typeof ev.data === "string" ? ev.data : typeof ev.text === "string" ? ev.text : "");
+const toolName = (entry) => (typeof entry === "string" ? entry : entry?.name);
+const describeEvent = (ev) => { const tool = ev?.type === "tool_call" ? nameOf(ev) : null; return tool ? `${ev.type}:${tool}` : ev?.type ?? null; };
+
+/** The per-turn scratch: the lifecycle seeds `readOnly` and `agent`; a missing mode is read-only (fail closed). */
+function scratch(state) {
+  const s = state.adapter ??= {};
+  s.calls ??= new Map();
+  return s;
+}
+
 export default {
   id: "grok",
   binEnv: BIN_ENV,
@@ -203,7 +229,67 @@ export default {
     return { args, env: compatEnv(request.env ?? {}, plan.readOnly), promptFile, promptText, answerFile: null, readOnly: plan.readOnly,
       requestedThreadId: request.resume ? null : thread, agent: plan.agent, contractCarrier: request.structured ? "none" : "rules" };
   },
-  parseEvent() { return { fatal: "grok: parseEvent is not implemented in this build (S4.3)" }; },
+  parseEvent(line, state) {
+    let ev;
+    try { ev = JSON.parse(line); } catch { return null; } // GROKX: a non-JSON line is not an event
+    if (typeof ev?.type !== "string") return null;
+    const s = scratch(state);
+    const readOnly = s.readOnly !== false;
+    const describe = describeEvent(ev);
+    switch (ev.type) {
+      case "available_commands": {
+        // Only `tools` is the catalogue (`commands` lists slash commands). An event without it leaves validation pending.
+        if (ev.tools === undefined) return { describe };
+        if (!Array.isArray(ev.tools)) return { fatal: "malformed tool catalogue" };
+        const names = ev.tools.map(toolName);
+        if (names.some((n) => typeof n !== "string" || !n)) return { fatal: "malformed tool catalogue entry" };
+        s.toolChecked = true;
+        const bad = readOnly ? names.filter((n) => FORBIDDEN.includes(n)) : [];
+        return bad.length ? { fatal: `read-only tool guard failed: ${bad.join(", ")}` } : { describe };
+      }
+      case "tool_call": {
+        if (readOnly && !s.toolChecked) return { fatal: "Grok used a tool before the read-only tool list was validated" };
+        const name = nameOf(ev);
+        if (readOnly && typeof name === "string" && (FORBIDDEN.includes(name) || MCP_TOOL.test(name))) return { fatal: `read-only tool guard failed: Grok called ${name}` };
+        if (s.calls.size >= PATH_CAP) return { fatal: "too many open tool calls in event stream" };
+        s.calls.set(idOf(ev), { name, path: inputPath(ev) });
+        return { toolStep: name ?? "tool", describe };
+      }
+      case "tool_call_update": {
+        const id = idOf(ev);
+        const call = s.calls.get(id);
+        if (call && !call.path && EDIT_TOOLS.has(call.name)) call.path = updatePath(ev);
+        const edited = ev.status === "completed" && EDIT_TOOLS.has(call?.name) && call.path ? call.path : null;
+        // A status of null (or none) is a progress update; only a named status other than these ends the call.
+        if (typeof ev.status === "string" && ev.status !== "pending" && ev.status !== "in_progress") s.calls.delete(id);
+        return edited ? { edited, describe } : { describe };
+      }
+      case "text": {
+        const data = textOf(ev);
+        return data ? { textDelta: data, describe } : { describe };
+      }
+      case "end": {
+        if (readOnly && !s.toolChecked) return { fatal: "Grok ended before the read-only tool list was validated" };
+        const returned = ev.sessionId ?? ev.session_id ?? null;
+        if (returned === null) return { fatal: "session not confirmed: Grok's end event names no session" };
+        if (typeof returned !== "string" || !returned) return { fatal: `Grok answered on session ${JSON.stringify(returned)}` };
+        const stop = ev.stopReason ?? ev.stop_reason ?? null;
+        if (!NORMAL_STOPS.has(stop)) return { fatal: STOP_TEXT[stop] ?? `Grok stopped with reason ${JSON.stringify(stop)}` };
+        const structured = ev.structuredOutput ?? ev.structured_output;
+        // end.modelUsage may name a cost-accounting id (grok-4.7-build for grok-4.7); the requested id is reported, never this.
+        return { completed: true, threadId: returned, ...(typeof ev.total_cost_usd === "number" ? { costUsd: ev.total_cost_usd } : {}),
+          ...(ev.usage ? { usage: ev.usage } : {}), ...(structured !== undefined && structured !== null ? { structured } : {}), describe };
+      }
+      case "error":
+        // Informational until the turn ends without `end` (GROKX); the stderr line carries the message then.
+        s.error = typeof ev.message === "string" ? ev.message.slice(0, 2000) : "Grok reported an error";
+        return { describe };
+      case "max_turns_reached":
+        return { fatal: "Grok stopped: max turns reached" };
+      default:
+        return { describe }; // thought, usage, and anything newer: ignored
+    }
+  },
   /** S4.4 implements the inline schema carrier and the answer mapping. */
   reviewPlan() { return { native: false, batches: null, promptTemplate: "review", schemaCarrier: "inline" }; },
   finalizeReview({ structured, unreviewed }) { return { structured: structured ?? null, unreviewed }; },
