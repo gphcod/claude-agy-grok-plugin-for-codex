@@ -258,11 +258,23 @@ test("R4: the snapshot comparison sees chmod +x on a dirty file, also past the b
   const overBudget = snapshot(workspace(dir), env, { maxBytes: 1000 });
   fs.chmodSync(path.join(dir, "dirty.sh"), 0o755);
   const stamp = fs.statSync(path.join(dir, "dirty.sh"));
-  assert.ok(stamp.mode & 0o111);
+  assert.ok(stamp.mode & 0o100);
   const after = snapshot(workspace(dir), env);
   assert.deepEqual(changes(before, after).files, ["dirty.sh"], "same content and state, new mode");
   assert.deepEqual(changes(overBudget, snapshot(workspace(dir), env, { maxBytes: 1000 })).files, ["dirty.sh"], "past the byte budget too");
   assert.deepEqual(changes(after, snapshot(workspace(dir), env)).files, [], "no change, no difference");
+});
+
+test("R4: the owner's execute bit is the one that counts, as in Git's own mode", { skip: process.platform === "win32" }, () => {
+  const dir = repoWithFile();
+  fs.writeFileSync(path.join(dir, "dirty.sh"), "dirty\n");
+  fs.chmodSync(path.join(dir, "dirty.sh"), 0o755);
+  const before = snapshot(workspace(dir), env);
+  fs.chmodSync(path.join(dir, "dirty.sh"), 0o655);
+  const cleared = snapshot(workspace(dir), env);
+  assert.deepEqual(changes(before, cleared).files, ["dirty.sh"], "0755 to 0655 clears Git's execute bit");
+  fs.chmodSync(path.join(dir, "dirty.sh"), 0o645);
+  assert.deepEqual(changes(cleared, snapshot(workspace(dir), env)).files, [], "a group bit is no change to Git");
 });
 
 test("R4: through a task, chmod +x on an already dirty file is an edit", { skip: process.platform === "win32" }, () => {
@@ -283,7 +295,7 @@ function dirtyRepo() {
 }
 const failingStatus = () => ({ PATH: gitShim(`case " $* " in *" status "*) echo 'fatal: index unreadable' >&2; exit 128;; esac`) });
 
-test("X-A1: a Gemini task whose git status fails after the turn reports no untouched dirty file as edited", async () => {
+test("X-A1: a Gemini task whose git status fails after the turn reports no untouched dirty file as edited", { skip: process.platform === "win32" }, async () => {
   const dir = dirtyRepo();
   const job = jobIn(dir);
   await gemini.beforeTurn({ job, request: {}, cwd: dir, env });
@@ -307,7 +319,7 @@ test("X-A1: a Gemini task over maxFiles reports no untouched dirty file as edite
   }
 });
 
-test("X-A1: a listed Gemini task still reports its edits, and a read-only turn keeps its behaviour on the same snapshots", async () => {
+test("X-A1: a listed Gemini task still reports its edits, and a read-only turn keeps its behaviour on the same snapshots", { skip: process.platform === "win32" }, async () => {
   const dir = dirtyRepo();
   const job = jobIn(dir);
   const ctx = { job, request: {}, cwd: dir, env };

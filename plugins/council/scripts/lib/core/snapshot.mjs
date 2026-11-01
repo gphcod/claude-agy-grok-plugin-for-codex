@@ -75,7 +75,7 @@ export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxByt
     try {
       const stat = fs.lstatSync(file);
       if (!stat.isFile() && !stat.isSymbolicLink()) { partial = true; files[name] = { state, kind: "non-file" }; continue; }
-      const measured = { state, size: stat.size, mtimeMs: stat.mtimeMs, executable: Boolean(stat.mode & 0o111) };
+      const measured = { state, size: stat.size, mtimeMs: stat.mtimeMs, executable: Boolean(stat.mode & 0o100) };
       if (stat.size + bytes > maxBytes) { partial = true; files[name] = { ...measured, hash: null }; continue; }
       let data;
       if (stat.isSymbolicLink()) data = Buffer.from(fs.readlinkSync(file));
