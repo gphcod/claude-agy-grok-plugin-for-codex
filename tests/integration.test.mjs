@@ -336,4 +336,24 @@ test("replay and cancel isolation: a request id is bound to its first provider; 
   }
 });
 
-test("concurrent fan-out (three asks in one Codex turn)", { skip: "S1.4's host concurrency probe is pending [user]; fan-out is sequential until it shows overlap (docs/decisions.md S1, PLAN.md A6)" }, () => {});
+// S1.4 (2026-11-01): Codex runs the shell calls of one turn in parallel, so a fan-out may issue its asks at once (A6).
+test("concurrent fan-out: one ask per provider started together, each with its own request id, overlap in time and all finish ok; follow-ups by job", async () => {
+  const w = world();
+  const env = { COUNCIL_FAKE_SCENARIO: "slow", COUNCIL_FAKE_SLOW_MS: "2000" };
+  const running = TURN_PROVIDERS.map((provider) => w.start(["ask", "--to", provider, "--request-id", `fan-${provider}`, "--", "the same brief"], { env }));
+  const ends = await Promise.all(running.map((r) => r.exited));
+  const jobs = TURN_PROVIDERS.map((provider, i) => {
+    assert.equal(ends[i].code, 0, `${provider}: ${ends[i].stdout}${ends[i].stderr}`);
+    assert.match(footerOf(ends[i].stdout), new RegExp(`^council ${provider} ok · job ${requestJobId(provider, SESSION, w.workspace, `fan-${provider}`)} · `));
+    return w.job(requestJobId(provider, SESSION, w.workspace, `fan-${provider}`));
+  });
+  const latestStart = Math.max(...jobs.map((j) => Date.parse(j.spawnedAt))), earliestEnd = Math.min(...jobs.map((j) => Date.parse(j.endedAt)));
+  assert.ok(latestStart < earliestEnd, "every provider's turn was running at the same time");
+  assert.deepEqual(TURN_PROVIDERS.map((p) => w.turns(p).length), TURN_PROVIDERS.map(() => 1), "one submission per provider");
+  assert.equal(w.call(["wait"]).stdout.trim().split("\n").length, TURN_PROVIDERS.length);
+  for (const [i, provider] of TURN_PROVIDERS.entries()) {
+    const reply = w.run(["reply", jobs[i].id, "--", "F1 AGREE"], RESUME[provider]);
+    assert.equal(reply.status, 0, `${provider}: ${reply.stdout}${reply.stderr}`);
+    assert.equal(resumed(provider, w.turns(provider).at(-1).argv), jobs[i].threadId);
+  }
+});

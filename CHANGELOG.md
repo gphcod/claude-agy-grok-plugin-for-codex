@@ -6,7 +6,7 @@ First release of Council for Codex: one Codex plugin, `council`, that calls Clau
 
 ### Added
 
-- One `$council` skill (2,993 B, description 168 B) with the POSIX heredoc and PowerShell here-string call forms, the `--prompt-file` and no-stdin rules, verbs, tiers, the policy on effort and tasks, sequential fan-out, `--request-id` rules, footer, exit codes and the discussion protocol.
+- One `$council` skill (2,997 B, description 168 B) with the POSIX heredoc and PowerShell here-string call forms, the `--prompt-file` and no-stdin rules, verbs, tiers, the policy on effort and tasks, a parallel fan-out, `--request-id` rules, footer, exit codes and the discussion protocol.
 - Verbs `ask`, `reply` (`<job|thread>`, `--thread`, `--last`, `--next-input`), `review` (`--uncommitted`, `--base`, `--commit`, `--adversarial`), `task` (`--thread`, Gemini `--allow-command`), `wait`, `cancel` (`--confirm-ended`), `models` (`--refresh`) and `setup` (`--live`, `--set`), each with `--to claude|gemini|grok`.
 - Per-call provider, model (aliases, pass-through with `model unverified`) and effort (one vocabulary, clamped downward and shown in the footer); tiers `consult`, `exec`, `deep` per provider, the Claude exec tier `sonnet`.
 - Structured reviews for every provider from a hash-checked snapshot, delivered in batches of at most 180,000 B with a synthesis pass, one draft-07 schema with finding ids and `AGREE`/`CHANGE`/`REJECT` decisions, and an identified findings ledger.
@@ -30,5 +30,4 @@ First release of Council for Codex: one Codex plugin, `council`, that calls Clau
 
 - Gemini read-only turns can search the web (agy's deny rule does not block it); `--web` is refused for Gemini.
 - Gemini is unsupported on Windows until the S7.2 session qualifies it; turn verbs `--to gemini` exit 2 there.
-- Fan-out is sequential until Codex's shell concurrency is probed.
 - No launcher kind is trusted to exit cleanly yet; every clean exit is followed by a process-table scan.

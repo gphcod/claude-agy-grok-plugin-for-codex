@@ -21,7 +21,7 @@ Change a delimiter found alone in the text. Text over 64 KiB, or in PowerShell o
 
 ## Verbs
 - `ask --to claude|gemini|grok`: new read-only thread. `reply <job>` or `reply --last`: read-only delta, same provider (another `--to` exits 2).
-- `review --to <p> [--base <ref>|--commit <sha>|--uncommitted] [--adversarial]`, text = focus. `reply <job> --next-input`: next saved batch, then synthesis.
+- `review --to <p> [--base <ref>|--commit <sha>|--uncommitted] [--adversarial]`, text = focus. `reply <job> --next-input`: next saved batch.
 - `task --to <p> [--thread <job>]`: edits files; gemini takes `--allow-command <exact>`.
 - `wait [job]`, `cancel [job]` (no `--to`), `models`, `setup`. `--web` (not gemini), `--model`, `--effort`.
 
@@ -29,7 +29,7 @@ Change a delimiter found alone in the text. Text over 64 KiB, or in PowerShell o
 Tiers consult/exec/deep: claude default/high sonnet/high default/xhigh; grok 4.7/high build-fast/xhigh 4.7/xhigh; gemini argon/high flash/high argon/high.
 User named no model: `ask`/`reply`/`review` only with `--tier consult`; ask once before higher effort (not for gemini). Named model: tier by complexity; explicit flags win. `task` only when the user authorizes edits; `cancel --confirm-ended` only on the user's word, even if a hint names it.
 Each review, task, exec, deep, xhigh or max call gets `--request-id <new word>`; retrying the identical call, flags included, replays the first result.
-Fan-out: the same brief as one `ask` per provider in sequence, own `--request-id`; then `reply <job>`, never `--last`.
+Fan-out: one `ask` per provider as parallel shell calls in one turn, same brief, own `--request-id`; then `reply <job>`, never `--last`.
 Findings F1, F2 tagged BLOCKER/MAJOR/MINOR with file:line. Replies send only `F1 AGREE`, `F2 CHANGE: ...`, `F3 REJECT: ...` and new facts. Stop when nothing changes or at `round N/N` (9 replies unless `--rounds`). Unresolved REJECT is disagreement. Rule each finding accepted, rejected or needs-user-waiver.
 
 ## Results

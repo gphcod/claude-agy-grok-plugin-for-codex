@@ -101,7 +101,7 @@ The skill (`plugins/council/skills/council/SKILL.md`, the only model-visible fil
 
 - When the user named no model: `ask`, `reply` and `review` only, with `--tier consult`; ask once before a higher effort (not for Gemini); never `task`, never `cancel --confirm-ended`. When the user named a model or family: choose the tier by complexity.
 - Discussion: findings numbered F1, F2, tagged BLOCKER, MAJOR or MINOR with `file:line`; replies carry only `AGREE`, `CHANGE: …`, `REJECT: …` and new facts; stop when nothing changes or at the round budget; an unresolved REJECT is reported as disagreement. Codex rules on each finding: accepted, rejected or needs-user-waiver.
-- Fan-out: one `ask` per provider, one call after another, each with its own `--request-id` and the same brief; follow-ups use `reply <job>`, never `--last`. Asks run in sequence because Codex's concurrency for independent shell calls is not yet probed (`PLAN.md` S1.4, A6).
+- Fan-out: one `ask` per provider, issued as parallel shell calls in one turn, each with its own `--request-id` and the same brief; follow-ups use `reply <job>`, never `--last`. Codex CLI 0.163 runs the shell calls of one turn in parallel (S1.4 probe, `docs/spike/codex-host.md`).
 
 ## Output, exit codes, blocking
 
@@ -185,7 +185,6 @@ Windows launches never go through `cmd.exe`; process identity and cleanup use th
 - **A clean exit is not trusted** on any launcher kind until S7 qualifies one: the post-exit scan costs time, and a held pipe locks the thread until `cancel --confirm-ended`.
 - **Workspace checks around Gemini turns** use bounded Git snapshots: outside Git, or with a partial snapshot and no detected change, the footer says `coverage unknown`; a detected change on a read-only turn is `incomplete` (exit 10).
 - **An unconfirmed Grok session** keeps its answer but cannot be resumed; start a new ask.
-- **Fan-out is sequential** until Codex's shell concurrency is probed.
 
 ## Differences from the three replaced plugins
 
