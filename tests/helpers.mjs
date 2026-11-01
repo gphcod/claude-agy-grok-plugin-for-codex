@@ -33,9 +33,25 @@ export function commitFile(cwd, name, content, message = `add ${name}`) {
 export const jobIdOf = (text) => /job=([a-z0-9]{16})/.exec(text)?.[1] ?? /job ([a-z0-9]{16})/.exec(text)?.[1];
 export const footerOf = (text) => text.trimEnd().split("\n").at(-1);
 
+// A test that kills its companion (to make a job lost) leaves the fake child to the `cancel` on its last line; a failed
+// assertion skips that line. Whatever this process's worlds still run is stopped when it exits: the null adapter's
+// operands name the world (--job-dir), so another run's fakes are never matched.
+const worldDirs = new Set();
+export function stopWorldChildren() {
+  if (!worldDirs.size || process.platform === "win32") return;
+  const table = spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  for (const line of (table.stdout ?? "").split("\n")) {
+    const row = /^\s*(\d+)\s+(.*)$/.exec(line);
+    if (!row || !row[2].includes(FAKE_CHILD) || ![...worldDirs].some((dir) => row[2].includes(dir))) continue;
+    try { process.kill(Number(row[1]), "SIGKILL"); } catch { /* already gone */ }
+  }
+}
+process.on("exit", stopWorldChildren);
+
 /** An isolated world: its own state root and Git workspace; `call`/`start` run the entry with the null adapter. */
 export function makeWorld({ git = true } = {}) {
   const dir = tmp();
+  worldDirs.add(dir);
   const workspace = path.join(dir, "work");
   fs.mkdirSync(workspace);
   if (git) { initGitRepo(workspace); commitFile(workspace, "README.md", "# work\n"); }

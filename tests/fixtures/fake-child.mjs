@@ -77,7 +77,8 @@ if (process.env.COUNCIL_FAKE_DENY) out({ type: "tool", name: "edit", path: proce
 if (answerFile) fs.writeFileSync(answerFile, answer);
 else if (!review || process.env.COUNCIL_FAKE_REVIEW_TEXT) { const text = review ? process.env.COUNCIL_FAKE_REVIEW_TEXT : answer; const half = Math.ceil(text.length / 2); out({ type: "text", data: text.slice(0, half) }); out({ type: "text", data: text.slice(half) }); }
 if (scenario === "no-completion") { leave(0); return; }
-if (process.env.COUNCIL_FAKE_HANG) await new Promise(() => setInterval(() => {}, 1000));
+// Bounded, so a test whose cleanup never ran (a failed assertion, a killed runner) cannot leave this process behind for good.
+if (process.env.COUNCIL_FAKE_HANG) { await new Promise((resolve) => setTimeout(resolve, Number(process.env.COUNCIL_FAKE_HANG_MS ?? 300000))); process.exit(97); }
 // COUNCIL_FAKE_END_FATAL: the end event is fatal yet carries cost and structured output.
 out({ type: "end", thread, cost: 0.001, ...(structured ? { structured } : {}), ...(unconfirmed ? { unconfirmed } : {}), ...(process.env.COUNCIL_FAKE_END_FATAL ? { fatal: process.env.COUNCIL_FAKE_END_FATAL } : {}) });
 if (scenario === "hold-pipes") {
