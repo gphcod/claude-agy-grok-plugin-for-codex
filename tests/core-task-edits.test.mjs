@@ -195,3 +195,58 @@ test("X-A2: a staged rename counts both names; a copy's source did not change, s
   run("git", ["add", "b.txt"], { cwd: moved.workspace });
   assert.deepEqual(edited(task(moved, { git: [["mv", "b.txt", "c.txt"]] })), [2, ["b.txt", "c.txt"]], "a rename of a file staged before the turn");
 });
+
+const RAW_NAME = Buffer.from([0x62, 0x61, 0x64, 0xff, 0xfe, 0x2e, 0x74, 0x78, 0x74]); // bad<ff><fe>.txt
+
+test("R3: a raw-byte filename in a real repository: the listing is not whole, edited falls back to the events, and a read-only turn does not fail", async (t) => {
+  const dir = repoWithFile();
+  const raw = Buffer.concat([Buffer.from(`${dir}${path.sep}`), RAW_NAME]);
+  try { fs.writeFileSync(raw, "one\n"); }
+  catch (error) { t.skip(`this file system refuses the name (${error.code})`); return; }
+  const before = snapshot(workspace(dir), env);
+  assert.deepEqual([before.listed, before.coverage], [false, "partial"]);
+  assert.equal(Object.keys(before.files).some((f) => f.startsWith("bad")), false, "no lossy entry");
+  const job = jobIn(dir);
+  snapshotBefore(job, dir, env);
+  fs.writeFileSync(raw, "two\n");
+  assert.equal(workspaceEdits(job, dir, env), null, "cannot tell, so the event count stands");
+  const ro = jobIn(dir, { verb: "ask", readOnly: true });
+  const ctx = { job: ro, request: {}, cwd: dir, env };
+  await gemini.beforeTurn(ctx);
+  assert.deepEqual(await gemini.afterTurn(ctx, { cleanupConfirmed: true }), { coverage: "unknown" }, "not complete, and no failure");
+});
+
+test("R3 where the file system refuses such a name: a status that lists one, from a git shim", { skip: process.platform === "win32" }, async () => {
+  // printf with octal bytes stands in for a repository cloned onto a file system that keeps raw names.
+  const dir = repoWithFile();
+  const shimmed = { PATH: gitShim(`case " $* " in *" status "*) printf '?? bad\\377\\376.txt\\000'; exit 0;; esac`) };
+  const listing = snapshot(workspace(dir, shimmed), shimmed);
+  assert.deepEqual([listing.listed, listing.coverage, Object.keys(listing.files)], [false, "partial", []]);
+  const job = jobIn(dir);
+  snapshotBefore(job, dir, shimmed);
+  fs.writeFileSync(path.join(dir, "real.txt"), "r\n");
+  assert.equal(workspaceEdits(job, dir, shimmed), null, "edited falls back to the events");
+  const ro = jobIn(dir, { verb: "ask", readOnly: true });
+  const ctx = { job: ro, request: {}, cwd: dir, env: shimmed };
+  await gemini.beforeTurn(ctx);
+  const result = await gemini.afterTurn(ctx, { cleanupConfirmed: true });
+  assert.deepEqual([result.coverage, result.incomplete, ro.mutationCoverage], ["unknown", undefined, "unknown"], "a read-only turn does not fail merely because such a file exists");
+  const task = jobIn(dir);
+  const taskCtx = { job: task, request: {}, cwd: dir, env: shimmed };
+  await gemini.beforeTurn(taskCtx);
+  const taskResult = await gemini.afterTurn(taskCtx, { cleanupConfirmed: true });
+  assert.deepEqual(taskResult, { coverage: "unknown" });
+});
+
+test("R3: a commit naming a raw-byte path cannot be listed, so HEAD moving gives the event count", { skip: process.platform === "win32" }, () => {
+  const dir = repoWithFile();
+  const job = jobIn(dir);
+  snapshotBefore(job, dir, env);
+  commitFile(dir, "next.txt", "n\n");
+  const shimmed = { PATH: gitShim(`case " $* " in *" --name-only "*) printf 'bad\\377.txt\\000'; exit 0;; esac`) };
+  assert.equal(workspaceEdits(job, dir, shimmed), null);
+  const job2 = jobIn(dir);
+  snapshotBefore(job2, dir, env);
+  commitFile(dir, "after.txt", "a\n");
+  assert.deepEqual(workspaceEdits(job2, dir, env), ["after.txt"], "a valid name is reported");
+});

@@ -37,6 +37,18 @@ function readBounded(file, remaining) {
     return data.length > remaining || data.length !== stat.size || fs.fstatSync(fd).size !== stat.size ? null : data;
   } finally { fs.closeSync(fd); }
 }
+const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+/** `git -z` output as strings; an item that is not valid UTF-8 is null, never a lossy string. */
+function nulSeparated(output) {
+  const items = [];
+  for (let at = 0; at < output.length;) {
+    const end = output.indexOf(0, at);
+    const stop = end < 0 ? output.length : end;
+    try { items.push(UTF8.decode(output.subarray(at, stop))); } catch { items.push(null); }
+    at = stop + 1;
+  }
+  return items;
+}
 /** One snapshot: coverage `tracked-and-unignored` (complete), `partial` (a bound was hit) or `unchecked` (outside Git). */
 export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxBytes = SNAPSHOT.maxBytes, timeoutMs = SNAPSHOT.timeoutMs } = {}) {
   const start = Date.now();
@@ -49,11 +61,12 @@ export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxByt
   let partial = [status, diff, staged].some((r) => r.code !== 0 || r.limited);
   // `listed`: the status names every dirty path, so a comparison of the entries is sound even when some hash is missing.
   let listed = status.code === 0 && !status.limited && !head.limited;
-  const entries = status.output.toString("utf8").split("\0");
+  const entries = status.output.length ? nulSeparated(status.output) : [];
   const files = Object.create(null); // a path named __proto__ is an entry, never the prototype (AGYX)
   let bytes = 0;
-  for (let i = 0; i < entries.length; i += 1) {
-    const entry = entries[i];
+  for (const entry of entries) {
+    // A path Node's string APIs cannot name would read as deleted in both snapshots and compare equal: no claim about it.
+    if (entry === null) { partial = true; listed = false; continue; }
     if (!entry) continue;
     const state = entry.slice(0, 2), name = entry.slice(3);
     if (Object.keys(files).length >= maxFiles || Date.now() - start > timeoutMs * 4) { partial = true; listed = false; break; }
@@ -117,16 +130,18 @@ export function snapshotAfter(job, cwd, env = {}) {
   }
   return after;
 }
-/** The files two commits differ in, relative to the root; an unborn side lists the other's whole tree. Null when git fails. */
+/** The files two commits differ in, relative to the root; an unborn side lists the other's whole tree. Null when git fails or a name is not UTF-8. */
 function headChanges(root, from, to, env) {
   const args = from && to ? ["diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", from, to] : ["ls-tree", "-r", "--name-only", "-z", to ?? from];
   const r = git(root, args, env);
-  return r.code === 0 && !r.limited ? r.output.toString("utf8").split("\0").filter(Boolean) : null;
+  if (r.code !== 0 || r.limited) return null;
+  const names = nulSeparated(r.output);
+  return names.includes(null) ? null : names.filter(Boolean);
 }
 /**
  * The paths a turn changed in the working tree, relative to `cwd` (`../x` outside it): whose listed state differs between
  * the snapshots, plus what differs between the two HEADs when HEAD moved. Null when it cannot tell (outside Git, a failed
- * git call, a listing past the cap, no before snapshot): the caller keeps the event-reported edits.
+ * git call, a listing past the cap, a path that is not valid UTF-8, no before snapshot): the caller keeps the event-reported edits.
  */
 export function workspaceEdits(job, cwd, env = {}) {
   const before = snapshotOf(job, "before");
