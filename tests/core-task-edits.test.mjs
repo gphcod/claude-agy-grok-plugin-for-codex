@@ -159,3 +159,23 @@ test("a before snapshot that went missing never fails the turn", async () => {
   const { job } = await runManagedTurn(ctxFor(w), losing, turn, () => turn, { json: true, deadlineMs: 20000, inactivityMs: 20000 });
   assert.deepEqual([job.code, job.edited], [0, ["e.js"]], "no before snapshot: the event count");
 });
+
+/** A `git` first on PATH that runs `script` (POSIX shell) and then the real git; returns the PATH to use. */
+function gitShim(script) {
+  const real = run("sh", ["-c", "command -v git"], {}).stdout.trim();
+  const bin = tmp();
+  fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\n${script}\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  return `${bin}${path.delimiter}${process.env.PATH}`;
+}
+
+test("R1: a cancel marker written during the before snapshot stops the turn with no provider spawn", { skip: process.platform === "win32" }, async () => {
+  const w = makeWorld();
+  const shimmed = gitShim(`for d in "${w.home}"/jobs/*/; do : > "$d/cancel"; done`);
+  const turn = turnFor(w, { verb: "task", env: { PATH: shimmed } });
+  let spawns = 0;
+  const hooks = { spawn: () => { spawns += 1; throw new Error("no provider may start"); } };
+  const { job } = await runManagedTurn({ ...ctxFor(w), env: { ...w.env, PATH: shimmed } }, adapter, turn, () => turn, { json: true, deadlineMs: 20000, inactivityMs: 20000 }, hooks);
+  assert.equal(spawns, 0, "zero spawn attempts");
+  assert.deepEqual([job.outcome, job.code, job.error, Boolean(job.spawnAttempted), w.fakeCalls().length], ["cancelled", 1, "cancelled", false, 0]);
+  assert.ok(fs.existsSync(path.join(job.dir, "snapshot-before.json")), "the marker came during the snapshot, which finished");
+});
