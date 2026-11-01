@@ -2,7 +2,8 @@
 // A stand-in for the Grok CLI (1.0.70). Adapted from grok_plugin_for_codex 1.1.0 tests/fake-grok.mjs; the streams come
 // from the S1.3 probes (tests/fixtures/streams/grok.json carries the provenance). It validates the A5.1 launch contract
 // (recipe flags, prompt file, rules text or schema carrier, compatEnv and guard variables) before emitting and plays
-// COUNCIL_FAKE_SCENARIO: ok, resume, denied, effort-error, review-findings, review-malformed, large-review, slow, hold-pipes.
+// COUNCIL_FAKE_SCENARIO: ok, resume, denied, effort-error, review-findings, review-malformed, large-review, slow, hold-pipes,
+// and the synthetic review-reject and no-session (S4.5).
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { ROOT, UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, flagValues, holdPipes, log, mismatch, readStdin, repoSchema,
@@ -86,7 +87,24 @@ switch (which) {
   case "effort-error": play(fill(fixtures["effort-error"])); process.stderr.write(`${fixtures["effort-error-stderr"]}\n`); break;
   case "review-findings": play(fill(fixtures["review-findings"])); break;
   case "review-malformed": play(fill(fixtures["review-malformed"])); break;
-  case "large-review": { const b = batchOf(prompt); play(fill(b && b.index >= b.total ? fixtures["structured-clean"] : fixtures["review-findings"])); break; }
+  // Text batches answer findings; the synthesis pass (or a last `batch n/n`) answers a clean approval.
+  case "large-review": { const b = batchOf(prompt); play(fill(/Batch units: synthesis/.test(prompt) || (b && b.index >= b.total) ? fixtures["structured-clean"] : fixtures["review-findings"])); break; }
+  // Synthetic (S4.5): an approval that REJECTs, by id, every open finding the prompt's prior-findings note lists (else the
+  // fixture's own findings), for an identified resolution.
+  case "review-reject": {
+    const listed = [...prompt.matchAll(/^- (\S+) (?:BLOCKER|MAJOR|MINOR) (\S+):(\d+) /gm)];
+    play(fill(fixtures["review-findings"]).map((e) => {
+      if (e.type === "text") return { ...e, data: "" };
+      if (e.type !== "end") return e;
+      const [base] = e.structuredOutput.findings;
+      const findings = listed.length ? listed.map(([, id, file, line]) => ({ ...base, id, file, line_start: Number(line), line_end: Number(line), decision: "REJECT" }))
+        : e.structuredOutput.findings.map((f) => ({ ...f, decision: "REJECT" }));
+      return { ...e, structuredOutput: { ...e.structuredOutput, verdict: "approve", summary: "Rejected.", findings } };
+    }));
+    break;
+  }
+  // Synthetic (S4.5): an end event that names no session (session not confirmed).
+  case "no-session": play(fill(fixtures.ok).map((e) => { if (e.type !== "end") return e; const { sessionId, ...rest } = e; return rest; })); break;
   default: mismatch(`unknown scenario ${which}`);
 }
 process.exit(exitCode);
