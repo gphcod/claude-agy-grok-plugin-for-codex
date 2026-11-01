@@ -94,3 +94,19 @@ test("ownership: the exact --prompt-file operand; two jobs with the same model a
   assert.equal(grok.ownsProcess({ argv: ["grok", "--rules", a.promptFile] }, a, "linux", hasFlagOperand), false);
   assert.equal(grok.ownsProcess(rowA, { childArgs: a.childArgs }, "linux", hasFlagOperand), true, "the operand is read from the recorded argv when promptFile is absent");
 });
+
+test("probe warns about several grok executables on PATH only when COUNCIL_GROK_BIN does not choose one", { skip: process.platform === "win32" }, async () => {
+  const w = world();
+  const bins = [path.join(w.dir, "a"), path.join(w.dir, "b")];
+  for (const dir of bins) {
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "grok"), `#!${process.execPath}\nimport(${JSON.stringify(FAKE)});\n`, { mode: 0o755 });
+  }
+  const env = { ...w.env, PATH: bins.join(path.delimiter) };
+  delete env.COUNCIL_GROK_BIN;
+  const launcher = grok.resolveLauncher(env, "darwin");
+  assert.equal(launcher.path, path.join(bins[0], "grok"));
+  const probe = await grok.probe(launcher, env, "darwin");
+  assert.deepEqual(probe.warnings, [`2 grok executables on PATH; the first one runs (${path.join(bins[0], "grok")})`]);
+  assert.deepEqual((await grok.probe(grok.resolveLauncher(w.env), w.env, "darwin")).warnings, []);
+});

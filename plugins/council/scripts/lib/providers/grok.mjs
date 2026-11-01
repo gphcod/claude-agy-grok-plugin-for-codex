@@ -8,7 +8,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { resolveLauncher as resolveBinary, runSync } from "../core/launcher.mjs";
+import { pathCandidates, resolveLauncher as resolveBinary, runSync } from "../core/launcher.mjs";
 import { loadStatic, parseModelListing } from "../core/catalog.mjs";
 import { loadTiers } from "../core/tiers.mjs";
 import { reviewProblem } from "../core/review-validate.mjs";
@@ -158,9 +158,12 @@ export default {
     const operand = job.promptFile ?? (at >= 0 ? args[at + 1] : null);
     return Boolean(operand) && hasFlagOperand(row, "--prompt-file", operand, platform);
   },
-  /** Non-billable: `--version` and `grok models` (parseModels); a tier model missing from the listing is a warning (GROKX setup.mjs). */
-  async probe(launcher = this.resolveLauncher(), env = process.env) {
+  /** Non-billable: `--version` and `grok models` (parseModels); a tier model missing from the listing, or several grok executables on PATH, is a warning (GROKX setup.mjs). */
+  async probe(launcher = this.resolveLauncher(), env = process.env, platform = process.platform) {
     const warnings = [];
+    // With COUNCIL_GROK_BIN set nothing on PATH runs, so several candidates there are no concern (GROKX setup.mjs).
+    const candidates = env[BIN_ENV] ? [] : pathCandidates("grok", env, platform);
+    if (candidates.length > 1) warnings.push(`${candidates.length} grok executables on PATH; the first one runs (${candidates[0]})`);
     const version = runSync(launcher, ["--version"], { env });
     if (version.status !== 0) { warnings.push(`grok --version failed: ${firstLine(version)}`); return { version: null, loggedIn: null, models: null, warnings }; }
     const listing = runSync(launcher, ["models"], { env, timeoutMs: 30000 });
