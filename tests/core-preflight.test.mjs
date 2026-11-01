@@ -113,3 +113,17 @@ test("the policy store: defaults, validation, realpath read roots and a version 
   assert.throws(() => setPolicy(home, []), /must be a JSON object/);
   assert.notEqual(setPolicy(home, { allowMcp: true }).version, policy.version);
 });
+
+test("an exec descriptor with recordOutput false keeps the probe output out of the result and the cache (core fix for S3.1)", async () => {
+  const dir = tmp();
+  const file = script(dir, "auth.mjs", "console.log(JSON.stringify({ loggedIn: true, email: 'someone@example.com' }));");
+  const descriptor = { kind: "exec", target: { command: process.execPath, args: [file], expectText: '"loggedIn":\\s*true', recordOutput: false }, why: "auth" };
+  const direct = await runDescriptor(descriptor);
+  assert.deepEqual(direct, { ok: true, status: 0 });
+  const home = path.join(dir, "state");
+  await runPreflight({ home, provider: "x", launcher: launcherFor(file), descriptors: [descriptor] });
+  const cached = fs.readdirSync(path.join(home, "preflight")).map((f) => fs.readFileSync(path.join(home, "preflight", f), "utf8")).join("");
+  assert.ok(!cached.includes("someone@example.com"), "the account line is never persisted");
+  const shown = await runDescriptor({ ...descriptor, target: { ...descriptor.target, recordOutput: true } });
+  assert.match(shown.output, /someone@example\.com/, "the default still records output");
+});

@@ -85,13 +85,14 @@ async function checkNetwork(descriptor, env) {
   } catch (error) { return { ok: false, detail: `network access failed (${error.cause?.code || error.name})` }; }
 }
 async function checkExec(descriptor, env) {
-  const { command, args = [], expectStatus = 0, expectText = null } = descriptor.target;
+  const { command, args = [], expectStatus = 0, expectText = null, recordOutput = true } = descriptor.target;
   const result = await startProbe(command, args, { env, timeoutMs: descriptor.timeoutMs ?? 15000 });
   if (result.error) return { ok: false, detail: `probe failed: ${result.error}` };
   const text = `${result.stdout}${result.stderr}`;
   if (expectText && !new RegExp(expectText).test(text)) return { ok: false, detail: `probe output did not match ${expectText}` };
   if (expectStatus !== null && result.status !== expectStatus) return { ok: false, detail: `probe exited ${result.status}: ${text.trim().split(/\r?\n/)[0] ?? ""}`.trim() };
-  return { ok: true, status: result.status, output: text.slice(0, 2000) };
+  // recordOutput: false keeps a probe's output out of the cache (an account status line naming the user, S3.1).
+  return { ok: true, status: result.status, ...(recordOutput === false ? {} : { output: text.slice(0, 2000) }) };
 }
 function checkProcessTable(descriptor, platform) {
   const snapshot = processSnapshot({ platform, timeout: descriptor.timeoutMs ?? 20000 });
