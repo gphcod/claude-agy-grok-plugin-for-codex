@@ -107,7 +107,8 @@ test("Claude's native-only rule: PATH wrappers and non-.exe files are refused on
 test("spawnChild and runSync launch the resolved command with the adapter's arguments and no shell", async () => {
   const dir = tmp();
   const script = file(dir, "echo.mjs", "process.stdout.write(JSON.stringify({ argv: process.argv.slice(2), stdin: require('fs').readFileSync(0, 'utf8'), depth: process.env.COUNCIL_DEPTH }));", 0o644);
-  fs.writeFileSync(script, "import fs from 'node:fs'; process.stdout.write(JSON.stringify({ argv: process.argv.slice(2), stdin: process.stdin.isTTY ? null : fs.readFileSync(0, 'utf8'), depth: process.env.COUNCIL_DEPTH }));");
+  // Reads stdin asynchronously: a synchronous read of a pipe can throw EAGAIN under load, which ended the fake early (write EPIPE).
+  fs.writeFileSync(script, "let stdin = ''; if (!process.stdin.isTTY) for await (const c of process.stdin) stdin += c; process.stdout.write(JSON.stringify({ argv: process.argv.slice(2), stdin: process.stdin.isTTY ? null : stdin, depth: process.env.COUNCIL_DEPTH }));");
   const launcher = grok({ env: { COUNCIL_GROK_BIN: script }, platform: "linux", home: dir });
   const sync = runSync(launcher, ["--version", "x y"], { env: { ...process.env, COUNCIL_DEPTH: "1" } });
   assert.equal(sync.status, 0, sync.stderr);
