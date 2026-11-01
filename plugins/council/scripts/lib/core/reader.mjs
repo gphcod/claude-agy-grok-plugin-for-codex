@@ -32,10 +32,11 @@ export function createReader(adapter, { cwd = process.cwd(), expectedThreadId = 
   function apply(result) {
     if (!result) return;
     if (result.fatal) {
-      // A fatal event may carry the turn's cost, usage and structured output: they are kept with the failure.
+      // A fatal event may carry the turn's cost, usage, structured output and an unconfirmed thread: they are kept with the failure.
       if (typeof result.costUsd === "number") state.costUsd = result.costUsd;
       if (result.usage) state.usage = result.usage;
       if (result.structured !== undefined) state.structured = result.structured;
+      if (result.unconfirmed) state.unconfirmed ??= typeof result.unconfirmed === "string" ? result.unconfirmed : "thread not confirmed: start a new ask";
       fail(result.fatal); return;
     }
     if (result.threadId !== undefined && result.threadId !== null) {

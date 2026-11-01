@@ -60,7 +60,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
   };
   let turn = initial, built = null, child = null, reason = null, persistenceFailed = false, spawnError = null;
   let drainExpired = false, pipesClosed = false, exhausted = false, announced = false, answer = "", queryError = null;
-  let afterTurnDone = false, hookOutcome = null, refusal = null;
+  let afterTurnDone = false, hookOutcome = null, refusal = null, released = false;
   const announce = () => { if (!announced && !options.json) { announced = true; hooks.announce?.(job); } };
   const claim = (id) => {
     if (!id) return;
@@ -395,13 +395,15 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
         policyVersion: turn.policyVersion ?? null, lastJob: job.id, ...(job.unconfirmed ? { resumable: false, unconfirmed: job.unconfirmed } : {}) });
     }
     save(job); finishMarker(job);
-    if (cleanupConfirmed) releaseClaims(ctx.home, job);
+    if (cleanupConfirmed) { releaseClaims(ctx.home, job); released = true; }
   } catch (failure) {
     Object.assign(job, { code: 1, outcome: "failed", status: "failed", cleanupPending: true, error: `finalization failed: ${failure.message}` });
     if (!job.done && job.reviewStateBase) job.reviewState = job.reviewStateBase;
     if (!job.done) { try { save(job); finishMarker(job); } catch { /* storage is gone: the heartbeat lapses and recovery reads the job as lost */ } }
   }
-  if (refusal) throw refusal;
+  // The usage refusal (exit 2) only once its job is finalized and the claim released; otherwise the storage failure and
+  // its recovery handle (the job id, `cancel <job>`) are the result (exit 1).
+  if (refusal && released) throw refusal;
   announce();
   return { job: jobView(ctx.home, job), answer };
 }

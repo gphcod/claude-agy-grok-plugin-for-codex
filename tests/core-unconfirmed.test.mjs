@@ -128,3 +128,37 @@ test("an incomplete review (malformed output) prints what it received after the 
   const t = JSON.parse(w.call(["review", "--to", "null", "--json"], { env: { COUNCIL_FAKE_STRUCTURED: JSON.stringify({ verdict: "lgtm" }), COUNCIL_FAKE_REVIEW_TEXT: "raw model text" } }).stdout);
   assert.match(t.answer, /Received output \(not accepted\):\nraw model text\n?$/);
 });
+
+test("a refusal under the claim whose finalization fails reports the storage failure (exit 1) and its recovery handle, not exit 2", async () => {
+  const w = makeWorld();
+  const first = jobIdOf(w.call(["ask", "--to", "null", "--", "q"]).stderr);
+  const thread = w.job(first).threadId;
+  const beforeClaim = () => saveThread(w.home, { ...loadThread(w.home, "null", thread), resumable: false, unconfirmed: HINT });
+  const { markDone } = await import("../plugins/council/scripts/lib/core/jobs.mjs");
+  let failed = false;
+  const flaky = (job) => { if (!failed) { failed = true; throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" }); } return markDone(job); };
+  const r = await inProcess(w, ["reply", first, "--", "more"], { hooks: { beforeClaim, markDone: flaky } });
+  assert.equal(r.code, 1, r.out + r.err);
+  const job = jobIdOf(r.out);
+  assert.ok(job && job !== first, r.out);
+  assert.match(footerOf(r.out), new RegExp(`error: finalization failed: ENOSPC: no space left on device · cleanup pending; next: cancel ${job}; do not resume$`));
+  assert.notEqual(inspectClaim(w.home, "null", thread).state, "absent", "the claim is still owned");
+});
+
+test("a fatal event that carries unconfirmed keeps it: exit 1, the answer kept, the resumed thread not resumable", () => {
+  const w = makeWorld();
+  const first = jobIdOf(w.call(["ask", "--to", "null", "--", "q"]).stderr);
+  const thread = w.job(first).threadId;
+  const r = w.call(["reply", first, "--", "more"], { env: { ...unconfirmed, COUNCIL_FAKE_END_FATAL: "incomplete: stopped" } });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(r.stdout.split("\n")[0], "fake answer to: more");
+  assert.match(footerOf(r.stdout), new RegExp(`error: incomplete: stopped · ${HINT}$`));
+  assert.equal(w.job(jobIdOf(r.stderr)).unconfirmed, HINT);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(w.home, "threads", `null-${thread}.json`), "utf8")).resumable, false);
+  const again = w.call(["reply", thread, "--to", "null", "--", "again"]);
+  assert.equal(again.status, 2);
+  assert.match(again.stderr, new RegExp(HINT));
+  const reader = createReader(adapter, {});
+  reader.feed(`${JSON.stringify({ type: "end", fatal: "x", unconfirmed: "hint" })}\n`);
+  assert.deepEqual([reader.state.failed, reader.state.unconfirmed], ["x", "hint"]);
+});
