@@ -107,3 +107,15 @@ Branch `s7-fixes-cx`, 2026-11-01. Re-runs used this branch's `plugins/council/sc
 Skill: 2,997 B before, 2,998 B after (budget 3,000 B). S7.0's record is `docs/qualification/baseline.md`.
 
 Round 2 of the review changed the same branch (`docs/decisions.md`, "Round 2"), with no new live run: default suite 528 tests, 525 pass, 0 fail, 3 skipped. The third skip is the raw-byte filename test, which APFS refuses (EILSEQ); a `git` shim covers that logic on macOS.
+
+## Installed-route re-test after the fixes (2026-11-01, main 17a829b)
+
+The installed copy was refreshed with `codex plugin remove` and `codex plugin add`; `validate-plugin.mjs --installed` reports 37 files equal. Route: installed `$council` under `danger-full-access`, except where noted.
+
+| Behaviour | Prompt | Result |
+|---|---|---|
+| A denial names itself | installed `council.mjs` run directly, `ask --to gemini --effort low` asked to run `ls -la` | exit 10, job `446jldiqoe8pdr7q`, `attention: denied run_command(ls -la)` |
+| Bare `wait` lists the session's jobs (I4) | "List the council jobs of this session." | Codex ran bare `wait` and listed job `qqcesjwwc8rb98mc` |
+| A task's tier (I6) | `$council task for grok at --effort low` | no `--tier consult`; exec tier `grok-4.7-build-fast`, job `bdcb600f242e1a0b`, `edited 1` |
+
+A read-only prompt asking Gemini to write a file ended exit 0 twice (jobs `qqcesjwwc8rb98mc`, `iv87pm1z13pu35mz`). Gemini declined under the read-only contract without a tool call, so no denial occurred and the status is correct. The direct-script check in the section above (job `f4af107e9d2b2a81`) is the one proven to count a shell edit.
