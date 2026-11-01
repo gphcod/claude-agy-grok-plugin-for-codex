@@ -6,7 +6,7 @@ First release of Council for Codex: one Codex plugin, `council`, that calls Clau
 
 ### Added
 
-- One `$council` skill (2,997 B, description 168 B) with the POSIX heredoc and PowerShell here-string call forms, the `--prompt-file` and no-stdin rules, verbs, tiers, the policy on effort and tasks, a parallel fan-out, `--request-id` rules, footer, exit codes and the discussion protocol.
+- One `$council` skill (2,998 B, description 168 B) with the POSIX heredoc and PowerShell here-string call forms, the `--prompt-file` and no-stdin rules, verbs, tiers, the policy on effort and tasks, a parallel fan-out, `--request-id` rules, footer, exit codes and the discussion protocol.
 - Verbs `ask`, `reply` (`<job|thread>`, `--thread`, `--last`, `--next-input`), `review` (`--uncommitted`, `--base`, `--commit`, `--adversarial`), `task` (`--thread`, Gemini `--allow-command`), `wait`, `cancel` (`--confirm-ended`), `models` (`--refresh`) and `setup` (`--live`, `--set`), each with `--to claude|gemini|grok`.
 - Per-call provider, model (aliases, pass-through with `model unverified`) and effort (one vocabulary, clamped downward and shown in the footer); tiers `consult`, `exec`, `deep` per provider, the Claude exec tier `sonnet`.
 - Structured reviews for every provider from a hash-checked snapshot, delivered in batches of at most 180,000 B with a synthesis pass, one draft-07 schema with finding ids and `AGREE`/`CHANGE`/`REJECT` decisions, and an identified findings ledger.
@@ -25,6 +25,12 @@ First release of Council for Codex: one Codex plugin, `council`, that calls Clau
 - Gemini `print_timeout` is exit 1 and keeps the answer (was 10); a partial or unavailable Gemini workspace snapshot is `coverage unknown` instead of exit 10.
 - Bare `review` never falls back to the default branch; `--base` reviews from the merge base; a Grok review from a subdirectory exits 2 naming the repository root.
 - `claude_plugin_for_codex` `fork`, `--profile` variants and `--with-context`, and gemini-plugin-for-codex caller `--settings` and `--inline-bytes`, are not carried over. See `docs/parity/` for every row.
+
+### Fixed before release (S7.1 macOS matrix)
+
+- A turn that exits 10 says why: the footer's `attention: <reason>` and `--json` `attention` (a denied action, an incomplete turn, open questions in the answer, an incomplete or malformed review).
+- `edited N` on a task counts working-tree changes from a Git snapshot around the turn, so edits made through a shell count.
+- The locked-thread refusal leads with its actions, so the footer's 200 B clip cannot drop them.
 
 ### Known limitations
 

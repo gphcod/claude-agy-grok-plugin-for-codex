@@ -100,6 +100,7 @@ Gemini has no effort above `high`, so its consult and deep tiers coincide. New t
 The skill (`plugins/council/skills/council/SKILL.md`, the only model-visible file, under 3,000 B) tells Codex:
 
 - When the user named no model: `ask`, `reply` and `review` only, with `--tier consult`; ask once before a higher effort (not for Gemini); never `task`, never `cancel --confirm-ended`. When the user named a model or family: choose the tier by complexity.
+- A `task` only when the user authorizes edits, at its default tier `exec`; bare `wait` lists this session's jobs; on exit 10 read the footer's `attention:`.
 - Discussion: findings numbered F1, F2, tagged BLOCKER, MAJOR or MINOR with `file:line`; replies carry only `AGREE`, `CHANGE: …`, `REJECT: …` and new facts; stop when nothing changes or at the round budget; an unresolved REJECT is reported as disagreement. Codex rules on each finding: accepted, rejected or needs-user-waiver.
 - Fan-out: one `ask` per provider, issued as parallel shell calls in one turn, each with its own `--request-id` and the same brief; follow-ups use `reply <job>`, never `--last`. Codex CLI 0.163 runs the shell calls of one turn in parallel (S1.4 probe, `docs/spike/codex-host.md`).
 

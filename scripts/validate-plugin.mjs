@@ -19,7 +19,7 @@ export const DESCRIPTION_BYTES = 170;
 export const REQUIRED_TERMS = ["council.mjs", "ask", "reply", "review", "task", "wait", "cancel", "models", "setup", "--to",
   "claude", "gemini", "grok", "COUNCIL_EOF", "@'", "exit $LASTEXITCODE", "--prompt-file", "--request-id", "never resubmit",
   "longest wait", "20 still running", "round N/N", "never repeat it verbatim", "preflight_blocked", "--tier consult",
-  "--next-input", "unreviewed N"];
+  "--next-input", "unreviewed N", "attention:", "open questions", "`wait` lists", "tier exec"];
 
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const parseVersion = (v) => {

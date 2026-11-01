@@ -12,7 +12,7 @@ Measured 2026-11-01 on macOS 27.0.1 (arm64), Node 22.19.0, branch `s6`, with `np
 | gemini | 91 B | 84 B | 175 B |
 | grok | 89 B | 76 B | 165 B |
 
-Skill: 2,993 B, description 168 B (the whole standing cost; one skill, no MCP server).
+Skill: 2,998 B after the S7.1 fixes (2,993 B when measured here, 2,997 B before S7.1), description 168 B (the whole standing cost; one skill, no MCP server).
 
 The footers were `council claude ok · job <16> · claude-opus-5-5/high · 0s · round 1/9`, `council gemini ok · job <16> · gemini-4-argon/high · 0s · round 1/9` and `council grok ok · job <16> · grok-4.7/high · 0s · round 1/9`; the start lines carry the 16-character job id and the 36-character native thread id. The bytes vary with the model name, the duration token (`0s` against the fakes; `1m05s` adds 3 B), the round, and the optional footer tokens (`edited N`, `unreviewed N`, `batch i/n`, `model unverified`, `full: <file>`, `error: …`, a recovery hint). A `--request-id` does not change the length: job ids are always 16 characters.
 

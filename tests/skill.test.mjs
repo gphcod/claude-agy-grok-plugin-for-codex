@@ -23,3 +23,9 @@ test("the skill carries every required term of S0.5 and both call forms", () => 
   assert.match(body, /@'\r?\n<text>\r?\n'@ \| node "<plugin>\\scripts\\council\.mjs" .*--; exit \$LASTEXITCODE/);
   assert.doesNotMatch(skill, /run_in_background|\/council:|slash command/, "nothing from the Claude host");
 });
+
+test("S7.1: the skill says why a turn exits 10, what bare `wait` does and which tier a task uses", () => {
+  assert.match(body, /10 needs attention \(findings; else the footer's `attention:`: denial, incomplete turn, open questions\)/);
+  assert.match(body, /`wait` lists this session's jobs/);
+  assert.match(body, /`task` only when the user authorizes edits, at default tier exec/);
+});
