@@ -8,7 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { KEEP_FINISHED, StateError, assertStateOutsideWorkspace, candidates, claimRequest, cleanupNeeded, createJob, describeEvent, findJob, homeDir,
+import { KEEP_FINISHED, StateError, assertStateOutsideWorkspace, candidates, claimRequest, cleanupNeeded, createJob, describeEvent, findJob, homeDir, jobView,
   lastEvent, latestOnThread, listJobs, loadJob, loadThread, lookupRequest, markDone, markRequestPrepared, markStopped, onThread, providersOf, prune,
   releaseRequest, requestFingerprint, requestJobId, requestKey, requestReserved, reserveJob, resultRecord, reviewInputPending, saveJob, saveThread, stateOf,
   threadProviders } from "../plugins/council/scripts/lib/core/jobs.mjs";
@@ -305,4 +305,17 @@ test("lastEvent reads the tail of events.jsonl, adapter-neutral, and ignores par
     describeEvent({ type: "assistant", message: { content: [{ type: "tool_use", name: "Edit" }] } }), describeEvent({ type: "tool_call", toolName: "grep" }), describeEvent({ x: 1 })]);
   fs.writeFileSync(path.join(job.dir, "events.jsonl"), `${"x".repeat(9000)}\n{"type":"text"}\n`);
   assert.equal(lastEvent(job), "text", "only the 8 KiB tail is read");
+});
+
+test("jobView and the review-input rule: a finished job with no claim and no pending input is free to prune; pending batches or synthesis are not", (t) => {
+  const { home, make } = fixture(t);
+  const job = make({ status: "done", threadIds: ["free-thread"] });
+  markDone(job);
+  const view = jobView(home, loadJob(home, job.id));
+  assert.deepEqual([view.cleanupPending, view.claimHeld], [false, false]);
+  for (const [state, pending] of [[null, false], [{ pending: 0, synthesisPending: false }, false], [{ pending: 3, synthesisPending: false }, true], [{ pending: 0, synthesisPending: true }, true]]) {
+    assert.equal(reviewInputPending({ reviewState: state }), pending, JSON.stringify(state));
+  }
+  claimThread(home, "grok", "free-thread", job);
+  assert.equal(jobView(home, loadJob(home, job.id)).claimHeld, true, "a claim still held keeps the job out of pruning");
 });

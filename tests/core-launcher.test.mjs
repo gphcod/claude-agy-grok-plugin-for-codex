@@ -121,3 +121,16 @@ test("spawnChild and runSync launch the resolved command with the adapter's argu
   assert.deepEqual(JSON.parse(out), { argv: ["--thread", "t"], stdin: "hello", depth: "1" });
   if (process.platform !== "win32") assert.equal(spawnChild(launcher, [], { cwd: dir, env: process.env, stdin: "ignore" }).pid > 0, true, "stdin may be ignored");
 });
+
+test("runSync bounds a probe: it is stopped at its timeout, gets no stdin, and reports the failure instead of hanging", () => {
+  const dir = tmp();
+  const hang = file(dir, "hang.mjs", "setTimeout(() => {}, 60000);", 0o644);
+  const launcher = grok({ env: { COUNCIL_GROK_BIN: hang }, platform: "linux", home: dir });
+  const started = Date.now();
+  const r = runSync(launcher, ["--version"], { env: process.env, timeoutMs: 300 });
+  assert.ok(Date.now() - started < 5000, "the probe was stopped");
+  assert.equal(r.error?.code, "ETIMEDOUT");
+  const reader = file(dir, "reader.mjs", "let n = 0; process.stdin.on('data', (c) => { n += c.length; }); process.stdin.on('end', () => console.log(n));", 0o644);
+  const read = runSync(grok({ env: { COUNCIL_GROK_BIN: reader }, platform: "linux", home: dir }), [], { env: process.env });
+  assert.equal(read.stdout.trim(), "0", "a probe's stdin is closed at once");
+});

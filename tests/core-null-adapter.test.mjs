@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import adapter, { FAKE_CHILD, catalog, tiers } from "./fixtures/null-adapter.mjs";
 import { DEPTH_VARIABLES, depthEnv } from "../plugins/council/scripts/lib/core/host.mjs";
+import { ADAPTER_MEMBERS, OPTIONAL_MEMBERS, EXIT, assertAdapter } from "../plugins/council/scripts/lib/core/types.mjs";
 
 const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "council-null-")));
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(COUNCIL|CLAUDE|CODEX|GROK|AGY)/.test(k) && k !== "CLAUDECODE"));
@@ -118,4 +119,20 @@ test("fake child: ok, exit-nonzero, no-completion, fragmented-frames, huge-line,
   assert.equal(exited.code, 0);
   assert.ok(closed - exited.at >= 900, `stdout stayed open ${closed - exited.at} ms after exit`);
   assert.match(out, /"type":"end"/);
+});
+
+test("the frozen interface (S2.7): assertAdapter accepts the null adapter and names every missing or mistyped member", () => {
+  assert.equal(assertAdapter(adapter, "null"), adapter);
+  assert.deepEqual(Object.keys(ADAPTER_MEMBERS), ["id", "binEnv", "resolveLauncher", "trustsCleanExit", "ownsProcess", "maxLineBytes", "probe", "preflight", "catalog", "buildTurn", "parseEvent", "reviewPlan", "finalizeReview"]);
+  assert.deepEqual(Object.keys(OPTIONAL_MEMBERS), ["beforeTurn", "afterTurn"]);
+  assert.deepEqual(EXIT, { ok: 0, attention: 10, running: 20, failed: 1, usage: 2 });
+  const { probe, ...noProbe } = adapter;
+  assert.throws(() => assertAdapter(noProbe, "null"), /missing or wrong probe \(function\)$/);
+  assert.throws(() => assertAdapter({ ...adapter, maxLineBytes: "1" }, "null"), /maxLineBytes \(number\)/);
+  assert.throws(() => assertAdapter({ ...adapter, catalog: null }, "null"), /catalog \(object\)/);
+  assert.throws(() => assertAdapter({ ...adapter, afterTurn: 1 }, "null"), /afterTurn \(function or absent\)/);
+  assert.throws(() => assertAdapter({ ...adapter }, "grok"), /id "grok"/, "a module must name the provider it is loaded for");
+  assert.throws(() => assertAdapter(undefined, "claude"), /provider claude exports no adapter object/);
+  const { beforeTurn, afterTurn, ...noHooks } = adapter;
+  assert.equal(assertAdapter(noHooks, "null"), noHooks, "the lifecycle hooks are optional");
 });

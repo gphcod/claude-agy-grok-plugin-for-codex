@@ -1,4 +1,3 @@
-// Ported unchanged from grok_plugin_for_codex 1.1.0 lib/fs.mjs (Apache-2.0); see NOTICE.
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";

@@ -20,6 +20,7 @@ import { runManagedTurn, cancelManaged } from "./lib/core/lifecycle.mjs";
 import { elapsed, elapsedOf, readAnswer, renderResult, resultJson, startLine } from "./lib/core/output.mjs";
 import { PreflightBlocked, runPreflight, getPolicy, setPolicy } from "./lib/core/preflight.mjs";
 import { LauncherError, resolveLauncher } from "./lib/core/launcher.mjs";
+import { assertAdapter } from "./lib/core/types.mjs";
 import { loadCatalog, loadStatic, resolveEffort, resolveModel, saveRefreshedCatalog } from "./lib/core/catalog.mjs";
 import { loadTiers, resolveTier } from "./lib/core/tiers.mjs";
 import { buildBatchReviewPrompt, collectReview, continueReviewTurn, finalizeReviewTurn, loadTemplate, startReviewTurn } from "./lib/core/review.mjs";
@@ -47,11 +48,11 @@ export async function loadAdapter(provider, env = process.env) {
   if (provider === TEST_ADAPTER) {
     if (env.COUNCIL_TEST_NULL_ADAPTER !== "1") return null;
     const file = path.join(PLUGIN_ROOT, "..", "..", "tests", "fixtures", "null-adapter.mjs");
-    return fs.existsSync(file) ? (await import(pathToFileURL(file).href)).default : null;
+    return fs.existsSync(file) ? assertAdapter((await import(pathToFileURL(file).href)).default, provider) : null;
   }
   if (!PROVIDERS.includes(provider)) return null;
   const file = path.join(PLUGIN_ROOT, "scripts", "lib", "providers", `${provider}.mjs`);
-  return fs.existsSync(file) ? (await import(pathToFileURL(file).href)).default : null;
+  return fs.existsSync(file) ? assertAdapter((await import(pathToFileURL(file).href)).default, provider) : null;
 }
 const knownProvider = (p, env) => PROVIDERS.includes(p) || (p === TEST_ADAPTER && env.COUNCIL_TEST_NULL_ADAPTER === "1");
 async function requireAdapter(provider, env) {

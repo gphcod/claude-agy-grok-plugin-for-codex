@@ -54,6 +54,8 @@ export default {
   },
   buildTurn(request) {
     const p = profile(request.env);
+    const requestLog = request.env?.COUNCIL_FAKE_REQUEST_LOG;
+    if (requestLog) { const { env, policy, ...rest } = request; fs.appendFileSync(requestLog, `${JSON.stringify({ ...rest, envKeys: Object.keys(env ?? {}).length, policy })}\n`); }
     const args = [];
     const thread = request.threadId ?? (p.id === "preassigned" ? randomUUID() : null);
     if (thread) args.push("--thread", thread);
