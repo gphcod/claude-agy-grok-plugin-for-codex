@@ -45,6 +45,10 @@ test("the footer: unreviewed and batch only on reviews and --next-input replies;
   assert.equal(recoveryHint({ ...base, outcome: "failed", threadId: null, requestedThreadId: "r" }), "thread not confirmed; start a new ask");
   assert.equal(recoveryHint({ ...base, reviewState: { pending: 2 } }), "next: reply k3f9k3f9k3f9k3f9 --next-input");
   assert.equal(recoveryHint(base), null);
+  assert.equal(recoveryHint({ ...base, mutationCoverage: "unknown" }), "coverage unknown", "an unverified workspace check is named in the footer");
+  assert.equal(recoveryHint({ ...base, mutationCoverage: "complete" }), null);
+  assert.equal(recoveryHint({ ...base, mutationCoverage: "unknown", claimHeld: true }), "cleanup pending; next: cancel k3f9k3f9k3f9k3f9; do not resume", "a recovery step outranks the coverage note");
+  assert.match(footer({ ...base, mutationCoverage: "unknown" }), / · coverage unknown$/);
   const everything = footer({ ...base, provider: "gemini", verb: "reply", nextInput: true, outcome: "attention", requestedEffort: "xhigh", effort: "high", model: "gemini-4-argon",
     unreviewed: ["u"], batch: { index: 2, total: 2 }, modelVerified: false, answerClipped: true, error: "e", cleanupPending: true }, false);
   assert.equal(everything, "council gemini needs attention · job k3f9k3f9k3f9k3f9 · gemini-4-argon/high<=xhigh · 38s · round 1/9 · unreviewed 1 · batch 2/2 · model unverified · full: /state/jobs/k3f9k3f9k3f9k3f9/answer.md · error: e · cleanup pending; next: cancel k3f9k3f9k3f9k3f9; do not resume");
