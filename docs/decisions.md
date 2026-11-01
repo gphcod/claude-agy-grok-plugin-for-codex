@@ -308,3 +308,10 @@ The S1.4 probes ran with the user's authorization inside real Codex sessions (co
 - **Control verbs that write.** `models --refresh` (the refreshed catalog), `setup --set` (policy.json) and `cancel` (marker, stop record, claim release) now check the state root before their first write and exit 1 with the same `preflight_blocked` line; plain `models`, `setup` without `--set`, and `wait` only read and are unchanged.
 - **Invalid input wins.** With the state root blocked, a turn is validated read-only (provider resolution, flag scoping, the adapter's `checkRequest`, settings) before the sandbox line, so its exit 2 stands; the request now carries the platform to `checkRequest` (`ctx.platform`, from the injection seam), so Gemini's win32 refusal (A8) is testable and is not masked. Tests: tests/core-state-root-blocked.test.mjs cases 2–4, failing before the change.
 - **Abandoned reservation (Codex follow-up).** The early replay path released an abandoned reservation (`reserved`, no job, companion gone) without checking writability, so a read-only state root gave a raw EACCES removing `requests/<key>.json`. The replay now checks the state root immediately before that release and exits 1 with the `preflight_blocked` line, leaving the record. Test: tests/core-state-root-blocked.test.mjs case 5, failing before the change.
+
+## 2026-11-01 Live task run (Claude)
+
+- The authorized `task --to claude` and its read-only follow-up ran live; `docs/qualification/claude-macos.md` records them.
+- The reply exited 10 through an open question, not through the tool-absent denial the test named. Claude declined without a tool call.
+- The live test now also asserts that the reply leaves the file unchanged, so it no longer depends on which of the two routes produces the 10.
+- The Claude-side twin's run of the same day found that its Gemini adapter counted no edits. This side's Gemini adapter already counts write-tool steps and snapshot changes, so no change is needed here.

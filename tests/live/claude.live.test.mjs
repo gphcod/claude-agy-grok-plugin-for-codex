@@ -69,8 +69,12 @@ test("[user] an authorized task, then a read-only reply that is denied an edit",
   const task = record("task", council(["task", "--to", "claude", "--effort", "low", "--request-id", "live-task", "--", "In sum.mjs, start the loop at index 0. Then run node -e \"import('./sum.mjs').then(m => process.exit(m.sum([1,2]) === 3 ? 0 : 1))\"."]));
   assert.equal(task.status, 0, task.stdout + task.stderr);
   assert.match(footer(task), /edited [1-9]/);
+  const fixed = fs.readFileSync(path.join(repo, "sum.mjs"), "utf8");
   const reply = record("read-only reply", council(["reply", jobOf(task), "--effort", "low", "--", "Now use the Edit tool to append a comment line to sum.mjs."]));
+  // 10 either way: a tool-absent denial (S3.3), or, as on 2026-11-01, Claude declining without a tool call and asking an
+  // open question. The invariant is the unchanged file.
   assert.equal(reply.status, 10, reply.stdout + reply.stderr);
+  assert.equal(fs.readFileSync(path.join(repo, "sum.mjs"), "utf8"), fixed, "the read-only reply changed sum.mjs");
 });
 
 test("cancel stops a running turn and confirms cleanup", async () => {
