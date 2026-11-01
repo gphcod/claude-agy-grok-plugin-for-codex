@@ -133,3 +133,105 @@ test("checkRequest refuses before any job record: unknown effort (the CLI would 
   assert.match(adapter.checkRequest({ ...ok, resume: true, threadId: "abc" }), /full session uuid/);
   assert.equal(adapter.checkRequest({ ...ok, resume: true, threadId: UUID }), null);
 });
+
+// ---- S3.2 buildTurn ----
+
+const request = (extra = {}) => ({ verb: "ask", nextInput: false, text: "q", prompt: "q", instructions: "ADVICE", contractPath: CONTRACT, model: null, effort: "low", resume: false, threadId: null,
+  cwd: ROOT, env: { ...baseEnv, COUNCIL_CLAUDE_BIN: FAKE }, schemaPath: null, structured: false, readOnly: true, web: false, allowCommands: [], maxTurns: null, maxBudgetUsd: null,
+  policy: { version: "default-v1", readRoots: [], web: false, allowMcp: false }, agent: null, jobDir: "/tmp/job", ...extra });
+const value = (args, flag) => args[args.indexOf(flag) + 1];
+const variadic = (args, flag) => { const i = args.indexOf(flag); if (i < 0) return null; const out = []; for (let j = i + 1; j < args.length && !args[j].startsWith("-"); j += 1) out.push(args[j]); return out; };
+const input = (built) => JSON.parse(built.stdin);
+
+test("ask: a new uuid, the read-only flag set, the contract as the snapshot system prompt, advice plus text in the input", () => {
+  const built = adapter.buildTurn(request());
+  const a = built.args;
+  assert.deepEqual(a.slice(0, 6), ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]);
+  const session = value(a, "--session-id");
+  assert.match(session, /^[0-9a-f-]{36}$/);
+  assert.equal(built.requestedThreadId, session, "claimed before spawn");
+  assert.ok(!a.includes("--resume"));
+  assert.deepEqual([value(a, "--system-prompt-snapshot"), value(a, "--append-system-prompt-file")], ["on", CONTRACT]);
+  assert.deepEqual([value(a, "--max-turns"), value(a, "--effort"), value(a, "--permission-mode"), value(a, "--permission-prompts"), value(a, "--setting-sources")], ["20", "low", "dontAsk", "none", "user"]);
+  assert.equal(value(a, "--tools"), "Read,Glob,Grep");
+  assert.deepEqual([variadic(a, "--allowedTools"), variadic(a, "--disallowedTools")], [null, null]);
+  assert.deepEqual([value(a, "--mcp-config"), a.includes("--strict-mcp-config"), value(a, "--settings"), a.includes("--no-chrome")], ['{"mcpServers":{}}', true, '{"disableAllHooks":true}', true]);
+  assert.ok(!a.includes("--model"), "default: the user's configured model, no flag");
+  assert.ok(!a.includes("--json-schema") && !a.includes("--max-budget-usd") && !a.includes("--add-dir"));
+  assert.deepEqual(input(built), { type: "user", session_id: session, message: { role: "user", content: "ADVICE\n\nq" }, parent_tool_use_id: null });
+  assert.ok(built.stdin.endsWith("}\n") && built.stdin.split("\n").length === 2, "one NDJSON line, then EOF");
+  assert.equal(built.readOnly, true);
+  assert.equal(built.contractCarrier, "append-system-prompt-file");
+  for (const name of ["COUNCIL_DEPTH", "CLAUDE_PLUGIN_CODEX_DEPTH", "GROK_CODEX_DEPTH", "GROK_BUILD_DEPTH", "AGY_BRIDGE_DEPTH"]) assert.equal(built.env[name], "1");
+  assert.equal(built.env.NO_COLOR, "1");
+  assert.notEqual(value(adapter.buildTurn(request()).args, "--session-id"), session, "every new thread gets its own uuid");
+  assert.deepEqual(value(adapter.buildTurn(request({ model: "sonnet" })).args, "--model"), "sonnet");
+});
+
+test("reply resumes read-only with the delta in the input; task and task --thread take the S1.1 launch and the task template", () => {
+  const reply = adapter.buildTurn(request({ verb: "reply", resume: true, threadId: UUID.toUpperCase(), prompt: "F1 AGREE" }));
+  assert.equal(value(reply.args, "--resume", UUID), UUID, "the lowercased uuid");
+  assert.ok(!reply.args.includes("--session-id"));
+  assert.deepEqual([value(reply.args, "--permission-mode"), value(reply.args, "--tools"), value(reply.args, "--max-turns")], ["dontAsk", "Read,Glob,Grep", "20"]);
+  assert.equal(input(reply).message.content, "ADVICE\n\nF1 AGREE");
+  assert.equal(input(reply).session_id, UUID);
+  for (const resume of [false, true]) {
+    const task = adapter.buildTurn(request({ verb: "task", readOnly: false, instructions: "TASK", prompt: "edit it", resume, threadId: resume ? UUID : null }));
+    const a = task.args;
+    assert.equal(a.includes("--resume"), resume);
+    assert.deepEqual([value(a, "--permission-mode"), value(a, "--permission-prompts"), value(a, "--max-turns")], ["acceptEdits", "none", "30"]);
+    assert.equal(value(a, "--tools"), "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash");
+    assert.deepEqual(variadic(a, "--allowedTools"), ["Edit,Write,MultiEdit,NotebookEdit,Bash"]);
+    assert.deepEqual(variadic(a, "--disallowedTools"), TASK_DISALLOWED);
+    assert.deepEqual(a.slice(-5), ["--disallowedTools", ...TASK_DISALLOWED], "the variadic lists close the argv");
+    assert.deepEqual([value(a, "--mcp-config"), value(a, "--settings")], ['{"mcpServers":{}}', '{"disableAllHooks":true}'], "hooks and MCP stay off on tasks");
+    assert.equal(input(task).message.content, "TASK\n\nedit it");
+    assert.equal(task.readOnly, false);
+  }
+});
+
+test("review: read-only set, the repository schema inline as one line, max-turns 2, the batch prompt as the whole input", () => {
+  const built = adapter.buildTurn(request({ verb: "review", instructions: null, prompt: "REVIEW PROMPT batch", schemaPath: SCHEMA, structured: true }));
+  const a = built.args;
+  assert.deepEqual(JSON.parse(value(a, "--json-schema")), JSON.parse(fs.readFileSync(SCHEMA, "utf8")));
+  assert.ok(!value(a, "--json-schema").includes("\n"), "one argv line, so the macOS process row stays matchable");
+  assert.deepEqual([value(a, "--max-turns"), value(a, "--permission-mode"), value(a, "--tools")], ["2", "dontAsk", "Read,Glob,Grep"]);
+  assert.equal(input(built).message.content, "REVIEW PROMPT batch");
+  const discussion = adapter.buildTurn(request({ verb: "reply", resume: true, threadId: UUID, instructions: null, prompt: "F1 REJECT", schemaPath: SCHEMA, structured: true }));
+  assert.ok(discussion.args.includes("--json-schema"), "a discussion reply on a review thread is structured");
+  assert.equal(value(discussion.args, "--max-turns"), "20");
+  assert.equal(MAX_TURNS.review, 2);
+});
+
+test("--web adds WebFetch,WebSearch to --tools and --allowedTools on read-only and task turns; the policy sets MCP, read roots and web", () => {
+  const web = adapter.buildTurn(request({ web: true })).args;
+  assert.equal(value(web, "--tools"), "Read,Glob,Grep,WebFetch,WebSearch");
+  assert.deepEqual(variadic(web, "--allowedTools"), ["WebFetch,WebSearch"]);
+  const task = adapter.buildTurn(request({ verb: "task", readOnly: false, web: true })).args;
+  assert.equal(value(task, "--tools"), "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash,WebFetch,WebSearch");
+  assert.deepEqual(variadic(task, "--allowedTools"), ["Edit,Write,MultiEdit,NotebookEdit,Bash,WebFetch,WebSearch"]);
+  const policy = adapter.buildTurn(request({ policy: { version: "p1", readRoots: ["/data/a", "/data/b"], web: true, allowMcp: true } })).args;
+  assert.ok(!policy.includes("--mcp-config") && !policy.includes("--strict-mcp-config"), "MCP only when the stored policy allows it");
+  assert.deepEqual(policy.flatMap((t, i) => (t === "--add-dir" ? [policy[i + 1]] : [])), ["/data/a", "/data/b"]);
+  assert.equal(value(policy, "--tools"), "Read,Glob,Grep,WebFetch,WebSearch", "policy web enables the pair too");
+  const limits = adapter.buildTurn(request({ maxTurns: 7, maxBudgetUsd: 0.5, effort: "max", model: "claude-opus-5-5" })).args;
+  assert.deepEqual([value(limits, "--max-turns"), value(limits, "--max-budget-usd"), value(limits, "--effort"), value(limits, "--model")], ["7", "0.5", "max", "claude-opus-5-5"]);
+});
+
+test("the input line is capped at 8,000,000 bytes, as CLAUDEX's requestLine", () => {
+  assert.equal(turnInput({ instructions: null, prompt: "p" }), "p");
+  assert.equal(requestLine("x", UUID), `{"type":"user","session_id":"${UUID}","message":{"role":"user","content":"x"},"parent_tool_use_id":null}\n`);
+  assert.throws(() => adapter.buildTurn(request({ prompt: "é".repeat(4_000_000) })), /exceeds 8000000 UTF-8 bytes/);
+});
+
+test("every launch buildTurn produces passes fake-claude's complete launch contract (exit 99 on any mismatch)", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const cases = [["ok", request()], ["resume", request({ verb: "reply", resume: true, threadId: UUID })], ["task", request({ verb: "task", readOnly: false })],
+    ["task", request({ verb: "task", readOnly: false, resume: true, threadId: UUID, web: true })], ["review-findings", request({ verb: "review", instructions: null, schemaPath: SCHEMA, structured: true })],
+    ["ok", request({ web: true, maxBudgetUsd: 1, model: "opus", policy: { version: "p", readRoots: [ROOT], web: false, allowMcp: false } })]];
+  for (const [scenario, req] of cases) {
+    const built = adapter.buildTurn(req);
+    const r = spawnSync(process.execPath, [FAKE, ...built.args], { input: built.stdin, encoding: "utf8", env: { ...built.env, COUNCIL_FAKE_SCENARIO: scenario }, timeout: 20000 });
+    assert.equal(r.status, 0, `${scenario}: ${r.stderr}`);
+  }
+});

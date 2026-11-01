@@ -2,8 +2,8 @@
 // A stand-in for the Claude Code CLI (2.1.314). Adapted from claude_plugin_for_codex 0.5.0 tests/fixtures/fake-claude.mjs
 // and streams.json; the streams come from the S1.1 probes (tests/fixtures/streams/claude.json carries the provenance).
 // It validates the A5.1 launch contract before emitting, answers the four cold preflight probes, and plays
-// COUNCIL_FAKE_SCENARIO: ok, resume, denied, tool-absent, effort-error, review-findings, review-malformed, large-review,
-// task, slow, hold-pipes, missing-result, duplicate-result, wrong-session, is-error, turn-limit.
+// COUNCIL_FAKE_SCENARIO: ok, resume, denied, tool-absent, effort-error, review-findings, review-malformed, review-reject, large-review,
+// task, task-edit-error, slow, hold-pipes, missing-result, duplicate-result, wrong-session, is-error, turn-limit.
 import fs from "node:fs";
 import { UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, holdPipes, log, mismatch, readStdin, repoSchema,
   requireDepth, sameSet, scenario, sleep, spikeText, streams, SLOW_MS } from "./fake-common.mjs";
@@ -59,8 +59,10 @@ if (mode === "dontAsk") {
   expect(sameSet(allowed, web ? WEB_TOOLS : []), "read-only --allowedTools is exactly the web tools under --web, otherwise absent", allowed);
   expect(disallowed.length === 0, "read-only turns carry no --disallowedTools", disallowed);
 } else {
-  expect(sameSet(tools, [...READ_TOOLS, ...EDIT_TOOLS]), "task turns carry exactly Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash", tools);
-  expect(sameSet(allowed, EDIT_TOOLS), "task turns allow exactly the edit tools", allowed);
+  // --web on a task adds the web pair to both lists (A3.3), as on read-only turns.
+  const web = tools.some((t) => WEB_TOOLS.includes(t));
+  expect(sameSet(tools, [...READ_TOOLS, ...EDIT_TOOLS, ...(web ? WEB_TOOLS : [])]), "task turns carry exactly Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash (plus WebFetch,WebSearch under --web)", tools);
+  expect(sameSet(allowed, [...EDIT_TOOLS, ...(web ? WEB_TOOLS : [])]), "task turns allow exactly the edit tools (plus the web pair under --web)", allowed);
   for (const rule of ["Bash(git push*)", "Bash(git reset --hard*)", "Bash(rm -rf *)", "Bash(sudo *)"]) expect(disallowed.includes(rule), `task turns disallow ${rule}`, disallowed);
 }
 const schemaText = flagValue(argv, "--json-schema");
@@ -75,7 +77,7 @@ checkArgv(argv.slice(1), { boolean: ["--verbose", "--strict-mcp-config", "--no-c
     "--model", "--permission-mode", "--permission-prompts", "--setting-sources", "--tools", "--mcp-config", "--settings", "--json-schema", "--max-budget-usd", "--add-dir"] });
 requireDepth();
 if (which === "resume" || which === "tool-absent") expect(resumeId, `${which} needs --resume`);
-if (which === "task") expect(mode === "acceptEdits", "task scenario needs the acceptEdits launch");
+if (which.startsWith("task")) expect(mode === "acceptEdits", `${which} scenario needs the acceptEdits launch`);
 if (which === "tool-absent") expect(mode === "dontAsk", "tool-absent scenario is a read-only resume");
 if (which.startsWith("review") || which === "large-review") expect(schema, `${which} needs --json-schema`);
 
@@ -104,11 +106,34 @@ switch (which) {
   case "denied": play(fill(fixtures.denied)); break;
   case "tool-absent": play(fill(fixtures["tool-absent"])); break;
   case "task": play(fill(fixtures.task)); break;
+  case "task-edit-error": {
+    // Synthetic mutation of `task` (S3.4): the Edit's tool result is an error and the Bash command exits 1.
+    const events = fill(fixtures.task).map((e) => {
+      if (e.type !== "user") return e;
+      const block = e.message.content[0];
+      if (block.tool_use_id === "toolu_01KUE2RkdHpbpsDu54j1e2g6") return { ...e, message: { ...e.message, content: [{ ...block, is_error: true, content: "<tool_use_error>String to replace not found in file.</tool_use_error>" }] } };
+      if (block.tool_use_id === "toolu_01UYeVHYP1sN7JMBbE6D74V3") return { ...e, message: { ...e.message, content: [{ ...block, is_error: true, content: "Exit code 1" }] } };
+      return e;
+    });
+    play(events);
+    break;
+  }
   case "review-findings": play(fill(fixtures["review-findings"])); break;
   case "review-malformed": play(fill(fixtures["review-malformed"])); break;
   case "large-review": {
     const batch = batchOf(input.message.content);
-    play(fill(batch && batch.index >= batch.total ? fixtures["structured-clean"] : fixtures["review-findings"]));
+    const last = batch ? batch.index >= batch.total : input.message.content.includes("Final synthesis:");
+    play(fill(last ? fixtures["structured-clean"] : fixtures["review-findings"]));
+    break;
+  }
+  case "review-reject": {
+    // Synthetic (S3.4): a discussion reply that REJECTs, by id and location, every finding the prompt's prior-findings note lists.
+    const listed = [...input.message.content.matchAll(/^- (\S+) (BLOCKER|MAJOR|MINOR) (.+):(\d+) /gm)];
+    const severity = { BLOCKER: "high", MAJOR: "medium", MINOR: "low" };
+    const findings = listed.map(([, id, rank, file, line]) => ({ id, severity: severity[rank], title: "Rejected", body: "Not a defect: the caller guarantees it.", file,
+      line_start: Number(line), line_end: Number(line), confidence: 0.9, recommendation: "None.", decision: "REJECT" }));
+    const output = { verdict: "approve", summary: "Every earlier finding is rejected with evidence.", findings, next_steps: [] };
+    play(fill(fixtures["structured-clean"]).map((e) => (e.type === "result" ? { ...e, result: JSON.stringify(output), structured_output: output } : e)));
     break;
   }
   case "missing-result": play(fill(fixtures.ok.filter((e) => e.type !== "result"))); exitCode = 1; break;

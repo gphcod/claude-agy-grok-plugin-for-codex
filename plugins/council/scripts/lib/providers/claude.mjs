@@ -152,7 +152,12 @@ export default {
     if (request.resume && !UUID.test(request.threadId ?? "")) return `claude resumes only a full session uuid; got ${JSON.stringify(request.threadId)}`;
     return null;
   },
-  buildTurn() { throw new Error("claude buildTurn arrives in S3.2"); },
+  buildTurn(request) {
+    const session = request.resume ? String(request.threadId).toLowerCase() : randomUUID();
+    const args = buildArgs(request, session);
+    return { args, env: { ...request.env, ...depthEnv(), NO_COLOR: "1" }, stdin: requestLine(turnInput(request), session), answerFile: null, promptFile: null,
+      readOnly: request.verb !== "task", requestedThreadId: session, agent: null, contractCarrier: "append-system-prompt-file" };
+  },
   parseEvent() { return { fatal: "claude parseEvent arrives in S3.3" }; },
   reviewPlan() { return { native: false, promptTemplate: "review", schemaCarrier: "flag" }; },
   finalizeReview() { return null; },
