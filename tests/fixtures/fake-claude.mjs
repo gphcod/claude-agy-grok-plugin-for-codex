@@ -2,7 +2,7 @@
 // A stand-in for the Claude Code CLI (2.1.314). Adapted from claude_plugin_for_codex 0.5.0 tests/fixtures/fake-claude.mjs
 // and streams.json; the streams come from the S1.1 probes (tests/fixtures/streams/claude.json carries the provenance).
 // It validates the A5.1 launch contract before emitting, answers the four cold preflight probes, and plays
-// COUNCIL_FAKE_SCENARIO: ok, resume, denied, tool-absent, effort-error, review-findings, review-malformed, review-reject, large-review,
+// COUNCIL_FAKE_SCENARIO: ok, resume, denied, denied-error, tool-absent, effort-error, review-findings, review-malformed, review-reject, large-review,
 // task, task-edit-error, slow, hold-pipes, missing-result, duplicate-result, wrong-session, is-error, turn-limit.
 import fs from "node:fs";
 import { UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, holdPipes, log, mismatch, readStdin, repoSchema,
@@ -104,6 +104,11 @@ switch (which) {
   }
   case "resume": play(fill(fixtures.resume)); break;
   case "denied": play(fill(fixtures.denied)); break;
+  case "denied-error": { // Synthetic (S3.7): the donor's denied stream whose result is is_error, so the CLI exits 1.
+    const events = fill(fixtures.denied).map((e) => (e.type === "result" ? { ...e, is_error: true, subtype: "error_during_execution" } : e));
+    play(events);
+    break;
+  }
   case "tool-absent": play(fill(fixtures["tool-absent"])); break;
   case "task": play(fill(fixtures.task)); break;
   case "task-edit-error": {

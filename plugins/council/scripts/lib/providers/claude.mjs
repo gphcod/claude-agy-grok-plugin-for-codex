@@ -84,8 +84,20 @@ export const sentinelOf = (stateRoot) => path.join(stateRoot, ".missing-capabili
 
 /** A denial in one shape, whatever produced it (CLAUDEX envelope.mjs `permissionDenials`). */
 const denial = (d, reason) => ({ tool: d.tool_name || d.tool || d.name || "unknown", path: d.tool_input?.file_path || d.tool_input?.notebook_path || d.tool_input?.path || d.input?.file_path || d.path || null,
-  input: d.tool_input || d.input || null, ...(reason ? { reason } : {}) });
-const dedupe = (list) => [...new Map(list.map((d) => [JSON.stringify([d.tool, d.path, d.input]), d])).values()];
+  input: d.tool_input || d.input || null, ...(d.tool_use_id ? { id: d.tool_use_id } : {}), ...(reason ? { reason } : {}) });
+/** One entry per denied call: the same tool_use_id, or the same tool, path and input, is one denial. */
+function dedupe(list) {
+  const out = [], seen = new Set();
+  for (const d of list) {
+    const keys = [`t:${JSON.stringify([d.tool, d.path, d.input])}`, ...(d.id ? [`i:${d.id}`] : [])];
+    if (keys.some((k) => seen.has(k))) continue;
+    keys.forEach((k) => seen.add(k));
+    out.push(d);
+  }
+  return out;
+}
+/** Claude's wording when a permission rule or the mode refuses a tool call (2.1.314: "... has been denied ..."). */
+const DENIAL_TEXT = /\bhas been denied\b|\bpermission to use \S+.*\bdenied\b/i;
 const pathOf = (input) => input?.file_path ?? input?.notebook_path ?? null;
 const resultText = (content) => typeof content === "string" ? content : Array.isArray(content) ? content.map((c) => c?.text ?? "").join("") : "";
 const isMap = (v) => v && typeof v === "object" && !Array.isArray(v);
@@ -196,12 +208,20 @@ export default {
         const use = s.pending.get(block.tool_use_id);
         s.pending.delete(block.tool_use_id);
         const failed = block.is_error === true;
-        if (EDIT_TOOLS.includes(use.name)) {
-          // Read-only: the edit tools are absent, so an attempt comes back as an error ("No such tool available", S1.1) → denied.
-          if (readOnly && failed) s.denials.push(denial({ tool_name: use.name, tool_input: use.input }, resultText(block.content).slice(0, 200) || "tool absent on a read-only turn"));
-          else if (readOnly) return { fatal: `a read-only Claude turn edited ${pathOf(use.input) ?? "a file"} through ${use.name}` };
-          else if (!failed && pathOf(use.input)) edited.push(pathOf(use.input)); // a failed edit changed nothing
-        } else if (use.name === "Bash" && failed && !readOnly && !out.failedCommand) out.failedCommand = String(use.input?.command ?? "Bash");
+        const text = resultText(block.content);
+        const call = { tool_name: use.name, tool_use_id: block.tool_use_id, tool_input: use.input };
+        if (readOnly && MUTATING.includes(use.name)) {
+          // Read-only: the edit tools and Bash are absent, so an attempt comes back as an error ("No such tool available", S1.1) → denied.
+          if (failed) s.denials.push(denial(call, text.slice(0, 200) || "tool absent on a read-only turn"));
+          else return { fatal: `a read-only Claude turn ran ${use.name}${pathOf(use.input) ? ` on ${pathOf(use.input)}` : ""}` };
+        } else if (EDIT_TOOLS.includes(use.name)) {
+          if (!failed && pathOf(use.input)) edited.push(pathOf(use.input)); // a failed edit changed nothing
+        } else if (use.name === "Bash" && failed) {
+          // A call a permission rule refused (--disallowedTools, outside --allowedTools) is a denial only, never also a failed command.
+          const refused = DENIAL_TEXT.test(text) || s.denials.some((d) => (d.id && d.id === block.tool_use_id) || (d.tool === "Bash" && d.input?.command === use.input?.command));
+          if (refused) s.denials.push(denial(call, text.slice(0, 200)));
+          else if (!out.failedCommand) out.failedCommand = String(use.input?.command ?? "Bash");
+        }
       }
       if (edited.length) out.edited = edited;
       return Object.keys(out).length ? out : null;
@@ -212,12 +232,16 @@ export default {
       if (typeof ev.session_id !== "string" || !ev.session_id) return { fatal: "malformed_result: the Claude result has no session id" };
       if (s.session && ev.session_id !== s.session) return { fatal: `the Claude result names session ${ev.session_id}, not ${s.session}` };
       if (typeof ev.subtype !== "string" || typeof ev.is_error !== "boolean") return { fatal: "malformed_result: the Claude result is missing subtype or is_error" };
+      const denials = dedupe([...s.denials, ...(Array.isArray(ev.permission_denials) ? ev.permission_denials.map((d) => denial(d)) : [])]);
+      const accounting = { ...(typeof ev.total_cost_usd === "number" ? { costUsd: ev.total_cost_usd } : {}),
+        ...(isMap(ev.usage) ? { usage: { ...ev.usage, turns: ev.num_turns ?? null, retries: s.retries } } : {}) };
       if (ev.is_error || ev.subtype !== "success") {
         const detail = ev.terminal_reason || ev.subtype;
         const message = typeof ev.result === "string" && ev.result.trim() ? ev.result.trim() : JSON.stringify(ev.errors ?? [ev.subtype]);
+        // A turn a denial made fail is a denial (exit 10), with the error text kept as its answer; otherwise it failed (exit 1).
+        if (denials.length) return { threadId: ev.session_id, textDelta: `claude ${detail}: ${message}`, completed: true, denied: { count: denials.length, denials }, ...accounting };
         return { threadId: ev.session_id, fatal: `claude ${detail}: ${message}` };
       }
-      const denials = dedupe([...s.denials, ...(Array.isArray(ev.permission_denials) ? ev.permission_denials.map((d) => denial(d)) : [])]);
       const structured = isMap(ev.structured_output) ? ev.structured_output : null;
       const answer = structured ? JSON.stringify(structured) : typeof ev.result === "string" ? ev.result : null;
       if (answer === null) return { threadId: ev.session_id, fatal: "the Claude result has no answer text" };
@@ -226,9 +250,7 @@ export default {
       const unconfirmed = readOnly ? [] : [...s.pending.values()].filter((u) => EDIT_TOOLS.includes(u.name) && pathOf(u.input)).map((u) => pathOf(u.input));
       return {
         threadId: ev.session_id, textDelta: answer, completed: true,
-        ...(structured ? { structured } : {}),
-        ...(typeof ev.total_cost_usd === "number" ? { costUsd: ev.total_cost_usd } : {}),
-        ...(isMap(ev.usage) ? { usage: { ...ev.usage, turns: ev.num_turns ?? null, retries: s.retries } } : {}),
+        ...(structured ? { structured } : {}), ...accounting,
         ...(denials.length ? { denied: { count: denials.length, denials } } : {}),
         ...(unconfirmed.length ? { edited: unconfirmed } : {}),
       };

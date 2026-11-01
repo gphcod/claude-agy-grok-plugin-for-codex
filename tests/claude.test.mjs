@@ -310,7 +310,7 @@ test("tool-absent: an edit attempted on a read-only turn comes back as an error 
   assert.equal(absent.denials[0].denials[0].path, "/scratch/repo/value.mjs");
   assert.match(absent.denials[0].denials[0].reason, /No such tool available: Edit/);
   const succeeded = fx("tool-absent").map((e) => (e.type === "user" ? { ...e, message: { ...e.message, content: [{ ...e.message.content[0], is_error: false, content: "updated" }] } } : e));
-  assert.match(play(succeeded).failed, /a read-only Claude turn edited \/scratch\/repo\/value\.mjs through Edit/, "an edit that succeeds on a read-only turn fails closed");
+  assert.match(play(succeeded).failed, /a read-only Claude turn ran Edit on \/scratch\/repo\/value\.mjs/, "an edit that succeeds on a read-only turn fails closed");
   const readAttempt = [init(), { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: "/nope" } }] } },
     { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", is_error: true, content: "ENOENT" }] } }, resultOf("ok")];
   assert.equal(play(readAttempt).denials.length, 0, "a failed read is not a denial");
@@ -349,4 +349,42 @@ test("structured output is the answer on reviews; finalizeReview prefers it and 
   assert.equal(malformed.failed, null, "schema problems are the validator's: incomplete (10), not a failed turn");
   assert.deepEqual(adapter.reviewPlan({ batches: [1] }, { adversarial: true }), { native: false, batches: [1], promptTemplate: "adversarial-review", schemaCarrier: "flag" });
   assert.equal(adapter.reviewPlan({ snapshot: null }, { adversarial: false }).promptTemplate, "review");
+});
+
+// ---- S3.7 review fixes (milestone 3: Codex gpt-6.1-sol, Gemini 4 Argon) ----
+
+const use = (id, name, input) => ({ type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] }, session_id: "<SESSION>" });
+const toolResult = (id, content, isError = true) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, is_error: isError, content }] }, session_id: "<SESSION>" });
+
+test("item 1: a Bash attempt on a read-only turn (tool absent) is denied like an edit; one that ran fails closed", () => {
+  const bash = play([init(), use("b1", "Bash", { command: "npm test" }), toolResult("b1", "<tool_use_error>Error: No such tool available: Bash</tool_use_error>"), resultOf("ok")]);
+  assert.deepEqual([bash.failed, bash.completed, bash.failedCommands], [null, true, []]);
+  assert.equal(bash.denials.length, 1);
+  assert.deepEqual([bash.denials[0].denials[0].tool, bash.denials[0].denials[0].input], ["Bash", { command: "npm test" }]);
+  assert.match(bash.denials[0].denials[0].reason, /No such tool available: Bash/);
+  assert.match(play([init(), use("b1", "Bash", { command: "rm x" }), toolResult("b1", "done", false), resultOf("ok")]).failed, /a read-only Claude turn ran Bash/);
+});
+
+test("item 2: on a task a Bash call refused by a permission rule is a denial only, never also a failed command", () => {
+  const task = fx("task")[0];
+  const refusedText = [task, use("p1", "Bash", { command: "git push origin main" }), toolResult("p1", "Permission to use Bash with command git push origin main has been denied."),
+    { ...resultOf("task"), permission_denials: [{ tool_name: "Bash", tool_use_id: "p1", tool_input: { command: "git push origin main" } }] }];
+  const a = play(refusedText, { readOnly: false });
+  assert.deepEqual([a.failed, a.failedCommands, a.denials[0].count], [null, [], 1], "the tool result and permission_denials name one denial");
+  const streamed = [task, use("p2", "Bash", { command: "sudo ls" }), { type: "permission_denied", tool_name: "Bash", tool_use_id: "p2", tool_input: { command: "sudo ls" } },
+    toolResult("p2", "refused"), resultOf("task")];
+  const b = play(streamed, { readOnly: false });
+  assert.deepEqual([b.failedCommands, b.denials[0].count], [[], 1], "a streamed permission_denied for the call makes its error a denial");
+  const plain = play([task, use("p3", "Bash", { command: "npm test" }), toolResult("p3", "Exit code 1\nfailing test"), resultOf("task")], { readOnly: false });
+  assert.deepEqual([plain.failedCommands, plain.denials.length], [["npm test"], 0], "an ordinary non-zero exit stays a failed command");
+});
+
+test("item 3: an is_error result after a recorded denial is denied (exit 10) with the error text as the answer; without a denial it fails", () => {
+  const failing = { ...resultOf("ok"), is_error: true, subtype: "error_during_execution", terminal_reason: "tool_denied", result: "Stopped: the edit was refused.", total_cost_usd: 0.01 };
+  const denied = play([init(), use("e1", "Edit", { file_path: "/scratch/repo/a.js" }), toolResult("e1", "No such tool available: Edit"), failing]);
+  assert.deepEqual([denied.failed, denied.completed, denied.denials.length, denied.costUsd], [null, true, 1, 0.01]);
+  assert.equal(denied.text, "claude tool_denied: Stopped: the edit was refused.");
+  const fromResult = play([init(), { ...failing, permission_denials: [{ tool_name: "Read", tool_input: { file_path: "/etc/x" } }] }]);
+  assert.deepEqual([fromResult.failed, fromResult.denials[0].count], [null, 1], "denials reported only in the result count too");
+  assert.match(play([init(), failing]).failed, /^claude tool_denied: Stopped/, "no denial: the turn failed (exit 1)");
 });
