@@ -24,7 +24,7 @@ function withTz(tz, fn) {
   finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
 }
 
-test("the darwin process query runs with TZ=UTC whatever the caller's TZ, so one process keeps one identity", () => {
+test("the darwin process query runs with TZ=UTC whatever the caller's TZ, so one process keeps one identity", { skip: typeof process.getuid !== "function" && "darwin query needs process.getuid (absent on Windows)" }, () => {
   const seen = [];
   const rows = ["UTC", "America/Los_Angeles", "Asia/Tokyo", "Australia/Lord_Howe", undefined].map((tz) => withTz(tz, () => {
     const snap = processSnapshot({ platform: "darwin", run: fakePs(seen) });
@@ -36,7 +36,7 @@ test("the darwin process query runs with TZ=UTC whatever the caller's TZ, so one
   for (const row of rows) assert.equal(startTime(row.stamp), BigInt(BORN / 1000), "the stamp reads as the true birth time");
 });
 
-test("an owner recorded under one TZ is still live to a cancel run under another", () => {
+test("an owner recorded under one TZ is still live to a cancel run under another", { skip: typeof process.getuid !== "function" && "darwin query needs process.getuid (absent on Windows)" }, () => {
   const record = withTz("UTC", () => processSnapshot({ platform: "darwin", run: fakePs([]) }).rows[0]);
   const snapshot = withTz("America/Los_Angeles", () => processSnapshot({ platform: "darwin", run: fakePs([]) }));
   assert.equal(companionState({ companionPid: 4242, companionIdentity: record }, snapshot), "live");
