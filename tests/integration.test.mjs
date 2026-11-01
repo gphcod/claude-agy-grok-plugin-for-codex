@@ -2,7 +2,8 @@
 // fake-agy.mjs, fake-grok.mjs) in one state root, one Codex session and one workspace. Every provider binary is a small
 // recording wrapper in front of its fake, so each invocation (probe, preflight exec descriptor or turn) is counted and
 // its guard variables checked. No test reaches a real CLI: the three COUNCIL_*_BIN variables name the wrappers, and the
-// HTTPS proxy variable makes the network descriptors skip their live request.
+// HTTPS proxy variable makes the network descriptors skip their live request. On Windows every Gemini turn verb is
+// refused with exit 2 and the A8 message before any job, so the turn cases there run Claude and Grok and assert the refusal.
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -11,6 +12,7 @@ import { pathToFileURL } from "node:url";
 import { makeWorld, jobIdOf, footerOf, until, alive, ROOT, BINARY } from "./helpers.mjs";
 import { DEPTH_VARIABLES, PROVIDERS } from "../plugins/council/scripts/lib/core/host.mjs";
 import { requestJobId } from "../plugins/council/scripts/lib/core/jobs.mjs";
+import { WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
 
 const FAKES = { claude: "fake-claude.mjs", gemini: "fake-agy.mjs", grok: "fake-grok.mjs" };
 const SESSION = "codex-integration-thread";
@@ -19,6 +21,9 @@ const COLD_PROBES = { claude: 4, gemini: 2, grok: 2 };
 /** The scenario each fake plays for a resumed read-only turn and for an edit turn. */
 const RESUME = { claude: "resume", gemini: "resume", grok: "resume" };
 const TASK = { claude: "task", gemini: "task", grok: "resume" };
+/** A8: on Windows every Gemini turn verb exits 2 before any job (gemini.mjs checkRequest); the turn cases there run claude and grok. */
+const WIN = process.platform === "win32";
+const TURN_PROVIDERS = WIN ? PROVIDERS.filter((p) => p !== "gemini") : PROVIDERS;
 const RESUME_DENY_MARKERS = ["search_replace", "write", "run_terminal_cmd", "search_tool", "use_tool"];
 
 /** One state root, one session, one workspace; the three providers behind recording wrappers. */
@@ -67,15 +72,21 @@ const large = (w) => { for (let i = 0; i < 3; i++) fs.writeFileSync(path.join(w.
 test("three providers in one session and workspace, in sequence: bare wait lists all three, each reply stays with its provider, a conflicting --to starts nothing", () => {
   const w = world();
   const jobs = {};
-  for (const provider of PROVIDERS) {
+  if (WIN) {
+    const refused = w.run(["ask", "--to", "gemini", "--", "hello gemini"]);
+    assert.equal(refused.status, 2, refused.stdout + refused.stderr);
+    assert.ok(refused.stderr.includes(WINDOWS_UNSUPPORTED));
+    assert.equal(w.turns("gemini").length, 0);
+  }
+  for (const provider of TURN_PROVIDERS) {
     const r = w.run(["ask", "--to", provider, "--effort", "low", "--", `hello ${provider}`]);
     assert.equal(r.status, 0, `${provider}: ${r.stdout}${r.stderr}`);
     assert.match(footerOf(r.stdout), new RegExp(`^council ${provider} ok · job [a-z0-9]{16} · \\S+/low · \\d+s · round 1/9$`));
     jobs[provider] = jobIdOf(r.stderr);
   }
   const listed = w.call(["wait"]).stdout.trim().split("\n");
-  assert.equal(listed.length, 3, listed.join("\n"));
-  for (const provider of PROVIDERS) assert.ok(listed.some((l) => l.startsWith(`${jobs[provider]} · ${provider} · done · `)), `${provider} listed`);
+  assert.equal(listed.length, TURN_PROVIDERS.length, listed.join("\n"));
+  for (const provider of TURN_PROVIDERS) assert.ok(listed.some((l) => l.startsWith(`${jobs[provider]} · ${provider} · done · `)), `${provider} listed`);
   assert.match(w.call(["wait"], { env: { CODEX_THREAD_ID: "another-thread" } }).stdout, /^no council jobs in this workspace and Codex thread/);
 
   const before = w.invoked().length;
@@ -84,19 +95,19 @@ test("three providers in one session and workspace, in sequence: bare wait lists
   assert.match(conflict.stderr, /belongs to claude; --to grok conflicts with it/);
   assert.equal(w.invoked().length, before, "a provider conflict starts no process");
 
-  for (const provider of PROVIDERS) {
+  for (const provider of TURN_PROVIDERS) {
     const r = w.run(["reply", jobs[provider], "--", "F1 AGREE"], RESUME[provider]);
     assert.equal(r.status, 0, `${provider}: ${r.stdout}${r.stderr}`);
     assert.match(footerOf(r.stdout), new RegExp(`^council ${provider} ok · .* · round 2/9$`));
     const turn = w.turns(provider).at(-1);
     assert.equal(resumed(provider, turn.argv), w.job(jobs[provider]).threadId, `${provider} resumed its own thread`);
   }
-  assert.deepEqual(PROVIDERS.map((p) => w.turns(p).length), [2, 2, 2], "each provider ran exactly its own two turns");
+  assert.deepEqual(PROVIDERS.map((p) => w.turns(p).length), PROVIDERS.map((p) => (TURN_PROVIDERS.includes(p) ? 2 : 0)), "each provider ran exactly its own two turns");
 });
 
 test("read-only after a task, on every provider: ask, task --thread, reply relaunch read-only, edit, read-only", () => {
   const w = world();
-  for (const provider of PROVIDERS) {
+  for (const provider of TURN_PROVIDERS) {
     const ask = w.run(["ask", "--to", provider, "--", "plan it"]);
     assert.equal(ask.status, 0, `${provider}: ${ask.stdout}${ask.stderr}`);
     const id = jobIdOf(ask.stderr);
@@ -146,7 +157,7 @@ test("provider- and verb-scoped flags are refused with exit 2 before any job, pr
 test("a denial is needs attention (exit 10) on every provider, including a denied turn the CLI itself fails (core cabec41)", () => {
   const w = world();
   const cases = [["claude", ["ask"], "denied"], ["claude", ["ask"], "denied-error"], ["gemini", ["ask"], "denied"],
-    ["gemini", ["task", "--allow-command", "node check.mjs", "--request-id", "dp"], "denied-prompt"], ["grok", ["ask"], "permission-cancelled"]];
+    ["gemini", ["task", "--allow-command", "node check.mjs", "--request-id", "dp"], "denied-prompt"], ["grok", ["ask"], "permission-cancelled"]].filter(([provider]) => TURN_PROVIDERS.includes(provider));
   for (const [provider, [verb, ...extra], scenario] of cases) {
     const r = w.run([verb, "--to", provider, ...extra, "--", "write the secret file"], scenario);
     assert.equal(r.status, 10, `${provider} ${scenario}: ${r.stdout}${r.stderr}`);
@@ -175,7 +186,7 @@ test("an unconfirmed Grok session is not resumable by job, thread, --last or tas
 
 test("an incomplete review keeps the output it received, on every provider (exit 10, no coverage)", () => {
   const w = world();
-  for (const provider of PROVIDERS) {
+  for (const provider of TURN_PROVIDERS) {
     fs.writeFileSync(path.join(w.workspace, `change-${provider}.txt`), "x\n");
     const r = w.run(["review", "--to", provider, "--json"], "review-malformed");
     assert.equal(r.status, 10, `${provider}: ${r.stdout}${r.stderr}`);
@@ -201,13 +212,14 @@ test("models --refresh and setup cover the three providers; every probe, preflig
     assert.match(setup.stdout, new RegExp(`^${provider}: \\S+${BINARY[provider][0]}\\.mjs \\(node-script\\) · .* · logged in · tiers consult=\\S+ exec=\\S+ deep=\\S+ · preflight ok$`, "m"), provider);
   }
   assert.match(setup.stdout, /warning: Gemini read-only turns can search the web; --web is not offered for Gemini/);
-  for (const provider of PROVIDERS) assert.equal(w.run(["ask", "--to", provider, "--", "q"]).status, 0, provider);
+  if (WIN) assert.ok(setup.stdout.includes(`warning: ${WINDOWS_UNSUPPORTED}`), "setup reports Gemini unsupported on Windows (A8)");
+  for (const provider of TURN_PROVIDERS) assert.equal(w.run(["ask", "--to", provider, "--", "q"]).status, 0, provider);
   const all = w.invoked();
-  assert.ok(all.length >= 3 + 2 + 2 + 4 + 2 + 2, `probes, descriptors and turns were all recorded (${all.length})`);
+  assert.ok(all.length >= TURN_PROVIDERS.length + 2 + 2 + 4 + 2 + 2, `probes, descriptors and turns were all recorded (${all.length})`);
   for (const entry of all) assert.ok(DEPTH_VARIABLES.every((n) => entry.guard[n] === "1"), `${entry.provider} ${entry.argv.slice(0, 3).join(" ")}: ${JSON.stringify(entry.guard)}`);
 });
 
-for (const provider of PROVIDERS) {
+for (const provider of TURN_PROVIDERS) {
   test(`subprocess counters, ${provider}: a cold call probes then submits once, a warm call submits once, a replay starts nothing, owner-death cancellation starts nothing`, async () => {
     const w = world();
     const count = () => ({ all: w.invoked(provider).length, turns: w.turns(provider).length });
@@ -238,7 +250,7 @@ for (const provider of PROVIDERS) {
   });
 }
 
-for (const provider of PROVIDERS) {
+for (const provider of TURN_PROVIDERS) {
   test(`review batch continuation across a companion restart, ${provider}: a --next-input turn whose companion dies is redelivered after cancel, then the review completes`, async () => {
     const w = world();
     large(w);
@@ -286,10 +298,11 @@ for (const provider of PROVIDERS) {
 
 test("replay and cancel isolation: a request id is bound to its first provider; cancelling one provider's job leaves another's running job and a third's record alone", async () => {
   const w = world();
-  const gemini = w.run(["ask", "--to", "gemini", "--", "finished first"]);
-  assert.equal(gemini.status, 0, gemini.stderr);
-  const geminiJob = jobIdOf(gemini.stderr);
-  const geminiMeta = fs.readFileSync(path.join(w.home, "jobs", geminiJob, "meta.json"), "utf8");
+  // The third provider's finished job: Gemini, except on Windows, where Gemini turns are refused (A8).
+  const gemini = WIN ? null : w.run(["ask", "--to", "gemini", "--", "finished first"]);
+  if (gemini) assert.equal(gemini.status, 0, gemini.stderr);
+  const geminiJob = gemini ? jobIdOf(gemini.stderr) : null;
+  const geminiMeta = gemini ? fs.readFileSync(path.join(w.home, "jobs", geminiJob, "meta.json"), "utf8") : null;
 
   const claude = w.run(["ask", "--to", "claude", "--request-id", "shared", "--", "q"]);
   assert.equal(claude.status, 0, claude.stderr);
@@ -315,10 +328,12 @@ test("replay and cancel isolation: a request id is bound to its first provider; 
   assert.match(footerOf(claudeEnd.stdout), /^council claude cancelled · /);
   assert.equal(grokEnd.code, 0, `the other provider's job ran to completion: ${grokEnd.stdout}${grokEnd.stderr}`);
   assert.match(footerOf(grokEnd.stdout), /^council grok ok · /);
-  assert.equal(fs.readFileSync(path.join(w.home, "jobs", geminiJob, "meta.json"), "utf8"), geminiMeta, "a finished job of a third provider is untouched");
   assert.match(w.call(["cancel"]).stdout, /^no running council job to cancel/);
-  const resumedAfter = w.run(["reply", geminiJob, "--", "still there?"], "resume");
-  assert.equal(resumedAfter.status, 0, "the third provider's thread stays resumable");
+  if (gemini) {
+    assert.equal(fs.readFileSync(path.join(w.home, "jobs", geminiJob, "meta.json"), "utf8"), geminiMeta, "a finished job of a third provider is untouched");
+    const resumedAfter = w.run(["reply", geminiJob, "--", "still there?"], "resume");
+    assert.equal(resumedAfter.status, 0, "the third provider's thread stays resumable");
+  }
 });
 
 test("concurrent fan-out (three asks in one Codex turn)", { skip: "S1.4's host concurrency probe is pending [user]; fan-out is sequential until it shows overlap (docs/decisions.md S1, PLAN.md A6)" }, () => {});

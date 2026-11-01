@@ -8,10 +8,12 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { makeWorld, jobIdOf, footerOf, alive, until } from "./helpers.mjs";
 import { main } from "../plugins/council/scripts/council.mjs";
-import { READ_ONLY_DENY } from "../plugins/council/scripts/lib/providers/gemini.mjs";
+import { READ_ONLY_DENY, WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
 
 const FAKE = path.resolve("tests", "fixtures", "fake-agy.mjs");
-const darwinOnly = { skip: process.platform === "win32" };
+/** A8: on Windows every Gemini turn verb exits 2 before any job, so the cases that run turns are skipped there and the
+ *  last test asserts the refusal instead. */
+const turns = { skip: process.platform === "win32" && "A8: Gemini turn verbs exit 2 on Windows (asserted by the Windows refusal test)" };
 /** A world wired to fake-agy, with an optional global agy settings file under its HOME. */
 function world({ git = true, global } = {}) {
   const w = makeWorld({ git });
@@ -35,7 +37,7 @@ async function inProcess(w, argv, { env = {}, hooks } = {}) {
   return { code, stdout, stderr };
 }
 
-test("verification: ask --to gemini --effort low prints the answer and the footer with the model and effort", () => {
+test("verification: ask --to gemini --effort low prints the answer and the footer with the model and effort", turns, () => {
   const w = world();
   const r = w.gemini(["ask", "--to", "gemini", "--effort", "low", "--", "Reply with pong"]);
   assert.equal(r.status, 0, r.stderr);
@@ -46,7 +48,7 @@ test("verification: ask --to gemini --effort low prints the answer and the foote
   assert.deepEqual([job.mutationCoverage, job.readOnly], ["complete", true]);
 });
 
-test("ask → task --thread → reply → task --thread: settings, --sandbox, --mode and --conversation on every transition", () => {
+test("ask → task --thread → reply → task --thread: settings, --sandbox, --mode and --conversation on every transition", turns, () => {
   const w = world({ global: { permissions: { allow: ["run_command(*)", "command(which)", "read_file(docs/*)"], deny: ["read_file(.env)"] }, toolPermission: "always-proceed" } });
   const ask = w.gemini(["ask", "--to", "gemini", "--", "plan it"]);
   assert.equal(ask.status, 0, ask.stderr);
@@ -77,7 +79,7 @@ test("ask → task --thread → reply → task --thread: settings, --sandbox, --
   assert.match(calls[0].prompt, /^<council_contract version="1">/, "the standing contract is prepended on every turn");
 });
 
-test("strict is preserved on read-only turns and on tasks with --allow-command; --allow-command and --web are refused elsewhere", () => {
+test("strict is preserved on read-only turns and on tasks with --allow-command; --allow-command and --web are refused elsewhere", turns, () => {
   const w = world({ global: { toolPermission: "strict" } });
   assert.equal(w.gemini(["ask", "--to", "gemini", "--", "q"]).status, 0);
   assert.equal(w.gemini(["task", "--to", "gemini", "--allow-command", "node check.mjs", "--", "t"], "task").status, 0);
@@ -91,7 +93,7 @@ test("strict is preserved on read-only turns and on tasks with --allow-command; 
   assert.equal(w.fakeCalls().length, 2, "a refusal spawns nothing");
 });
 
-test("denials exit 10: a deny-rule tool error, and denied_actions with an empty response (not an empty-response failure)", () => {
+test("denials exit 10: a deny-rule tool error, and denied_actions with an empty response (not an empty-response failure)", turns, () => {
   const w = world();
   const rule = w.gemini(["ask", "--to", "gemini", "--json", "--", "write a file"], "denied");
   assert.equal(rule.status, 10, rule.stdout);
@@ -103,7 +105,7 @@ test("denials exit 10: a deny-rule tool error, and denied_actions with an empty 
   assert.match(prompt.stdout, /^agy denied command \(RunCommand\): headless mode cannot prompt for this permission\.\ncouncil gemini needs attention/);
 });
 
-test("failures exit 1: duplicate result, missing result, status ERROR, empty response, print_timeout", () => {
+test("failures exit 1: duplicate result, missing result, status ERROR, empty response, print_timeout", turns, () => {
   const w = world();
   for (const [scenario, pattern] of [["duplicate-result", /error: agy sent a duplicate terminal result/], ["missing-result", /error: gemini ended without completing the turn/],
     ["effort-error", /error: agy status ERROR: invalid model selection/], ["empty-response", /error: agy returned an empty response/], ["print-timeout", /error: \[agy\] print timeout after 5s with turn in progress/]]) {
@@ -114,7 +116,7 @@ test("failures exit 1: duplicate result, missing result, status ERROR, empty res
   }
 });
 
-test("review fixes: print_timeout exits 1 and keeps agy's answer; a deny-rule denial before an empty result exits 10 with the denial as answer", () => {
+test("review fixes: print_timeout exits 1 and keeps agy's answer; a deny-rule denial before an empty result exits 10 with the denial as answer", turns, () => {
   const w = world();
   const timeout = w.gemini(["ask", "--to", "gemini", "--", "q"], "print-timeout-answer");
   assert.equal(timeout.status, 1, timeout.stdout);
@@ -124,7 +126,7 @@ test("review fixes: print_timeout exits 1 and keeps agy's answer; a deny-rule de
   assert.match(denied.stdout, /^agy denied write_file: permission check failed[\s\S]*\ncouncil gemini needs attention/);
 });
 
-test("model and effort: a suffix conflict exits 2 before any spawn; xhigh is clamped to high in the footer; a suffixed id travels alone", () => {
+test("model and effort: a suffix conflict exits 2 before any spawn; xhigh is clamped to high in the footer; a suffixed id travels alone", turns, () => {
   const w = world();
   const conflict = w.gemini(["ask", "--to", "gemini", "--model", "gemini-4-argon-low", "--effort", "high", "--", "q"]);
   assert.equal(conflict.status, 2);
@@ -142,7 +144,7 @@ test("model and effort: a suffix conflict exits 2 before any spawn; xhigh is cla
   assert.equal(flag(w.fakeCalls().at(-1).argv, "--model"), "gemini-4-argon", "aliases resolve inside the catalog");
 });
 
-test("review: structured through --json-schema, findings exit 10; adversarial template; malformed output exits 10 incomplete", () => {
+test("review: structured through --json-schema, findings exit 10; adversarial template; malformed output exits 10 incomplete", turns, () => {
   const w = world();
   fs.writeFileSync(path.join(w.workspace, "sum.mjs"), "export const sum = (items) => { let s = 0; for (let i = 1; i < items.length; i++) s += items[i]; return s; };\n");
   const review = w.gemini(["review", "--to", "gemini"], "review-findings");
@@ -164,7 +166,7 @@ test("review: structured through --json-schema, findings exit 10; adversarial te
   assert.match(json.answer, /Incomplete: review finding 1 needs an id/);
 });
 
-test("a two-batch review continues with reply --next-input, keeping the blocker until the clean synthesis", () => {
+test("a two-batch review continues with reply --next-input, keeping the blocker until the clean synthesis", turns, () => {
   const w = world();
   for (let i = 0; i < 3; i++) fs.writeFileSync(path.join(w.workspace, `part${i}.txt`), "snapshot\n".repeat(18000));
   const first = w.gemini(["review", "--to", "gemini"], "large-review");
@@ -179,7 +181,7 @@ test("a two-batch review continues with reply --next-input, keeping the blocker 
   assert.ok(w.fakeCalls().slice(1).every((c) => c.conversation === w.job(job).threadId && flag(c.argv, "--json-schema")), "each batch resumes the conversation with the schema");
 });
 
-test("snapshots: a task reports its edited files; a read-only turn whose workspace changed is incomplete; outside Git coverage is unknown", () => {
+test("snapshots: a task reports its edited files; a read-only turn whose workspace changed is incomplete; outside Git coverage is unknown", turns, () => {
   const w = world();
   const task = w.gemini(["task", "--to", "gemini", "--", "edit"], "task-edit");
   assert.equal(task.status, 0, task.stderr);
@@ -197,7 +199,7 @@ test("snapshots: a task reports its edited files; a read-only turn whose workspa
   assert.match(footerOf(r.stdout), / · edited 0 · coverage unknown$/, "the footer names it (milestone 3 review Q6)");
 });
 
-test("two concurrent jobs are told apart by their settings paths: cancelling one leaves the other running to completion", darwinOnly, async () => {
+test("two concurrent jobs are told apart by their settings paths: cancelling one leaves the other running to completion", turns, async () => {
   const w = world();
   const env = { COUNCIL_FAKE_SCENARIO: "slow", COUNCIL_FAKE_SLOW_MS: "4000" };
   const a = w.start(["ask", "--to", "gemini", "--", "first"], { env });
@@ -218,7 +220,7 @@ test("two concurrent jobs are told apart by their settings paths: cancelling one
   assert.match(footerOf(rb.stdout), new RegExp(`^council gemini ok · job ${jobOf(second)} `), "the other job's agy was never touched");
 });
 
-test("the stop path ends agy's language-server child with its group (deadline), and a child reparented to pid 1", darwinOnly, async () => {
+test("the stop path ends agy's language-server child with its group (deadline), and a child reparented to pid 1", turns, async () => {
   const w = world();
   const stopped = w.gemini(["ask", "--to", "gemini", "--deadline", "2", "--", "q"], "language-server");
   assert.equal(stopped.status, 1, stopped.stdout);
@@ -235,7 +237,7 @@ test("the stop path ends agy's language-server child with its group (deadline), 
   assert.match(json.error ?? "", /owned execution survived the launcher/);
 });
 
-test("preflight blocked: a loopback listener that cannot bind exits 1 with the action line and zero spawns", () => {
+test("preflight blocked: a loopback listener that cannot bind exits 1 with the action line and zero spawns", turns, () => {
   const w = world();
   const r = w.gemini(["ask", "--to", "gemini", "--", "q"], "ok", { env: { COUNCIL_AGY_LISTEN_HOST: "192.0.2.1" } });
   assert.equal(r.status, 1);
@@ -250,7 +252,7 @@ test("preflight blocked: a loopback listener that cannot bind exits 1 with the a
   assert.match(state.stderr, /preflight_blocked: agy backend state/);
 });
 
-test("setup, models --refresh, wait and cancel: warnings, the listing, a replay without a new spawn", () => {
+test("setup, models --refresh, wait and cancel: warnings, the listing, a replay without a new spawn", turns, () => {
   const w = world({ global: { toolPermission: "always-proceed" } });
   const setup = w.call(["setup", "--to", "gemini"]);
   assert.equal(setup.status, 0, setup.stderr);
@@ -272,9 +274,22 @@ test("setup, models --refresh, wait and cancel: warnings, the listing, a replay 
   assert.match(w.call(["cancel", job]).stdout, /^finished · gemini · job [a-z0-9]{16}/);
 });
 
-test("a backend persistence error on agy's stderr makes a successful turn need attention (AGYX's host-denial check)", () => {
+test("a backend persistence error on agy's stderr makes a successful turn need attention (AGYX's host-denial check)", turns, () => {
   const w = world();
   const r = w.gemini(["ask", "--to", "gemini", "--json", "--", "q"], "host-denied");
   assert.equal(r.status, 10, r.stdout);
   assert.equal(w.job(JSON.parse(r.stdout).job).incomplete, "agy's diagnostics report denied host access (stderr); the turn may not have persisted");
+});
+
+test("on Windows every Gemini turn verb exits 2 with the A8 message before any job or launch; setup says so", { skip: process.platform !== "win32" && "Windows only (A8); runs in the S7.2 session" }, () => {
+  const w = world();
+  fs.writeFileSync(path.join(w.workspace, "change.txt"), "x\n");
+  for (const args of [["ask", "--to", "gemini", "--", "q"], ["review", "--to", "gemini"], ["task", "--to", "gemini", "--", "edit"]]) {
+    const r = w.gemini(args);
+    assert.equal(r.status, 2, `${args.join(" ")}: ${r.stdout}${r.stderr}`);
+    assert.ok(r.stderr.includes(WINDOWS_UNSUPPORTED), r.stderr);
+  }
+  assert.equal(w.fakeCalls().length, 0, "nothing reached agy");
+  assert.equal(fs.existsSync(path.join(w.home, "jobs")) ? fs.readdirSync(path.join(w.home, "jobs")).length : 0, 0, "no job record");
+  assert.ok(w.call(["setup", "--to", "gemini"]).stdout.includes(`warning: ${WINDOWS_UNSUPPORTED}`));
 });

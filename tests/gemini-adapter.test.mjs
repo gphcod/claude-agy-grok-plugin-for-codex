@@ -31,6 +31,8 @@ function home(global) {
   }
   return dir;
 }
+/** buildTurn refuses on Windows as a backstop to checkRequest (A8); the cases that build a launch run elsewhere. */
+const buildsHere = { skip: process.platform === "win32" && "A8: buildTurn refuses on Windows (asserted by the Windows backstop test)" };
 const launcher = () => gemini.resolveLauncher({ COUNCIL_AGY_BIN: FAKE });
 /** A TurnRequest as the entry builds it. */
 function request(extra = {}) {
@@ -160,7 +162,7 @@ test("S5.2 settings: tasks keep the global lists; --allow-command adds the pair 
   assert.equal(sessionSettings({ readOnly: false }, {}).agentMode, undefined, "agentMode is set only on read-only turns");
 });
 
-test("S5.2 configuredPolicy reads only permissions and toolPermission; a broken global file stops the turn", () => {
+test("S5.2 configuredPolicy reads only permissions and toolPermission; a broken global file stops the turn", buildsHere, () => {
   const h = home({ permissions: { allow: ["command(ls)"] }, toolPermission: "strict", apiKey: "secret", model: "x" });
   assert.deepEqual(configuredPolicy(path.join(h, ".gemini", "antigravity-cli", "settings.json")), { permissions: { allow: ["command(ls)"], ask: [], deny: [] }, toolPermission: "strict" });
   assert.deepEqual(configuredPolicy(path.join(tmp(), "missing.json")), {});
@@ -169,7 +171,7 @@ test("S5.2 configuredPolicy reads only permissions and toolPermission; a broken 
   assert.throws(() => gemini.buildTurn(request({ home: home("{") })), /invalid JSON; no turn submitted/);
 });
 
-test("S5.2 buildTurn: a read-only ask carries the exact A5.1 flag set, the job's settings file and one NDJSON message", () => {
+test("S5.2 buildTurn: a read-only ask carries the exact A5.1 flag set, the job's settings file and one NDJSON message", buildsHere, () => {
   const h = home({ permissions: { allow: ["run_command(*)"], deny: ["read_file(.env)"] }, toolPermission: "always-proceed" });
   const req = request({ home: h, deadlineMs: 90000 });
   const built = gemini.buildTurn(req);
@@ -190,7 +192,7 @@ test("S5.2 buildTurn: a read-only ask carries the exact A5.1 flag set, the job's
   assert.equal(built.env.TERM_PROGRAM_SECRET, undefined, "the child environment is the request's, never process.env");
 });
 
-test("S5.2 buildTurn: model and effort rules, --conversation on resumes, --json-schema on structured turns, --mode only on tasks", () => {
+test("S5.2 buildTurn: model and effort rules, --conversation on resumes, --json-schema on structured turns, --mode only on tasks", buildsHere, () => {
   const args = (extra) => gemini.buildTurn(request(extra)).args;
   const suffixed = args({ model: "gemini-4-argon-low", effort: "low" });
   assert.deepEqual([flag(suffixed, "--model"), suffixed.includes("--effort")], ["gemini-4-argon-low", false], "a suffixed id travels alone");
@@ -418,4 +420,8 @@ test("review fix 2: an untracked path named __proto__ is a snapshot entry, so a 
 test("S5.4 review plan: agy enforces --json-schema (S1.2), so the schema travels by path; --adversarial picks its template", () => {
   assert.deepEqual(gemini.reviewPlan({ batches: [["u1"], ["u2"]], batch: { index: 1, total: 2 } }, { adversarial: false }), { native: false, batches: [["u1"], ["u2"]], promptTemplate: "review", schemaCarrier: "path" });
   assert.equal(gemini.reviewPlan({ snapshot: null }, { adversarial: true }).promptTemplate, "adversarial-review");
+});
+
+test("A8 backstop: on Windows buildTurn throws the unsupported message", { skip: process.platform !== "win32" && "Windows only; runs in the S7.2 session" }, () => {
+  assert.throws(() => gemini.buildTurn(request()), (error) => error.message === WINDOWS_UNSUPPORTED);
 });

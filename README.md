@@ -77,7 +77,7 @@ Bare `review` and `--uncommitted` review the working tree against `HEAD` plus un
 - `--model <id|alias>`: an exact CLI id or an alias (`fable`, `opus`, `sonnet`, `haiku`, `default`; `argon`, `flash`; `4.7`, `4.6`, `build-fast`). An unknown id passes through and the footer says `model unverified`. `default` means the user's configured Claude model (no `--model` flag); the footer then shows the model Claude reports.
 - `--effort low|medium|high|xhigh|max`: one vocabulary. Council clamps downward only, against the model's offered efforts, and shows the clamp in the footer (`gemini-4-argon/high<=xhigh`). Claude accepts all five; Grok tops at `xhigh`; Gemini at `high`. A Gemini effort-suffixed id (`gemini-4-argon-high`) is an explicit effort, and a conflicting `--effort` exits 2.
 - `--tier consult|exec|deep`: defaults below; explicit `--model`/`--effort` win; on `reply` an explicit `--tier` overrides the inherited settings.
-- `--request-id <id>` (1 to 128 characters, `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`): a repeat with the same input replays the first result and never starts a second CLI; changed input under the same id exits 2. Give one to every review, task, deep, `xhigh` or `max` call.
+- `--request-id <id>` (1 to 128 characters, `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`): a repeat with the same input replays the first result and never starts a second CLI; changed input under the same id exits 2. Give one to every review, task, `exec`-tier, deep, `xhigh` or `max` call.
 - `--rounds <n>` (or `COUNCIL_CODEX_ROUNDS`): the reply budget, 9 by default.
 - `--deadline <s>` (default 14400) and `--inactivity-timeout <s>` (default 1200) start cleanup; `wait --timeout <s>` (default 90) only returns 20. agy's `--print-timeout` is derived from the deadline.
 - `--web`: web search, off by default. Grok omits `--disable-web-search`; Claude adds `WebFetch,WebSearch`; Gemini refuses it (exit 2, see trade-offs).
@@ -115,7 +115,7 @@ council <provider> <ok|needs attention|failed|cancelled> · job <16 chars> · <m
 |---|---|
 | 0 | done |
 | 10 | needs attention: review findings, pending or unreviewed coverage, a denied action, incomplete or malformed review output, `cancel --confirm-ended` refused because an owned process is live |
-| 20 | still running (`wait` only) |
+| 20 | still running: `wait` timed out, a replayed `--request-id` whose first call is still preparing, or a `cancel` that finds another cancel's deferred cleanup hook still running; nothing was stopped |
 | 1 | failed, cancelled, busy, or `preflight_blocked` |
 | 2 | invalid input |
 
@@ -165,7 +165,7 @@ Every provider child, probe and preflight probe carries the five guard variables
 | gemini | `--settings` file from the user's global lists with read-only rules (`write_file`, `edit_file`, `command`, `unsandboxed`, `mcp`, `execute_url` denied), `--sandbox` | `--mode accept-edits`; `--allow-command X` adds `command(X)`/`unsandboxed(X)` and sets `toolPermission` to `request-review` unless the global value is `strict`; a task without it keeps the global value |
 | grok | `--agent explore` (or the resume deny list after an edit turn), `--deny MCPTool(*)`, hostile tools disallowed, `--no-subagents`, `--disable-web-search` | default agent, `--deny "Bash(git push*)"`, `--deny "Bash(rm -rf *)"` |
 
-The current verb's permissions are enforced on every launch, so a `reply` after a `task` on the same thread is read-only again. More read roots, web or MCP for Claude come only from a user-approved `setup --set <policy.json>` (`readRoots`, `web`, `allowMcp`), which applies to every later launch.
+The current verb's permissions are enforced on every launch, so a `reply` after a `task` on the same thread is read-only again. `--web` gives Claude `WebFetch` and `WebSearch` for that call (and the thread keeps it). More read roots, MCP, or web on every call come only from a user-approved `setup --set <policy.json>` (`readRoots`, `allowMcp`, `web`), which applies to every later launch.
 
 ## Platforms
 

@@ -3,7 +3,8 @@
 // placeholders filled in (<plugin>, <verb>, <provider>, [flags], <text>), and each run through `sh`; on Windows through
 // powershell.exe and pwsh when present (S7.2 runs them; elsewhere those cases are skipped). Each case parses
 // `council <provider> ok · job <16 chars>` from the last line and checks the prompt bytes the fake received.
-// Run with `npm run test:e2e`. No real CLI is reached: the COUNCIL_*_BIN variables name the fakes.
+// On Windows every Gemini turn verb is refused with exit 2 and the A8 message (gemini.mjs checkRequest), so the Gemini
+// cases there assert that refusal through the call form instead. Run with `npm run test:e2e`. No real CLI is reached: the COUNCIL_*_BIN variables name the fakes.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -11,6 +12,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { makeWorld, ROOT, PLUGIN_ROOT, BINARY } from "./helpers.mjs";
 import { PROVIDERS } from "../plugins/council/scripts/lib/core/host.mjs";
+import { WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
 
 const skill = fs.readFileSync(path.join(PLUGIN_ROOT, "skills", "council", "SKILL.md"), "utf8");
 const blocks = [...skill.matchAll(/```(?:bash|sh|powershell|pwsh)?\r?\n([\s\S]*?)```/g)].map((m) => m[1]).filter((b) => /scripts[\\/]council\.mjs/.test(b));
@@ -21,9 +23,15 @@ const FOOTER = (provider, label = "ok") => new RegExp(`^council ${provider} ${la
 
 /** The shells that run a form here: `sh` for POSIX; powershell.exe and pwsh on Windows when present. */
 const onPath = (name) => spawnSync(process.platform === "win32" ? "where.exe" : "which", [name], { encoding: "utf8" }).status === 0;
-const SHELLS = [{ name: "sh", form: "posix", argv: (script) => ["sh", ["-c", script]] }];
+const SHELLS = process.platform !== "win32" || onPath("sh") ? [{ name: "sh", form: "posix", argv: (script) => ["sh", ["-c", script]] }] : [];
 if (process.platform === "win32") {
   for (const exe of ["powershell.exe", "pwsh"]) if (onPath(exe)) SHELLS.push({ name: exe, form: "powershell", argv: (script) => [exe, ["-NoProfile", "-NonInteractive", "-Command", script]] });
+}
+/** A8: on Windows every Gemini turn verb is refused with exit 2 before any job; the call form must still carry the code. */
+const refusedHere = (provider) => provider === "gemini" && process.platform === "win32";
+function assertRefused(run, label) {
+  assert.equal(run.code, 2, `${label}: ${run.stdout}${run.stderr}`);
+  assert.ok(run.stderr.includes(WINDOWS_UNSUPPORTED), `${label}: the A8 refusal: ${run.stderr}`);
 }
 const POWERSHELL_SKIP = process.platform === "win32" ? (SHELLS.some((s) => s.form === "powershell") ? false : "neither powershell.exe nor pwsh is on PATH")
   : "the PowerShell call form runs on Windows (PLAN.md S7.2)";
@@ -98,6 +106,7 @@ for (const sh of SHELLS.filter((s) => s.form === "posix")) {
       const w = world();
       const simple = "Reply with pong";
       const one = await shell(w, sh, callForm("posix", { verb: "ask", provider, flags: "--effort low --request-id e2e-flags", text: simple }));
+      if (refusedHere(provider)) { assertRefused(one, "ask"); assert.equal(w.received().length, 0); return; }
       assert.equal(one.code, 0, one.stdout + one.stderr);
       assert.match(lastLine(one), FOOTER(provider));
       assert.match(lastLine(one), /\/low · /, "the leading --effort flag applied");
@@ -130,6 +139,7 @@ for (const sh of SHELLS.filter((s) => s.form === "posix")) {
       assert.notEqual(collided.code, 0, "the rest of the text ran as a command");
       assert.notEqual(received(w)?.endsWith(text), true, "the default delimiter cuts the text short");
       const run = await shell(w, sh, callForm("posix", { verb: "ask", provider, text, delimiter: "COUNCIL_EOF_2" }));
+      if (refusedHere(provider)) return assertRefused(run, "ask");
       assert.equal(run.code, 0, run.stdout + run.stderr);
       assert.match(lastLine(run), FOOTER(provider));
       assertPrompt(w, text, "other delimiter");
@@ -141,6 +151,7 @@ for (const sh of SHELLS.filter((s) => s.form === "posix")) {
       const file = path.join(w.dir, "prompt.txt");
       fs.writeFileSync(file, text, "utf8");
       const run = await shell(w, sh, bareForm("posix", { verb: "ask", provider, flags: `--prompt-file "${file}"`, stdinNull: true }));
+      if (refusedHere(provider)) return assertRefused(run, "--prompt-file");
       assert.equal(run.code, 0, run.stdout + run.stderr);
       assert.match(lastLine(run), FOOTER(provider));
       assertPrompt(w, text, "--prompt-file");
@@ -150,6 +161,8 @@ for (const sh of SHELLS.filter((s) => s.form === "posix")) {
       const w = world();
       fs.writeFileSync(path.join(w.workspace, "sum.mjs"), "export const sum = (a) => a.length;\n");
       const run = await shell(w, sh, bareForm("posix", { verb: "review", provider }), { scenario: "review-findings", closeStdin: false, timeout: 30000 });
+      assert.ok(run.ms < 8000, `returned in ${run.ms} ms with stdin left open (the idle limit is 10 s)`);
+      if (refusedHere(provider)) return assertRefused(run, "review");
       assert.equal(run.code, 10, run.stdout + run.stderr);
       assert.match(lastLine(run), FOOTER(provider, "needs attention"));
       assert.ok(run.ms < 8000, `returned in ${run.ms} ms with stdin left open (the idle limit is 10 s)`);
@@ -164,6 +177,7 @@ for (const sh of powershells.length ? powershells : [{ name: "powershell" }]) {
       const w = world();
       const text = "first line\n-- --to grok --json\n\nlast line";
       const run = await shell(w, sh, callForm("powershell", { verb: "ask", provider, flags: "--effort low --request-id e2e-ps", text }));
+      if (refusedHere(provider)) return assertRefused(run, "here-string ask");
       assert.equal(run.code, 0, run.stdout + run.stderr);
       assert.match(lastLine(run), FOOTER(provider));
       assertPrompt(w, text, "here-string");
@@ -177,6 +191,7 @@ for (const sh of powershells.length ? powershells : [{ name: "powershell" }]) {
       const file = path.join(w.dir, "prompt.txt");
       fs.writeFileSync(file, text, "utf8");
       const run = await shell(w, sh, bareForm("powershell", { verb: "ask", provider, flags: `--prompt-file "${file}"`, stdinNull: true }));
+      if (refusedHere(provider)) return assertRefused(run, "--prompt-file");
       assert.equal(run.code, 0, run.stdout + run.stderr);
       assertPrompt(w, text, "--prompt-file");
     });
@@ -185,8 +200,9 @@ for (const sh of powershells.length ? powershells : [{ name: "powershell" }]) {
       const w = world();
       fs.writeFileSync(path.join(w.workspace, "sum.mjs"), "export const sum = (a) => a.length;\n");
       const run = await shell(w, sh, bareForm("powershell", { verb: "review", provider }), { scenario: "review-findings", closeStdin: false, timeout: 30000 });
-      assert.equal(run.code, 10, run.stdout + run.stderr);
       assert.ok(run.ms < 8000, `returned in ${run.ms} ms`);
+      if (refusedHere(provider)) return assertRefused(run, "review");
+      assert.equal(run.code, 10, run.stdout + run.stderr);
     });
   }
 }
