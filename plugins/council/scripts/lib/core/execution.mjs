@@ -136,7 +136,9 @@ export function processSnapshot({ pid = null, platform = process.platform, run =
     }
     if (platform === "darwin") {
       const r = run("ps", ["-ww", ...(pid === null ? ["-ax"] : ["-p", String(pid)]), "-o", "pid=,ppid=,pgid=,uid=,stat=,lstart=,args="], {
-        encoding: "utf8", env: { ...process.env, LC_ALL: "en_US.UTF-8" }, shell: false, timeout, maxBuffer: 16 * 1024 * 1024,
+        // TZ=UTC: lstart stamps are identity evidence compared across processes, so they must not depend on the
+        // caller's time zone (a cancel run under another TZ would read a live owner as gone). startTime reads them as UTC.
+        encoding: "utf8", env: { ...process.env, LC_ALL: "en_US.UTF-8", TZ: "UTC" }, shell: false, timeout, maxBuffer: 16 * 1024 * 1024,
       });
       if (r.error || (r.status !== 0 && !(pid !== null && r.status === 1 && !r.stdout.trim()))) return queryFailed(r, timeout);
       const rows = [];
@@ -212,14 +214,14 @@ export function ownsExecution(row, job, platform = process.platform, adapter = n
 const MONTHS = "JanFebMarAprMayJunJulAugSepOctNovDec";
 /**
  * A creation stamp in comparable form: Linux jiffies and Windows ticks as BigInt, macOS `ps -o lstart` text
- * ("Sat Oct 31 12:00:00 2026", local time) as epoch seconds; null when unreadable.
+ * ("Sat Oct 31 12:00:00 2026", printed under TZ=UTC) as epoch seconds; null when unreadable.
  */
 export function startTime(stamp) {
   if (/^\d+$/.test(stamp ?? "")) return BigInt(stamp);
   const m = /^[A-Z][a-z]{2} ([A-Z][a-z]{2}) +(\d{1,2}) (\d{1,2}):(\d{2}):(\d{2}) (\d{4})$/.exec(String(stamp ?? "").trim());
   const month = m ? MONTHS.indexOf(m[1]) : -1;
   if (month < 0 || month % 3) return null;
-  return BigInt(Math.floor(new Date(Number(m[6]), month / 3, Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5])).getTime() / 1000));
+  return BigInt(Math.floor(Date.UTC(Number(m[6]), month / 3, Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5])) / 1000)); // queried with TZ=UTC
 }
 /** The launched child's (the macOS group leader's) creation time from `job.leader`, recorded right after spawn; null means no leader identity. */
 function leaderStart(job) {

@@ -76,10 +76,10 @@ test("macOS ownership needs the adapter's evidence and the complete recorded inv
   assert.equal(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), { ...job, childArgs: [] }, "darwin", grokLike), false, "a record from before launch owns nothing by text");
 });
 
-test("startTime: numeric ticks as BigInt, macOS lstart text as local epoch seconds, anything else null", () => {
+test("startTime: numeric ticks as BigInt, macOS lstart text (queried with TZ=UTC) as UTC epoch seconds, anything else null", () => {
   assert.equal(startTime("123"), 123n);
-  assert.equal(startTime("Sat Oct 31 12:00:05 2026"), BigInt(new Date(2026, 9, 31, 12, 0, 5).getTime() / 1000));
-  assert.equal(startTime("Mon Oct 5 09:03:00 2026"), BigInt(new Date(2026, 9, 5, 9, 3, 0).getTime() / 1000), "single-digit day as the snapshot normalizes it");
+  assert.equal(startTime("Sat Oct 31 12:00:05 2026"), BigInt(Date.UTC(2026, 9, 31, 12, 0, 5) / 1000));
+  assert.equal(startTime("Mon Oct 5 09:03:00 2026"), BigInt(Date.UTC(2026, 9, 5, 9, 3, 0) / 1000), "single-digit day as the snapshot normalizes it");
   assert.ok(startTime("Sat Oct 31 12:00:05 2026") > startTime("Sat Oct 31 11:59:59 2026"), "compared as times, not text");
   for (const bad of [undefined, null, "", "0x10", "Sat Foo 31 12:00:00 2026", "Sat Oct 31 12:00 2026"]) assert.equal(startTime(bad), null, String(bad));
 });
