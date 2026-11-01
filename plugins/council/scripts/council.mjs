@@ -166,6 +166,8 @@ function planTurn(ctx, adapter, verb, o, text, memo) {
   if (!launcher) throw new LauncherError(`${adapter.id} not found: install its CLI or set ${adapter.binEnv}`);
   const prepare = (jobId) => {
     const prev = thread ? latestOnThread(ctx.home, adapter.id, thread.threadId, jobId) ?? thread.prev : null;
+    // Rechecked under the claim: another turn may have made the thread non-resumable since it was resolved.
+    if (thread && jobId) resumable({ provider: adapter.id, threadId: thread.threadId, prev, record: loadThread(ctx.home, adapter.id, thread.threadId) });
     // The thread record stands in for pruned job history (A7.6): round, budget, effort request and web persist there.
     const base = prev ?? thread?.record ?? null;
     const cwd = base?.cwd ?? ctx.cwd;
