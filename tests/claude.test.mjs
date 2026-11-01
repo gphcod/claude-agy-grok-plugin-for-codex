@@ -235,3 +235,118 @@ test("every launch buildTurn produces passes fake-claude's complete launch contr
     assert.equal(r.status, 0, `${scenario}: ${r.stderr}`);
   }
 });
+
+// ---- S3.3 parseEvent and finalizeReview ----
+
+/** Feeds a recorded stream through the core reader, seeded as the lifecycle seeds it. */
+function play(events, { readOnly = true, session = UUID, expected = session, cwd = "/scratch/repo" } = {}) {
+  let text = "";
+  const reader = createReader(adapter, { cwd, expectedThreadId: expected, onText: (t) => { text += t; } });
+  Object.assign(reader.state.adapter, { readOnly, agent: null });
+  for (const e of events) reader.feed(`${typeof e === "string" ? e : JSON.stringify(e).replaceAll("<SESSION>", session).replaceAll("<SCRATCH>", "/scratch")}\n`);
+  reader.end();
+  return { ...reader.state, text, edited: [...reader.state.edited] };
+}
+const fx = (name) => STREAMS[name];
+const resultOf = (name) => fx(name).find((e) => e.type === "result");
+const init = (extra = {}) => ({ ...fx("ok")[0], ...extra });
+
+test("ok and resume: the thread from init, the observed model, the answer only from the result, cost and usage", () => {
+  const ok = play(fx("ok"));
+  assert.deepEqual([ok.failed, ok.threadId, ok.model, ok.text, ok.completed, ok.costUsd], [null, UUID, "claude-opus-5-5", "pong", true, 0.0272304]);
+  assert.equal(ok.usage.turns, 1);
+  assert.equal(ok.usage.retries, 0);
+  const resume = play(fx("resume"));
+  assert.equal(resume.model, "claude-sonnet-5-5");
+  assert.match(resume.text, /MARKER alpha/);
+  const chatty = play([fx("ok")[0], { type: "assistant", message: { content: [{ type: "text", text: "intermediate" }] }, session_id: "<SESSION>" }, resultOf("ok")]);
+  assert.equal(chatty.text, "pong", "assistant text is never the answer");
+  const retried = play([fx("ok")[0], { type: "system", subtype: "api_retry", category: "overloaded" }, { type: "system", subtype: "thinking_tokens" }, { type: "rate_limit_event" }, resultOf("ok")]);
+  assert.deepEqual([retried.failed, retried.usage.retries], [null, 1]);
+});
+
+test("terminal checks: missing, duplicate, wrong-session, malformed, is_error, turn limit, empty or absent answer", () => {
+  const missing = play(fx("ok").filter((e) => e.type !== "result"));
+  assert.deepEqual([missing.completed, missing.failed], [false, null], "EOF without result: the lifecycle fails the turn (exit 1)");
+  assert.match(play([...fx("ok"), resultOf("ok")]).failed, /duplicate Claude result event/);
+  assert.match(play(fx("ok").map((e) => JSON.stringify(e).replaceAll("<SESSION>", "00000000-0000-4000-8000-000000000099"))).failed, /answered on thread .*expected/);
+  assert.match(play([init(), { ...resultOf("ok"), session_id: "00000000-0000-4000-8000-000000000099" }]).failed, /names session 00000000/);
+  assert.match(play([init(), { ...resultOf("ok"), session_id: undefined }]).failed, /malformed_result: the Claude result has no session id/);
+  assert.match(play([init(), { ...resultOf("ok"), subtype: undefined }]).failed, /malformed_result: .*subtype or is_error/);
+  assert.match(play([init(), { ...resultOf("ok"), is_error: "false" }]).failed, /malformed_result/);
+  const unknown = play(fx("is-error"));
+  assert.match(unknown.failed, /^claude api_error: There's an issue with the selected model \(gpt-6\.1-sol\)/);
+  assert.equal(unknown.text, "", "the synthetic assistant text is not an answer");
+  assert.match(play(fx("turn-limit")).failed, /^claude max_turns: \["error_max_turns"\]/);
+  assert.match(play([init(), { ...resultOf("ok"), subtype: "error_max_budget_usd", is_error: false, terminal_reason: undefined }]).failed, /^claude error_max_budget_usd/);
+  assert.match(play([init(), { ...resultOf("ok"), result: "  " }]).failed, /the Claude result is empty/);
+  assert.match(play([init(), { ...resultOf("ok"), result: undefined }]).failed, /no answer text/);
+  assert.match(play(["{not json"]).failed, /malformed JSON in the Claude event stream/);
+  assert.match(play([{ subtype: "init" }]).failed, /malformed Claude event/);
+  assert.match(play([{ ...init(), session_id: undefined }]).failed, /init event without a session id/);
+});
+
+test("init must confirm the launched mode, and a read-only launch must advertise no mutating tool", () => {
+  assert.match(play(fx("ok"), { readOnly: false }).failed, /permission mode "dontAsk", not the launched acceptEdits/);
+  assert.match(play(fx("task"), { readOnly: true }).failed, /permission mode "acceptEdits", not the launched dontAsk/);
+  assert.match(play([init({ tools: ["Read", "Edit", "Bash"] }), resultOf("ok")]).failed, /a read-only Claude turn advertised Edit, Bash/);
+  assert.equal(play([init({ tools: ["Read", "Glob", "Grep", "StructuredOutput", "WebFetch", "WebSearch", "mcp__x__y"] }), resultOf("ok")]).failed, null);
+});
+
+test("denials: permission_denied events merged with result.permission_denials, deduplicated → denied (exit 10)", () => {
+  const denied = play(fx("denied"));
+  assert.deepEqual([denied.failed, denied.text, denied.denials.length], [null, "Partial answer.", 1]);
+  assert.deepEqual(denied.denials[0], { count: 1, denials: [{ tool: "Read", path: "/restricted/private.txt", input: { file_path: "/restricted/private.txt" } }] });
+  const two = play([{ type: "permission_denied", tool_name: "WebFetch", tool_input: { url: "https://x" } }, ...fx("denied")]);
+  assert.equal(two.denials[0].count, 2);
+  assert.equal(play(fx("ok")).denials.length, 0);
+});
+
+test("tool-absent: an edit attempted on a read-only turn comes back as an error tool result → denied, never edited", () => {
+  const absent = play(fx("tool-absent"));
+  assert.deepEqual([absent.failed, absent.text, absent.edited], [null, "denied", []]);
+  assert.equal(absent.denials.length, 1);
+  assert.equal(absent.denials[0].denials[0].tool, "Edit");
+  assert.equal(absent.denials[0].denials[0].path, "/scratch/repo/value.mjs");
+  assert.match(absent.denials[0].denials[0].reason, /No such tool available: Edit/);
+  const succeeded = fx("tool-absent").map((e) => (e.type === "user" ? { ...e, message: { ...e.message, content: [{ ...e.message.content[0], is_error: false, content: "updated" }] } } : e));
+  assert.match(play(succeeded).failed, /a read-only Claude turn edited \/scratch\/repo\/value\.mjs through Edit/, "an edit that succeeds on a read-only turn fails closed");
+  const readAttempt = [init(), { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: "/nope" } }] } },
+    { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", is_error: true, content: "ENOENT" }] } }, resultOf("ok")];
+  assert.equal(play(readAttempt).denials.length, 0, "a failed read is not a denial");
+});
+
+test("task: edited paths from confirmed Edit/Write/MultiEdit/NotebookEdit results; a failed edit is left out; a failed Bash is a failed command", () => {
+  const task = play(fx("task"), { readOnly: false });
+  assert.deepEqual([task.failed, task.text, task.edited, task.failedCommands, task.toolSteps], [null, "edited and ran 0", ["value.mjs"], [], 3]);
+  const broken = play(fx("task").map((e) => {
+    if (e.type !== "user") return e;
+    const block = e.message.content[0];
+    if (block.tool_use_id === "toolu_01KUE2RkdHpbpsDu54j1e2g6") return { ...e, message: { ...e.message, content: [{ ...block, is_error: true, content: "String to replace not found" }] } };
+    if (block.tool_use_id === "toolu_01UYeVHYP1sN7JMBbE6D74V3") return { ...e, message: { ...e.message, content: [{ ...block, is_error: true, content: "Exit code 1" }] } };
+    return e;
+  }), { readOnly: false });
+  assert.deepEqual([broken.failed, broken.edited, broken.failedCommands, broken.denials.length], [null, [], ['node -e "process.exit(0)"; echo $?'], 0]);
+  const taskInit = fx("task")[0];
+  const many = play([taskInit,
+    { type: "assistant", message: { content: [{ type: "tool_use", id: "w", name: "Write", input: { file_path: "<SCRATCH>/repo/new.txt" } }, { type: "tool_use", id: "m", name: "MultiEdit", input: { file_path: "<SCRATCH>/repo/a.js" } },
+      { type: "tool_use", id: "n", name: "NotebookEdit", input: { notebook_path: "<SCRATCH>/repo/n.ipynb" } }, { type: "tool_use", id: "u", name: "Edit", input: { file_path: "<SCRATCH>/repo/pending.js" } }] } },
+    { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "w", content: "ok" }, { type: "tool_result", tool_use_id: "m", content: "ok" }, { type: "tool_result", tool_use_id: "n", content: "ok" }] } },
+    resultOf("task")], { readOnly: false });
+  assert.deepEqual(many.edited.sort(), ["a.js", "n.ipynb", "new.txt", "pending.js"], "an edit whose result never arrived may have happened: reported");
+});
+
+test("structured output is the answer on reviews; finalizeReview prefers it and falls back to the answer text; reviewPlan carries the schema by flag", () => {
+  const review = play(fx("review-findings"));
+  assert.equal(review.failed, null);
+  assert.equal(review.structured.verdict, "needs-attention");
+  assert.deepEqual(JSON.parse(review.text), review.structured, "the spooled answer is the structured JSON");
+  assert.deepEqual(adapter.finalizeReview({ answerText: "junk", structured: review.structured, unreviewed: ["x"] }), { structured: review.structured, unreviewed: ["x"] });
+  assert.deepEqual(adapter.finalizeReview({ answerText: review.text, structured: null, unreviewed: [] }).structured, review.structured);
+  assert.equal(adapter.finalizeReview({ answerText: "not json", structured: null, unreviewed: [] }).structured, null, "the core reports it incomplete (exit 10)");
+  assert.equal(adapter.finalizeReview({ answerText: "[1]", structured: null, unreviewed: [] }).structured, null);
+  const malformed = play(fx("review-malformed"));
+  assert.equal(malformed.failed, null, "schema problems are the validator's: incomplete (10), not a failed turn");
+  assert.deepEqual(adapter.reviewPlan({ batches: [1] }, { adversarial: true }), { native: false, batches: [1], promptTemplate: "adversarial-review", schemaCarrier: "flag" });
+  assert.equal(adapter.reviewPlan({ snapshot: null }, { adversarial: false }).promptTemplate, "review");
+});

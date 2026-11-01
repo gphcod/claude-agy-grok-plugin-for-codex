@@ -158,7 +158,89 @@ export default {
     return { args, env: { ...request.env, ...depthEnv(), NO_COLOR: "1" }, stdin: requestLine(turnInput(request), session), answerFile: null, promptFile: null,
       readOnly: request.verb !== "task", requestedThreadId: session, agent: null, contractCarrier: "append-system-prompt-file" };
   },
-  parseEvent() { return { fatal: "claude parseEvent arrives in S3.3" }; },
-  reviewPlan() { return { native: false, promptTemplate: "review", schemaCarrier: "flag" }; },
-  finalizeReview() { return null; },
+  /**
+   * S3.3. `state.adapter` is this turn's scratch, seeded by the lifecycle with the launch's `readOnly`; it also keeps the
+   * init session, pending tool uses, denials and retries. Init must confirm the launched mode (`dontAsk` read-only,
+   * `acceptEdits` task) and, on a read-only turn, advertise no mutating tool; anything else fails closed. Without the
+   * seed (a direct call) the turn counts as read-only, so no path is counted as edited on unproven evidence.
+   */
+  parseEvent(line, state) {
+    const s = state.adapter;
+    s.pending ??= new Map(); s.denials ??= []; s.retries ??= 0;
+    let ev;
+    try { ev = JSON.parse(line); } catch { return { fatal: "malformed JSON in the Claude event stream" }; }
+    if (!isMap(ev) || typeof ev.type !== "string") return { fatal: "malformed Claude event" };
+    const readOnly = s.readOnly !== false;
+    if (ev.type === "system" && ev.subtype === "init") {
+      if (typeof ev.session_id !== "string" || !ev.session_id) return { fatal: "Claude init event without a session id" };
+      if (s.session && s.session !== ev.session_id) return { fatal: "a second Claude init event names another session" };
+      const launched = readOnly ? "dontAsk" : "acceptEdits";
+      if (ev.permissionMode !== launched) return { fatal: `Claude reports permission mode ${JSON.stringify(ev.permissionMode)}, not the launched ${launched}` };
+      const advertised = Array.isArray(ev.tools) ? ev.tools.filter((t) => MUTATING.includes(t)) : [];
+      if (readOnly && advertised.length) return { fatal: `a read-only Claude turn advertised ${advertised.join(", ")}` };
+      s.session = ev.session_id;
+      return { threadId: ev.session_id, ...(typeof ev.model === "string" && ev.model ? { model: ev.model } : {}) };
+    }
+    if (ev.type === "system" && ev.subtype === "api_retry") { s.retries += 1; s.lastRetry = ev.category || ev.error?.type || "unknown"; return null; }
+    if (ev.type === "permission_denied") { s.denials.push(denial(ev)); return null; }
+    if (ev.type === "assistant") {
+      s.firstAssistantAt ??= Date.now();
+      const uses = (Array.isArray(ev.message?.content) ? ev.message.content : []).filter((c) => c?.type === "tool_use");
+      for (const use of uses) if (typeof use.id === "string") s.pending.set(use.id, { name: use.name, input: use.input ?? {} });
+      return uses.length ? { toolStep: String(uses[0].name) } : null;
+    }
+    if (ev.type === "user") {
+      const edited = [], out = {};
+      for (const block of Array.isArray(ev.message?.content) ? ev.message.content : []) {
+        if (block?.type !== "tool_result" || !s.pending.has(block.tool_use_id)) continue;
+        const use = s.pending.get(block.tool_use_id);
+        s.pending.delete(block.tool_use_id);
+        const failed = block.is_error === true;
+        if (EDIT_TOOLS.includes(use.name)) {
+          // Read-only: the edit tools are absent, so an attempt comes back as an error ("No such tool available", S1.1) → denied.
+          if (readOnly && failed) s.denials.push(denial({ tool_name: use.name, tool_input: use.input }, resultText(block.content).slice(0, 200) || "tool absent on a read-only turn"));
+          else if (readOnly) return { fatal: `a read-only Claude turn edited ${pathOf(use.input) ?? "a file"} through ${use.name}` };
+          else if (!failed && pathOf(use.input)) edited.push(pathOf(use.input)); // a failed edit changed nothing
+        } else if (use.name === "Bash" && failed && !readOnly && !out.failedCommand) out.failedCommand = String(use.input?.command ?? "Bash");
+      }
+      if (edited.length) out.edited = edited;
+      return Object.keys(out).length ? out : null;
+    }
+    if (ev.type === "result") {
+      if (s.result) return { fatal: "duplicate Claude result event" };
+      s.result = true;
+      if (typeof ev.session_id !== "string" || !ev.session_id) return { fatal: "malformed_result: the Claude result has no session id" };
+      if (s.session && ev.session_id !== s.session) return { fatal: `the Claude result names session ${ev.session_id}, not ${s.session}` };
+      if (typeof ev.subtype !== "string" || typeof ev.is_error !== "boolean") return { fatal: "malformed_result: the Claude result is missing subtype or is_error" };
+      if (ev.is_error || ev.subtype !== "success") {
+        const detail = ev.terminal_reason || ev.subtype;
+        const message = typeof ev.result === "string" && ev.result.trim() ? ev.result.trim() : JSON.stringify(ev.errors ?? [ev.subtype]);
+        return { threadId: ev.session_id, fatal: `claude ${detail}: ${message}` };
+      }
+      const denials = dedupe([...s.denials, ...(Array.isArray(ev.permission_denials) ? ev.permission_denials.map((d) => denial(d)) : [])]);
+      const structured = isMap(ev.structured_output) ? ev.structured_output : null;
+      const answer = structured ? JSON.stringify(structured) : typeof ev.result === "string" ? ev.result : null;
+      if (answer === null) return { threadId: ev.session_id, fatal: "the Claude result has no answer text" };
+      if (!answer.trim()) return { threadId: ev.session_id, fatal: "the Claude result is empty" };
+      // An edit whose tool result never arrived may have happened: a task reports it.
+      const unconfirmed = readOnly ? [] : [...s.pending.values()].filter((u) => EDIT_TOOLS.includes(u.name) && pathOf(u.input)).map((u) => pathOf(u.input));
+      return {
+        threadId: ev.session_id, textDelta: answer, completed: true,
+        ...(structured ? { structured } : {}),
+        ...(typeof ev.total_cost_usd === "number" ? { costUsd: ev.total_cost_usd } : {}),
+        ...(isMap(ev.usage) ? { usage: { ...ev.usage, turns: ev.num_turns ?? null, retries: s.retries } } : {}),
+        ...(denials.length ? { denied: { count: denials.length, denials } } : {}),
+        ...(unconfirmed.length ? { edited: unconfirmed } : {}),
+      };
+    }
+    return null; // rate_limit_event, system/thinking_tokens, stream events: nothing for the turn
+  },
+  reviewPlan(review, request) {
+    return { native: false, batches: review?.batches, promptTemplate: request?.adversarial ? "adversarial-review" : "review", schemaCarrier: "flag" };
+  },
+  /** `structured_output` is authoritative; the answer text (the same JSON) is the fallback. The core validates and reconciles. */
+  finalizeReview({ answerText, structured, unreviewed }) {
+    if (!isMap(structured) && answerText) { try { structured = JSON.parse(answerText); } catch { structured = null; } }
+    return { structured: isMap(structured) ? structured : null, unreviewed };
+  },
 };
