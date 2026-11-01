@@ -12,7 +12,7 @@ import { BEAT_MS, refreshBeat } from "./heartbeat.mjs";
 import { executionController, companionState, recordRecoveryEvidence, QUERY_MS } from "./execution.mjs";
 import { spawnChild } from "./launcher.mjs";
 import { createReader } from "./reader.mjs";
-import { readAnswer } from "./output.mjs";
+import { attentionReason, readAnswer } from "./output.mjs";
 import { writeFileAtomic } from "./fs.mjs";
 import { UsageError } from "./args.mjs";
 
@@ -321,7 +321,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
   let parsed = null;
   try { parsed = readAnswer(answerFile); answer = parsed.answer; }
   catch (error) { if (error.code !== "ENOENT") reason ??= `answer storage failed: ${error.message}`; }
-  let outcome = "failed", error = reason;
+  let outcome = "failed", error = reason, openQuestions = false, reviewIncomplete = null;
   const denied = seen?.denials?.length ? seen.denials : [];
   const incomplete = hookOutcome?.incomplete ?? seen?.incomplete ?? null;
   if (reason === "cancelled") outcome = "cancelled";
@@ -341,7 +341,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     else if (incomplete) { outcome = "attention"; job.incomplete = incomplete; }
     else if (turn.structuredReview && job.readOnly && seen?.edited?.size) { outcome = "attention"; job.incomplete = `the read-only review changed the workspace: ${[...seen.edited].slice(0, 5).join(", ")}`; }
     else if (turn.structuredReview) outcome = "review"; // settled below, after the cleanup check
-    else outcome = parsed.questions ? "attention" : "ok";
+    else { openQuestions = parsed.questions; outcome = openQuestions ? "attention" : "ok"; }
   }
   if (!cleanupConfirmed) {
     if (job.unattributedPipes) job.answerComplete = ["ok", "attention", "review"].includes(outcome);
@@ -368,6 +368,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
         if (text !== undefined) { io.writeFileSync(answerFile, text); parsed = readAnswer(answerFile); answer = parsed.answer; }
         Object.assign(job, { verdict: review.verdict ?? null, findings: review.findings ?? null, reviewState: review.reviewState ?? job.reviewState, unreviewed: review.unreviewed ?? job.unreviewed });
         if (review.attention) job.reviewAttention = review.attention;
+        if (review.incomplete) reviewIncomplete = review.incomplete;
         outcome = job.reviewAttention || (job.unreviewed ?? []).length > 0 || job.reviewState?.synthesisPending || job.reviewState?.pending || job.reviewState?.blocking ? "attention" : "ok";
       } catch (failure) { error = `answer storage failed: ${failure.message}`; }
     }
@@ -381,6 +382,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     error, cleanupPending: !cleanupConfirmed, endedAt: new Date().toISOString(),
     edited: [...(seen?.edited ?? [])], failedCommands: [...(seen?.failedCommands ?? []), ...(hookOutcome?.failedCommands ?? [])], cost: seen?.costUsd ?? null, usage: seen?.usage ?? null,
     answerClipped: parsed?.answerClipped ?? false, denied: denied.length ? denied : undefined,
+    attention: outcome === "attention" ? attentionReason({ denied, incomplete: job.incomplete ?? reviewIncomplete, questions: openQuestions }) : null,
     unconfirmed: seen?.unconfirmed ?? null, ...(outcome === "failed" && seen?.structured ? { structured: seen.structured } : {}),
   });
   delete job.stderrTail;
@@ -397,7 +399,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     save(job); finishMarker(job);
     if (cleanupConfirmed) { releaseClaims(ctx.home, job); released = true; }
   } catch (failure) {
-    Object.assign(job, { code: 1, outcome: "failed", status: "failed", cleanupPending: true, error: `finalization failed: ${failure.message}` });
+    Object.assign(job, { code: 1, outcome: "failed", status: "failed", cleanupPending: true, attention: null, error: `finalization failed: ${failure.message}` });
     if (!job.done && job.reviewStateBase) job.reviewState = job.reviewStateBase;
     if (!job.done) { try { save(job); finishMarker(job); } catch { /* storage is gone: the heartbeat lapses and recovery reads the job as lost */ } }
   }

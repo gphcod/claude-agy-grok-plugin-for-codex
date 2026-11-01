@@ -315,3 +315,9 @@ The S1.4 probes ran with the user's authorization inside real Codex sessions (co
 - The reply exited 10 through an open question, not through the tool-absent denial the test named. Claude declined without a tool call.
 - The live test now also asserts that the reply leaves the file unchanged, so it no longer depends on which of the two routes produces the 10.
 - The Claude-side twin's run of the same day found that its Gemini adapter counted no edits. This side's Gemini adapter already counts write-tool steps and snapshot changes, so no change is needed here.
+
+## 2026-11-01 S7.1 fixes
+
+The twin (Council for Claude Code) gets the same change for each shared ruling (X1, X2, X3).
+
+- **X1, `attention: <reason>` (matrix I1, I3).** A non-review turn that exited 10 printed a bare `needs attention`; the reason was only in `meta.json`, so Codex could not follow "denials need the user". The footer gains an optional token in the slot of `error:` (the two never appear together: attention has no error), `--json` gains `attention` (string or null), and the job record stores it (`lifecycle.mjs`, from `attentionReason` in `output.mjs`), so a replay or `wait` prints the same line. This amends "the footer grammar is frozen" (S5.3): `coverage unknown` still goes in the hint slot. Text: one line, at most 200 B, cause first: `denied <tool>(<what>)` with ` (+N more)`, the incomplete message as is, or `open questions in the answer`. `(+N more)` is reserved before clipping, so a long command cannot push it out. Denial shapes differ per provider (Gemini one entry per step with `parameters`, Claude one `{count, denials}` entry, Grok `{reason}` with no tool name); `attentionReason` flattens them. Reviews get the token only for a denial, a changed workspace or incomplete/malformed output; plain findings, coverage and batches keep their own output.

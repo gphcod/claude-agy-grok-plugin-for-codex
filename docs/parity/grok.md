@@ -85,6 +85,7 @@ S4.7. Source: GROKX `/Users/cia/GitCode/grok_plugin_for_codex` at `v1.1.0` (`148
 | `round N/M` on replies | `round N/M` on ask, reply, task | intentionally different | A3.4: threaded verbs print it; ask and a fresh task print `1/M` |
 | `full: <file>` (24 KiB preview) | same | same | |
 | `error: <msg>` | same | same | |
+| — | `attention: <reason>` in the same slot on exit 10 (not on plain findings) | intentionally different | S7.1: a denial, an incomplete turn or open questions were invisible outside `meta.json` |
 | `cleanup pending; next: cancel <job>; do not resume` | same | same | plus `thread locked; next: cancel <job> --confirm-ended …` (A7.8) |
 | `next: reply <job>[ --next-input]` | `next: reply <job> --next-input` only while batches are pending | intentionally different | A3.4 hints only recovery and continuation |
 | `--json` `session`, `requestedSession`, `aggregateVerdict`, `reviewRef`, `snapshotId`, `unreviewed` | `thread`, `requestedThread`, `session` (host session), `verdict`, `findings`, `coverage{…}`, `batch`, `modelVerified`, `requestedEffort`, `round`, `rounds`, `failedCommands`, `threadLocked` | intentionally different | A3.4 key set; `session` changes meaning (Grok's session id is `thread`) |

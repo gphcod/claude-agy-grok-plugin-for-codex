@@ -64,7 +64,7 @@ test("the --json object carries every A3.4 field and bounds its lists", () => {
     reviewState: { reviewRef: "r", snapshotId: "s", status: "partial", total: 4, pending: 2, completed: ["u1"], unsupportedCount: 1, synthesisPending: true, blocking: false },
     unreviewed: ["a", "b"], batch: { index: 1, total: 2 }, edited: Array.from({ length: 100 }, (_, i) => `f${i}.js`) }, "answer");
   assert.deepEqual(Object.keys(json), ["provider", "job", "thread", "requestedThread", "session", "status", "exit", "verb", "tier", "model", "modelVerified", "effort", "requestedEffort",
-    "round", "rounds", "verdict", "findings", "coverage", "batch", "edited", "editedCount", "failedCommands", "failedCommandCount", "costUsd", "elapsedMs", "error", "cleanupPending",
+    "round", "rounds", "verdict", "findings", "coverage", "batch", "edited", "editedCount", "failedCommands", "failedCommandCount", "costUsd", "elapsedMs", "error", "attention", "cleanupPending",
     "threadLocked", "answer", "clipped", "answerFile"]);
   assert.deepEqual([json.provider, json.job, json.thread, json.session, json.model, json.modelVerified, json.effort, json.requestedEffort, json.tier, json.round, json.rounds, json.verdict, json.exit, json.costUsd],
     ["grok", "k3f9k3f9k3f9k3f9", "t-1", "codex-1", "grok-4.7", true, "high", "high", "consult", 1, 9, "approve", 0, 0.0123]);

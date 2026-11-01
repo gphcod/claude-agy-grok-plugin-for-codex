@@ -1,6 +1,8 @@
 // Output grammar (A3.4) and the answer scan, ported from grok_plugin_for_codex 1.1.0 lib/output.mjs and lib/answer.mjs
 // (S2.2). The start line goes to stderr, suppressed under --json; the footer is one stdout line; cost and counters
 // live in --json. The answer preview is capped at 24 KiB and the full answer named by `full: <file>`.
+// Footer: `council <provider> <status> · job <id> · <model>/<effort>[<=requested] · <duration>[ · round N/M][ · edited N]
+// [ · unreviewed N][ · batch i/n][ · model unverified][ · full: <file>][ · error: <msg> | · attention: <reason>][ · <recovery hint>]`.
 import fs from "node:fs";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -18,6 +20,35 @@ export function utf8Prefix(text, cap) {
 }
 const oneLine = (text, max = 200) => utf8Prefix(String(text).replace(/\s+/g, " ").trim(), max);
 export const pendingCleanup = (job) => Boolean((job.cleanupPending && !job.stopped) || job.claimHeld);
+const bytes = (text) => Buffer.byteLength(text, "utf8");
+/** The input fields that say what a denied call was trying to do, across the providers' tool shapes. */
+const DENIED_DETAIL = ["command", "CommandLine", "file_path", "TargetFile", "AbsolutePath", "FilePath", "Path", "path", "notebook_path", "url", "Url", "pattern", "query"];
+function deniedDetail(input) {
+  if (!input || typeof input !== "object") return null;
+  const value = DENIED_DETAIL.map((key) => input[key]).find((v) => typeof v === "string" && v) ?? Object.values(input).find((v) => typeof v === "string" && v);
+  return value ?? null;
+}
+/** One denial as `<tool>(<what it tried>)`; a provider that names no tool (Grok's permission stop) gives its reason. */
+function denialSummary(denial) {
+  if (!denial?.tool) return `a tool call: ${denial?.reason ?? "permission refused"}`;
+  const detail = denial.path ?? deniedDetail(denial.input ?? denial.parameters);
+  return detail ? `${denial.tool}(${oneLine(detail, 120)})` : String(denial.tool);
+}
+/**
+ * The footer's `attention: <reason>` (A3.4): why a turn needs attention, one line, at most 200 B, cause first. The first
+ * denial with ` (+N more)`, the incomplete message as is, or the open questions of an answer. Null otherwise: a review's
+ * plain findings, coverage and batches have their own output and tokens.
+ */
+export function attentionReason({ denied = [], incomplete = null, questions = false } = {}) {
+  const denials = denied.flatMap((d) => (Array.isArray(d?.denials) ? d.denials : [d]));
+  if (denials.length) {
+    const more = denials.length > 1 ? ` (+${denials.length - 1} more)` : "";
+    return `${oneLine(`denied ${denialSummary(denials[0])}`, 200 - bytes(more))}${more}`;
+  }
+  if (incomplete) return oneLine(incomplete);
+  return questions ? "open questions in the answer" : null;
+}
+const attentionOf = (job) => (job.outcome === "attention" ? job.attention ?? null : null);
 
 export function elapsed(ms) {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -62,6 +93,7 @@ export function footer(job, clipped) {
   if (job.modelVerified === false) parts.push("model unverified");
   if (clipped || job.answerClipped) parts.push(`full: ${path.join(job.dir, "answer.md")}`);
   if (job.error) parts.push(`error: ${oneLine(job.error)}`);
+  else if (attentionOf(job)) parts.push(`attention: ${oneLine(attentionOf(job))}`);
   const hint = recoveryHint(job);
   if (hint) parts.push(hint);
   return parts.join(" · ");
@@ -85,7 +117,7 @@ export function resultJson(job, answer) {
     verdict: job.verdict ?? null, findings: job.findings ?? null, coverage, batch: job.batch ?? null,
     edited: (job.edited ?? []).slice(0, 10).map((p) => oneLine(p)), editedCount: (job.edited ?? []).length,
     failedCommands: (job.failedCommands ?? []).slice(0, 10).map((c) => oneLine(c)), failedCommandCount: (job.failedCommands ?? []).length,
-    costUsd: job.cost ?? null, elapsedMs: elapsedOf(job), error: job.error ? oneLine(job.error, 2000) : null,
+    costUsd: job.cost ?? null, elapsedMs: elapsedOf(job), error: job.error ? oneLine(job.error, 2000) : null, attention: attentionOf(job),
     cleanupPending: pendingCleanup(job), threadLocked: Boolean(job.threadLocked), answer: text, clipped: clipped || Boolean(job.answerClipped),
     answerFile: path.join(job.dir, "answer.md"),
   };

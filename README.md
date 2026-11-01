@@ -81,7 +81,7 @@ Bare `review` and `--uncommitted` review the working tree against `HEAD` plus un
 - `--rounds <n>` (or `COUNCIL_CODEX_ROUNDS`): the reply budget, 9 by default.
 - `--deadline <s>` (default 14400) and `--inactivity-timeout <s>` (default 1200) start cleanup; `wait --timeout <s>` (default 90) only returns 20. agy's `--print-timeout` is derived from the deadline.
 - `--web`: web search, off by default. Grok omits `--disable-web-search`; Claude adds `WebFetch,WebSearch`; Gemini refuses it (exit 2, see trade-offs).
-- `--json`: one JSON object (`provider`, `job`, `thread`, `session`, `model`, `modelVerified`, `effort`, `requestedEffort`, `tier`, `round`, `rounds`, `verdict`, `findings`, `coverage`, `batch`, `edited`, `failedCommands`, `costUsd`, `exit`, `answerFile`, …).
+- `--json`: one JSON object (`provider`, `job`, `thread`, `session`, `model`, `modelVerified`, `effort`, `requestedEffort`, `tier`, `round`, `rounds`, `verdict`, `findings`, `coverage`, `batch`, `edited`, `failedCommands`, `costUsd`, `attention`, `exit`, `answerFile`, …).
 - `--prompt-file <path>`, `--cwd <dir>`, `--thread <id>`, `--last`.
 - Provider-scoped, refused with exit 2 elsewhere and before any job record: `--max-turns <n>` (Claude; review 2, ask/reply 20, task 30 by default; 1 to 100), `--max-budget-usd <n>` (Claude), `--allow-command <exact>` (`task --to gemini` only), `--set` and `--live` (`setup`), `--confirm-ended` (`cancel`).
 
@@ -108,13 +108,13 @@ The skill (`plugins/council/skills/council/SKILL.md`, the only model-visible fil
 Start line on stderr: `[council] provider=<p> job=<id> thread=<native id|?>[ target=<review target>]`. The answer (a 24 KiB preview; `full: <file>` names the whole answer) is followed by one footer line:
 
 ```
-council <provider> <ok|needs attention|failed|cancelled> · job <16 chars> · <model>/<effort>[<=requested] · <duration>[ · round N/M][ · edited N][ · unreviewed N][ · batch i/n][ · model unverified][ · full: <file>][ · error: <msg>][ · <recovery hint>]
+council <provider> <ok|needs attention|failed|cancelled> · job <16 chars> · <model>/<effort>[<=requested] · <duration>[ · round N/M][ · edited N][ · unreviewed N][ · batch i/n][ · model unverified][ · full: <file>][ · error: <msg> | · attention: <reason>][ · <recovery hint>]
 ```
 
 | Exit | Meaning |
 |---|---|
 | 0 | done |
-| 10 | needs attention: review findings, pending or unreviewed coverage, a denied action, incomplete or malformed review output, `cancel --confirm-ended` refused because an owned process is live |
+| 10 | needs attention: review findings, pending or unreviewed coverage, a denied action, an incomplete turn, incomplete or malformed review output, an answer whose `Open questions:` line is not `none`, `cancel --confirm-ended` refused because an owned process is live. Except for findings and coverage, the footer says why: `attention: denied <tool>(<what>)[ (+N more)]`, the incomplete message, or `attention: open questions in the answer` |
 | 20 | still running: `wait` timed out, a replayed `--request-id` whose first call is still preparing, or a `cancel` that finds another cancel's deferred cleanup hook still running; nothing was stopped |
 | 1 | failed, cancelled, busy, or `preflight_blocked` |
 | 2 | invalid input |
