@@ -55,7 +55,7 @@ Per provider:
 |---|---|---|---|---|---|
 | claude | `/Users/cia/.local/bin/claude` (native) | 2.1.314 (the qualified version; no warning) | logged in | ok | none |
 | gemini | `/Users/cia/.local/bin/agy` (native) | 1.4.12 | logged in (`agy models` succeeded) | ok | the global agy `toolPermission` is `always-proceed`, so a Gemini task without `--allow-command` runs any command; Gemini read-only turns can search the web |
-| grok | `/Users/cia/.grok/bin/grok` (native) | 1.0.70 (f50904eaee6c) [stable] | logged in | ok | two grok executables on PATH (`~/.grok/bin/grok` first, then `~/.local/bin/grok`); the first runs |
+| grok | `/Users/cia/.grok/bin/grok` (native) | 1.0.70 (f50904eaee6c) [stable] | logged in | ok | two grok executables on PATH (`~/.grok/bin/grok` first, then `~/.local/bin/grok`); the first runs. *Later finding: `~/.local/bin/grok` is a symlink to `~/.grok/bin/grok`, the same binary; since the S1.4 follow-up the probe counts by real path and no longer warns here.* |
 
 Preflight results cached in the scratch state root (every descriptor passed, none unverified):
 

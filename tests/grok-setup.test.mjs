@@ -110,3 +110,21 @@ test("probe warns about several grok executables on PATH only when COUNCIL_GROK_
   assert.deepEqual(probe.warnings, [`2 grok executables on PATH; the first one runs (${path.join(bins[0], "grok")})`]);
   assert.deepEqual((await grok.probe(grok.resolveLauncher(w.env), w.env, "darwin")).warnings, []);
 });
+
+test("probe counts grok executables on PATH by real path: a symlink to the same binary (and a repeated PATH entry) is one executable", { skip: process.platform === "win32" }, async () => {
+  const w = world();
+  // As on the S6.6 machine: ~/.local/bin/grok is a symlink to ~/.grok/bin/grok.
+  const real = path.join(w.dir, "grok-home", "bin"), link = path.join(w.dir, "local", "bin"), other = path.join(w.dir, "other");
+  for (const dir of [real, link, other]) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(real, "grok"), `#!${process.execPath}\nimport(${JSON.stringify(FAKE)});\n`, { mode: 0o755 });
+  fs.symlinkSync(path.join(real, "grok"), path.join(link, "grok"));
+  const env = { ...w.env, PATH: [real, link, real].join(path.delimiter) };
+  delete env.COUNCIL_GROK_BIN;
+  const linked = await grok.probe(grok.resolveLauncher(env, "darwin"), env, "darwin");
+  assert.deepEqual(linked.warnings.filter((x) => /executables on PATH/.test(x)), [], "one file behind a symlink and a repeated entry is one executable");
+  fs.copyFileSync(path.join(real, "grok"), path.join(other, "grok"));
+  fs.chmodSync(path.join(other, "grok"), 0o755);
+  const both = { ...env, PATH: [link, real, other].join(path.delimiter) };
+  const copied = await grok.probe(grok.resolveLauncher(both, "darwin"), both, "darwin");
+  assert.deepEqual(copied.warnings.filter((x) => /executables on PATH/.test(x)), [`2 grok executables on PATH; the first one runs (${path.join(link, "grok")})`], "a separate copy still counts");
+});

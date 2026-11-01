@@ -166,8 +166,10 @@ export default {
   async probe(launcher = this.resolveLauncher(), env = process.env, platform = process.platform) {
     const warnings = [];
     // With COUNCIL_GROK_BIN set nothing on PATH runs, so several candidates there are no concern (GROKX setup.mjs).
+    // Counted by real path: a symlink to the same binary (~/.local/bin/grok → ~/.grok/bin/grok) is one executable.
     const candidates = env[BIN_ENV] ? [] : pathCandidates("grok", env, platform);
-    if (candidates.length > 1) warnings.push(`${candidates.length} grok executables on PATH; the first one runs (${candidates[0]})`);
+    const distinct = new Set(candidates.map(realOr)).size;
+    if (distinct > 1) warnings.push(`${distinct} grok executables on PATH; the first one runs (${candidates[0]})`);
     const version = runSync(launcher, ["--version"], { env });
     if (version.status !== 0) { warnings.push(`grok --version failed: ${firstLine(version)}`); return { version: null, loggedIn: null, models: null, warnings }; }
     const listing = runSync(launcher, ["models"], { env, timeoutMs: 30000 });
