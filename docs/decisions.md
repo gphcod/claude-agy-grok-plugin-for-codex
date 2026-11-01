@@ -161,3 +161,11 @@ Findings F1–F19 as the coordinator merged them, with the coordinator's correct
 - A cancel that reads a `running` after-turn reservation checks its holder with a fresh query taken after the read: the controller's new `scoped(pid)` (one `ps -p`/scoped query), or a fresh full snapshot for a controller without it. Not found in that query is gone (takeover); live or a failed query is running/unknown (exit 20 or 1, nothing touched). S2.10 used the table the cancel took before reading, which could predate the holder, so a second hook ran.
 - `execution.mjs` re-pinned (`executionController().scoped`); test in tests/core-review-fixes.test.mjs reproduces Codex's scheduling and fails against S2.10.
 
+
+## 2026-10-31 core (S4): two BuiltTurn seams for a prompt-file adapter
+
+Found while implementing S4 (Grok); a frozen-contract change (S2.7), so it needs a review by one of the three models.
+
+- **`BuiltTurn.promptText`** (optional): the lifecycle writes `promptText ?? stdin ?? request.prompt` to `promptFile`. Before, an adapter could change the prompt file's content only through `stdin`, which also pipes that text to the child; Grok reads its prompt from `--prompt-file` only (the fake rejects stdin), yet its per-turn instructions (advice, task) must travel in the input (contract.md, A5.1 claude rule applied to every provider).
+- **`state.adapter` seeded with `{ readOnly, agent }`** from the BuiltTurn before the first event. parseEvent receives `(line, state)` only, so it could not know whether the turn is read-only; Grok's FORBIDDEN catalogue check (A5.1, S4.3) must fail closed on read-only turns and stay off on tasks.
+- lifecycle.mjs (host-adapted, not pinned) and types.mjs only; reader.mjs (pinned) is unchanged. Test: tests/core-turn-seams.test.mjs, failing against d5d1d71. The twin needs the same seams only if its Grok adapter hits the same gap; recorded here as a candidate shared change.

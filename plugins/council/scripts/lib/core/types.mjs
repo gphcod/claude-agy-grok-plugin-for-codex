@@ -39,6 +39,7 @@
  * @property {Record<string, string>} [env]
  * @property {string} [stdin]           written to the child's stdin; omit to ignore stdin
  * @property {string | null} [promptFile] written by the lifecycle before spawn
+ * @property {string} [promptText]     the prompt file's content when the adapter composes it (default: `stdin`, else the request prompt)
  * @property {string | null} [answerFile] where the child writes its answer, when it does
  * @property {boolean} readOnly
  * @property {string | null} [requestedThreadId] a thread id chosen before spawn (claimed before the child starts)
@@ -79,7 +80,8 @@
  *   once, only after verified cleanup: a turn that ends with cleanup pending defers it to the `cancel` that confirms
  *   cleanup (request null, `deferred: true`, its result ignored). A deferred run whose cancel died mid-hook is run again
  *   by the next cancel (S2.10), so afterTurn must tolerate a re-run (idempotent, or harmless when repeated)
- * @property {(line: string, state: object) => ParsedEvent | null} parseEvent
+ * @property {(line: string, state: object) => ParsedEvent | null} parseEvent `state.adapter` is the per-turn scratch, seeded with the
+ *   BuiltTurn's `{ readOnly, agent }` before the first event
  * @property {(review: object, request: { adversarial: boolean }) => { native: false, batches?: any, promptTemplate: string, schemaCarrier: "inline" | "path" | "flag" | "embed" }} reviewPlan
  * @property {(input: { answerText: string | null, structured: object | null, unreviewed: string[], batch: object | null, ledger: object[] }) => object | null} finalizeReview
  *   `answerText` is the complete spooled answer (uncapped); called only after every success condition holds

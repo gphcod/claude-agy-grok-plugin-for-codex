@@ -101,7 +101,8 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
       childArgs: built.args, promptFile: built.promptFile ?? null, answerFile: built.answerFile ?? null,
       argv: [turn.launcher.command, ...turn.launcher.args, ...built.args],
     });
-    if (built.promptFile) io.writeFileSync(built.promptFile, built.stdin ?? turn.prompt ?? "");
+    // A prompt-file adapter may compose the file itself (promptText: instructions plus text), without piping stdin.
+    if (built.promptFile) io.writeFileSync(built.promptFile, built.promptText ?? built.stdin ?? turn.prompt ?? "");
     if (turn.reviewFiles) {
       const root = path.join(job.dir, "review-input");
       io.mkdirSync(root, { recursive: true });
@@ -185,6 +186,8 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
           return true;
         },
       });
+      // parseEvent sees the turn's mode in its per-turn scratch: a read-only guard (Grok's FORBIDDEN catalogue) fails closed.
+      Object.assign(reader.state.adapter, { readOnly: built.readOnly !== false, agent: built.agent ?? null });
       await new Promise((resolve) => {
         let settled = false, exitTimer = null, timer = null;
         const handlers = new Map();
