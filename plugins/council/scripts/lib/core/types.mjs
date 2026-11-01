@@ -54,6 +54,9 @@
  * @property {string} [fatal] @property {object} [denied] @property {string} [incomplete] @property {object} [structured]
  * @property {string | string[]} [edited] @property {string} [failedCommand] @property {number} [costUsd] @property {object} [usage]
  * @property {string} [model] the model the provider reports using (Claude's system/init); stored as the job's model when `default` was requested
+ * @property {string} [unconfirmed] the turn finished without confirming its thread: the answer and exit code stand, this text is the
+ *   footer hint, and the thread is not resumable (job `unconfirmed`, thread record `resumable: false`)
+ * A `fatal` event may also carry `costUsd`, `usage` and `structured`; they are kept with the failure.
  */
 /**
  * @typedef {object} NormalizedReview

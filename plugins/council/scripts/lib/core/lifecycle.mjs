@@ -366,6 +366,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     error, cleanupPending: !cleanupConfirmed, endedAt: new Date().toISOString(),
     edited: [...(seen?.edited ?? [])], failedCommands: [...(seen?.failedCommands ?? []), ...(hookOutcome?.failedCommands ?? [])], cost: seen?.costUsd ?? null, usage: seen?.usage ?? null,
     answerClipped: parsed?.answerClipped ?? false, denied: denied.length ? denied : undefined,
+    unconfirmed: seen?.unconfirmed ?? null, ...(outcome === "failed" && seen?.structured ? { structured: seen.structured } : {}),
   });
   delete job.stderrTail;
   try {
@@ -376,7 +377,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     if (job.threadId && job.admitted) {
       (hooks.saveThread ?? saveThread)(ctx.home, { provider, threadId: job.threadId, cwd: job.cwd, session: job.session, model: job.model, modelInput: job.modelInput ?? null, effort: job.effort,
         requestedEffort: job.requestedEffort ?? null, tier: job.tier, round: job.round, rounds: job.rounds, roundsSet: job.roundsSet, agent: job.agent ?? null, web: job.web, readOnly: job.readOnly,
-        policyVersion: turn.policyVersion ?? null, lastJob: job.id });
+        policyVersion: turn.policyVersion ?? null, lastJob: job.id, ...(job.unconfirmed ? { resumable: false, unconfirmed: job.unconfirmed } : {}) });
     }
     save(job); finishMarker(job);
     if (cleanupConfirmed) releaseClaims(ctx.home, job);

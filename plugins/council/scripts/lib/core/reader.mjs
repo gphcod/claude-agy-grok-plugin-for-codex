@@ -14,7 +14,7 @@ const PATH_CAP = 10000;
  * edited (Set), failedCommands[], costUsd, usage, toolSteps, hasText, lastEvent, adapter (the adapter's per-turn scratch).
  */
 export function createReader(adapter, { cwd = process.cwd(), expectedThreadId = null, maxLineBytes = adapter.maxLineBytes ?? LINE_CAP, onText, onFailure, onThread, onEvent } = {}) {
-  const state = { threadId: null, model: null, completed: false, failed: null, denials: [], incomplete: null, structured: null, edited: new Set(), failedCommands: [],
+  const state = { threadId: null, model: null, completed: false, failed: null, denials: [], incomplete: null, unconfirmed: null, structured: null, edited: new Set(), failedCommands: [],
     costUsd: null, usage: null, toolSteps: 0, hasText: false, lastEvent: null, events: 0, adapter: {} };
   const decoder = new StringDecoder("utf8");
   let buffer = "", bytes = 0, broken = false, separate = false, refused = null;
@@ -31,7 +31,13 @@ export function createReader(adapter, { cwd = process.cwd(), expectedThreadId = 
   };
   function apply(result) {
     if (!result) return;
-    if (result.fatal) { fail(result.fatal); return; }
+    if (result.fatal) {
+      // A fatal event may carry the turn's cost, usage and structured output: they are kept with the failure.
+      if (typeof result.costUsd === "number") state.costUsd = result.costUsd;
+      if (result.usage) state.usage = result.usage;
+      if (result.structured !== undefined) state.structured = result.structured;
+      fail(result.fatal); return;
+    }
     if (result.threadId !== undefined && result.threadId !== null) {
       if (expectedThreadId && String(result.threadId).toLowerCase() !== String(expectedThreadId).toLowerCase()) { fail(`the provider answered on thread ${JSON.stringify(result.threadId)}, expected ${expectedThreadId}`); return; }
       if (state.threadId === null && refused === null) {
@@ -48,6 +54,8 @@ export function createReader(adapter, { cwd = process.cwd(), expectedThreadId = 
     }
     if (result.denied) state.denials.push(result.denied);
     if (result.incomplete) state.incomplete = result.incomplete;
+    // The turn finished but the provider never confirmed its thread: the answer stands, the thread is not resumable.
+    if (result.unconfirmed) state.unconfirmed ??= typeof result.unconfirmed === "string" ? result.unconfirmed : "thread not confirmed: start a new ask";
     if (result.structured !== undefined) state.structured = result.structured;
     if (result.edited) {
       for (const p of [].concat(result.edited)) { state.edited.add(relative(p)); if (state.edited.size > PATH_CAP) { fail("too many edited paths in event stream"); return; } }
