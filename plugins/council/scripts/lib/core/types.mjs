@@ -77,7 +77,8 @@
  * @property {(ctx: { job: object, request: TurnRequest, cwd: string, env: object }) => any} [beforeTurn]
  * @property {(ctx: { job: object, request: TurnRequest | null, cwd: string, env: object }, outcome: { cleanupConfirmed: true, reason: string | null, completed: boolean, denials: object[], deferred?: true }) => any} [afterTurn]
  *   once, only after verified cleanup: a turn that ends with cleanup pending defers it to the `cancel` that confirms
- *   cleanup (request null, `deferred: true`, its result ignored)
+ *   cleanup (request null, `deferred: true`, its result ignored). A deferred run whose cancel died mid-hook is run again
+ *   by the next cancel (S2.10), so afterTurn must tolerate a re-run (idempotent, or harmless when repeated)
  * @property {(line: string, state: object) => ParsedEvent | null} parseEvent
  * @property {(review: object, request: { adversarial: boolean }) => { native: false, batches?: any, promptTemplate: string, schemaCarrier: "inline" | "path" | "flag" | "embed" }} reviewPlan
  * @property {(input: { answerText: string | null, structured: object | null, unreviewed: string[], batch: object | null, ledger: object[] }) => object | null} finalizeReview

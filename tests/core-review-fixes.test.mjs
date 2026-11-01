@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { makeWorld, jobIdOf, footerOf, alive, until, turnFor, ctxFor, adapter, ENTRY } from "./helpers.mjs";
-import { claimRequest, createJob, loadJob, markDone, loadThread, lookupRequest, requestFingerprint, requestKey, stateOf } from "../plugins/council/scripts/lib/core/jobs.mjs";
+import { claimRequest, createJob, loadJob, markDone, saveJob, loadThread, lookupRequest, requestFingerprint, requestKey, stateOf } from "../plugins/council/scripts/lib/core/jobs.mjs";
 import { claimThread, inspectClaim } from "../plugins/council/scripts/lib/core/claims.mjs";
 import { executionController, ownedExecution } from "../plugins/council/scripts/lib/core/execution.mjs";
 import { runManagedTurn, cancelManaged } from "../plugins/council/scripts/lib/core/lifecycle.mjs";
@@ -327,7 +327,7 @@ test("S2.9 fix 3: the deferred afterTurn is reserved before stop and release; EN
   const turn = turnFor(w);
   const result = await runManagedTurn(ctxFor(w), adapter, turn, null, timers, { control: blind });
   assert.equal(result.job.cleanupPending, true);
-  const io = { ...fs, writeFileSync(file, ...rest) { if (path.basename(String(file)) === "after-turn") throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" }); return fs.writeFileSync(file, ...rest); } };
+  const io = { ...fs, writeFileSync(file, ...rest) { if (path.basename(String(file)).startsWith("after-turn")) throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" }); return fs.writeFileSync(file, ...rest); } };
   const first = await cancelManaged(ctxFor(w), loadJob(w.home, result.job.id), { control: empty, adapter, io, timeoutMs: 2000 });
   assert.equal(first.code, 1, JSON.stringify(first));
   assert.match(first.error, /afterTurn could not be reserved \(no space left on device\); cleanup is confirmed but the claim is kept/);
@@ -350,4 +350,44 @@ test("S2.9 (c): the leader's identity is recorded right after spawn, so even a t
   assert.equal(stored.leader.pid, stored.pid);
   assert.ok(stored.leader.stamp, "pid and creation time");
   assert.ok(stored.execution.some((r) => r.pid === stored.pid && r.stamp === stored.leader.stamp), "persisted with the launch");
+});
+
+test("S2.10: a cancel that finds the deferred afterTurn running under a live holder touches nothing; only a settled hook releases, once", async () => {
+  const w = makeWorld();
+  const turn = turnFor(w);
+  const result = await runManagedTurn(ctxFor(w), adapter, turn, null, timers, { control: blind });
+  const job = loadJob(w.home, result.job.id);
+  // The job's companion is gone; this process, the hook's holder, is live in the table both cancels read.
+  saveJob({ ...job, companionPid: 999999, companionIdentity: { pid: 999999, stamp: "1" } });
+  const me = { pid: process.pid, stamp: "me" };
+  const control = { ...empty, self: () => me, snapshot: () => ({ state: "ok", rows: [{ ...me, raw: "node", argv: ["node"] }] }) };
+  let open, entered;
+  const barrier = new Promise((resolve) => { open = resolve; });
+  const inside = new Promise((resolve) => { entered = resolve; });
+  let runs = 0;
+  const gated = { ...adapter, afterTurn: async () => { runs += 1; entered(); await barrier; } };
+  const a = cancelManaged(ctxFor(w), loadJob(w.home, job.id), { control, adapter: gated, timeoutMs: 5000 });
+  await inside;
+  const b = await cancelManaged(ctxFor(w), loadJob(w.home, job.id), { control, adapter: gated, timeoutMs: 5000 });
+  assert.deepEqual([b.code, b.status], [20, "running"], JSON.stringify(b));
+  assert.match(b.error, /another cancel \(pid \d+\) is running job [a-z0-9]{16}'s deferred afterTurn; nothing was released/);
+  assert.equal(inspectClaim(w.home, "null", turn.thread).state, "owned", "the claim is kept while the hook runs");
+  assert.ok(!fs.existsSync(path.join(job.dir, "stopped")));
+  open();
+  assert.equal((await a).code, 0);
+  assert.equal(inspectClaim(w.home, "null", turn.thread).state, "absent");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(job.dir, "after-turn"), "utf8")).state, "settled");
+  assert.equal((await cancelManaged(ctxFor(w), loadJob(w.home, job.id), { control, adapter: gated, timeoutMs: 2000 })).code, 0);
+  assert.equal(runs, 1, "the hook ran once");
+});
+
+test("S2.10: a running reservation whose holder is proven gone is taken over and the hook runs again before release", async () => {
+  const w = makeWorld();
+  const turn = turnFor(w);
+  const result = await runManagedTurn(ctxFor(w), adapter, turn, null, timers, { control: blind });
+  fs.writeFileSync(path.join(result.job.dir, "after-turn"), JSON.stringify({ state: "running", pid: 999998, identity: { pid: 999998, stamp: "x" }, startedAt: "2026-10-31T00:00:00.000Z" }));
+  const r = await cancelManaged(ctxFor(w), loadJob(w.home, result.job.id), { control: empty, adapter, timeoutMs: 2000 });
+  assert.equal(r.code, 0, JSON.stringify(r));
+  assert.deepEqual(w.hooks().map((h) => h.hook), ["beforeTurn", "afterTurn"]);
+  assert.equal(inspectClaim(w.home, "null", turn.thread).state, "absent");
 });

@@ -13,6 +13,7 @@ import { executionController, companionState, recordRecoveryEvidence, QUERY_MS }
 import { spawnChild } from "./launcher.mjs";
 import { createReader } from "./reader.mjs";
 import { readAnswer } from "./output.mjs";
+import { writeFileAtomic } from "./fs.mjs";
 
 /** Production defaults; tests inject shorter ones through hooks. */
 export const SHUTDOWN_MS = 60000;
@@ -386,17 +387,44 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
 }
 
 /**
- * The afterTurn a turn deferred because its cleanup was unverified, run once by the cancel that confirms cleanup, before
- * that cancel marks the job stopped and releases its claims: the `after-turn` marker is created exclusively first, so a
- * failure before the hook begins (`{blocked}`) leaves the job cleanup-pending with its claim and a retry runs it; once
- * the marker exists the hook never runs again. `request` is null there and its result changes no finalized record.
+ * The afterTurn a turn deferred because its cleanup was unverified, run by the cancel that confirms cleanup, before that
+ * cancel marks the job stopped and releases its claims. Its reservation, the `after-turn` record, carries a state:
+ * `running` with the holder's pid and identity (created whole and exclusively: a private file linked into place), then
+ * `settled` with the outcome (an atomic rename). Only `settled` lets a cancel mark stopped and release. A cancel that
+ * finds `running` under a live holder touches nothing (`{busy}`, exit 20); under a holder that cannot be checked or an
+ * unreadable record it touches nothing either (`{blocked}`, exit 1); under a holder proven gone it takes the reservation
+ * over and runs the hook again, so afterTurn must tolerate a re-run. A failure before the hook begins is `{blocked}`:
+ * the job stays cleanup-pending with its claim and a retry runs it. `request` is null and the result changes no record.
  */
-async function deferredAfterTurn(ctx, job, adapter, io) {
+async function deferredAfterTurn(ctx, job, adapter, io, control, snapshot) {
   if (!job.afterTurnPending || !adapter?.afterTurn) return {};
-  try { io.writeFileSync(path.join(job.dir, "after-turn"), "", { flag: "wx" }); }
-  catch (error) { return error.code === "EEXIST" ? {} : { blocked: `afterTurn could not be reserved (${error.message}); cleanup is confirmed but the claim is kept: run cancel ${job.id} again` }; }
-  try { await adapter.afterTurn({ job, request: null, cwd: job.cwd, env: ctx.env }, { ...job.afterTurnPending, cleanupConfirmed: true, deferred: true }); return {}; }
-  catch (error) { return { error: `afterTurn failed: ${error.message}` }; }
+  const file = path.join(job.dir, "after-turn");
+  const me = { state: "running", pid: process.pid, identity: control.self?.() ?? null, startedAt: new Date().toISOString() };
+  const retry = `run cancel ${job.id} again`;
+  const read = () => { try { return JSON.parse(io.readFileSync(file, "utf8")); } catch (error) { return error.code === "ENOENT" ? null : { state: "unreadable" }; } };
+  let reserved = false;
+  try {
+    const temp = `${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
+    try { io.writeFileSync(temp, JSON.stringify(me), { flag: "wx" }); io.linkSync(temp, file); reserved = true; }
+    finally { try { io.rmSync(temp, { force: true }); } catch { /* best effort */ } }
+  } catch (error) { if (error.code !== "EEXIST") return { blocked: `afterTurn could not be reserved (${error.message}); cleanup is confirmed but the claim is kept: ${retry}` }; }
+  if (!reserved) {
+    const record = read();
+    if (record?.state === "settled") return record.outcome === "ok" ? {} : { error: record.outcome };
+    if (record?.state !== "running") return { blocked: `job ${job.id}'s deferred afterTurn record is unreadable; the claim is kept` };
+    const holder = companionState({ companionPid: record.pid, companionIdentity: record.identity }, snapshot);
+    if (holder === "live") return { busy: `another cancel (pid ${record.pid}) is running job ${job.id}'s deferred afterTurn; nothing was released: ${retry} after it settles` };
+    if (holder !== "gone") return { blocked: `the holder of job ${job.id}'s deferred afterTurn (pid ${record.pid}) cannot be checked; the claim is kept: ${retry}` };
+    try { writeFileAtomic(file, JSON.stringify(me)); } catch (error) { return { blocked: `afterTurn could not be taken over (${error.message}); the claim is kept: ${retry}` }; }
+    const now = read();
+    if (now?.pid !== me.pid || now?.startedAt !== me.startedAt) return { busy: `another cancel took over job ${job.id}'s deferred afterTurn; nothing was released: ${retry} after it settles` };
+  }
+  let outcome = "ok";
+  try { await adapter.afterTurn({ job, request: null, cwd: job.cwd, env: ctx.env }, { ...job.afterTurnPending, cleanupConfirmed: true, deferred: true }); }
+  catch (error) { outcome = `afterTurn failed: ${error.message}`; }
+  try { writeFileAtomic(file, JSON.stringify({ state: "settled", outcome, settledAt: new Date().toISOString() })); }
+  catch (error) { return { blocked: `afterTurn ran but its settlement could not be stored (${error.message}); the claim is kept: ${retry}` }; }
+  return outcome === "ok" ? {} : { error: outcome };
 }
 
 /**
@@ -425,7 +453,8 @@ export async function cancelManaged(ctx, job, { timeoutMs = 30000, control = exe
       if (found.state === "unknown") unsure = "execution ownership/cleanup cannot be confirmed; claim and cancellation request retained";
       else if (found.state === "gone") {
         if (job.unattributedPipes && !confirmEnded) return { status: "unknown", code: 1, job: view(), error: `an unidentified process held job ${job.id}'s output; the thread stays locked until cancel ${job.id} --confirm-ended after checking the process table` };
-        const hook = await deferredAfterTurn(ctx, job, adapter, io);
+        const hook = await deferredAfterTurn(ctx, job, adapter, io, control, snapshot);
+        if (hook.busy) return { status: "running", code: 20, job: view(), error: hook.busy };
         if (hook.blocked) return { status: "unknown", code: 1, job: view(), error: hook.blocked };
         markStopped(job);
         releaseClaims(ctx.home, job);
