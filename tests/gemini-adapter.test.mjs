@@ -216,3 +216,144 @@ test("S5.2 the print timeout follows the deadline less a margin; the review prom
   const content = JSON.parse(stdinMessage({ contractPath: CONTRACT, instructions: null, prompt: "Instructions for this turn (structured code review" })).message.content;
   assert.ok(content.endsWith("\n\nInstructions for this turn (structured code review"));
 });
+
+// ---------------------------------------------------------------------------------------------------------------- S5.3
+
+test("S5.3 ok and resume: the conversation id from init and result, the response as the answer, usage summed per turn", () => {
+  const ok = read(fill(STREAMS.ok));
+  assert.deepEqual([ok.threadId, ok.completed, ok.failed, ok.text, ok.denials.length], ["conv-1", true, null, "pong\n", 0]);
+  assert.equal(ok.usage.input_tokens, 7686);
+  const resume = read(fill(STREAMS.resume, "conv-2"), { expectedThreadId: "conv-2" });
+  assert.deepEqual([resume.completed, resume.text, resume.usage.input_tokens, resume.usage.conversation.input_tokens], [true, "pong2\n", 2274, 9960], "this turn's usage, and the conversation's");
+  const wrong = read(fill(STREAMS.resume, "conv-3"), { expectedThreadId: "conv-2" });
+  assert.match(wrong.failed, /answered on thread "conv-3", expected conv-2/);
+});
+
+test("S5.3 denials: a deny-rule tool error is denied with the answer kept; denied_actions with an empty response is denied, not an empty-response failure", () => {
+  const rule = read(fill(STREAMS.denied));
+  assert.deepEqual([rule.completed, rule.failed, rule.denials.map((d) => d.tool)], [true, null, ["write_file", "run_command"]]);
+  assert.equal(rule.denials[0].write, true);
+  assert.match(rule.text, /^Step 1: Failed/);
+  const prompt = read(fill(STREAMS["denied-prompt"]));
+  assert.deepEqual([prompt.completed, prompt.failed], [true, null], "the reader latches the first fatal, so denied_actions is checked first");
+  assert.deepEqual(prompt.denials.map((d) => d.tool), ["run_command", "command"]);
+  assert.deepEqual(prompt.denials[1].actions, [{ action: "command", display: "RunCommand" }]);
+  assert.match(prompt.text, /^agy denied command \(RunCommand\): headless mode cannot prompt/);
+});
+
+test("S5.3 failures: status ERROR, print_timeout, empty response, duplicate result, missing result, malformed lines", () => {
+  assert.match(read(fill(STREAMS["effort-error"])).failed, /^agy status ERROR: invalid model selection/);
+  assert.equal(read(fill(STREAMS["effort-error"])).threadId, null, "an empty conversation id is no thread");
+  assert.match(read(fill(STREAMS["print-timeout"])).failed, /^print_timeout: /);
+  const empty = fill(STREAMS.ok).map((l) => l.replace('"response":"pong\\n"', '"response":"  "'));
+  assert.equal(read(empty).failed, "agy returned an empty response");
+  const ok = fill(STREAMS.ok);
+  assert.equal(read([...ok, ok.at(-1)]).failed, "agy sent a duplicate terminal result");
+  const missing = read(ok.slice(0, -1));
+  assert.deepEqual([missing.completed, missing.failed], [false, null], "EOF without a result: the lifecycle fails the turn (exit 1)");
+  assert.equal(read(["{not json"]).failed, "agy emitted malformed NDJSON");
+  assert.equal(read([JSON.stringify({ type: "x" })]).failed, "agy event name missing");
+  assert.equal(read([JSON.stringify({ event: "result", result: { response: "x" } })]).failed, "agy sent a missing or malformed terminal result");
+  const interrupted = read([JSON.stringify({ event: "result", result: { conversation_id: "c", status: "ERROR", error: "interrupted", finished_reason: "interrupted", response: "" } })]);
+  assert.match(interrupted.failed, /agy status ERROR: interrupted/);
+  assert.equal(read([JSON.stringify({ event: "unknown_kind" }), ...ok]).completed, true, "unknown events are ignored");
+});
+
+test("S5.3 caps: a frame over 4 MiB and a partial answer over 4 MiB are fatal", () => {
+  const huge = JSON.stringify({ event: "step_update", step_update: { step_type: "agent_response", state: "ACTIVE", text_delta: "x".repeat(LIMIT) } });
+  assert.match(read([huge]).failed, /JSONL line over 4194304 bytes/);
+  const chunk = JSON.stringify({ event: "step_update", step_update: { step_type: "agent_response", state: "ACTIVE", text_delta: "y".repeat(1024 * 1024) } });
+  assert.equal(read([chunk, chunk, chunk, chunk, chunk]).failed, "agy's partial answer exceeds the 4 MiB limit");
+});
+
+test("S5.3 tool steps: failed commands, task edits from write tools, a completed write on a read-only turn is incomplete", () => {
+  const step = (tool, state, parameters, output) => JSON.stringify({ event: "step_update", step_update: { conversation_id: "conv-1", step_type: "tool", state, tool_name: tool, tool_info: { name: tool, parameters, ...(output ? { output } : {}) } } });
+  const ok = fill(STREAMS.ok);
+  const task = read([step("run_command", "DONE", { CommandLine: "npm test" }, "Command exited with code 2.\n\nCommand output:\nfail"), step("run_command", "DONE", { CommandLine: "ls" }, "Command exited with code 0."),
+    step("run_command", "ERROR", { CommandLine: "make" }), step("write_to_file", "DONE", { TargetFile: "/repo/src/a.js" }), step("write_to_file", "ERROR", { TargetFile: "/repo/b.js" }), ...ok], { readOnly: false });
+  assert.deepEqual(task.failedCommands, ["npm test", "make"]);
+  assert.deepEqual([...task.edited], ["src/a.js"], "a failed write is no edit");
+  assert.equal(task.toolSteps, 5);
+  const ro = read([step("replace_file_content", "DONE", { TargetFile: "/repo/a.js" }), ...ok], { readOnly: true });
+  assert.deepEqual([ro.incomplete, ro.edited.size], ["agy completed replace_file_content on a read-only turn", 0]);
+  assert.equal(read(fill(STREAMS.task), { readOnly: false }).failedCommands.length, 0);
+  assert.equal(read(fill(STREAMS.web)).toolSteps, 1, "web search is a tool step, not a denial (S1.2 trade-off)");
+});
+
+test("S5.3 structured review output comes from result.structured_output; finalizeReview falls back to the response text", () => {
+  const review = read(fill(STREAMS["review-findings"]));
+  assert.equal(review.structured.findings[0].id, "F1");
+  assert.equal(JSON.parse(review.text).findings[0].id, "F1");
+  const malformed = read(fill(STREAMS["review-malformed"]));
+  assert.deepEqual([malformed.completed, malformed.failed], [true, null], "an empty response with structured output is no empty-response failure");
+  assert.equal(JSON.parse(malformed.text).findings[0].id, undefined, "the validator, not the reader, rejects it (exit 10)");
+  const parsed = gemini.finalizeReview({ answerText: '{"verdict":"approve"}', structured: null, unreviewed: ["u"] });
+  assert.deepEqual(parsed, { structured: { verdict: "approve" }, unreviewed: ["u"] });
+  assert.deepEqual(gemini.finalizeReview({ answerText: "not json", structured: null, unreviewed: [] }), { structured: null, unreviewed: [] });
+  const s = { verdict: "approve" };
+  assert.equal(gemini.finalizeReview({ answerText: "{}", structured: s, unreviewed: [] }).structured, s);
+});
+
+test("S5.3 the optional lifecycle hooks are present", () => {
+  for (const name of ["beforeTurn", "afterTurn"]) assert.equal(typeof gemini[name], "function");
+});
+
+test("S5.3 snapshots: bounded, complete in a small repository, unchecked outside Git, partial past the file cap", () => {
+  const dir = repo();
+  const before = snapshot(workspace(dir));
+  assert.equal(before.coverage, "tracked-and-unignored");
+  fs.writeFileSync(path.join(dir, "a.txt"), "changed\n");
+  fs.writeFileSync(path.join(dir, "new.txt"), "n\n");
+  const after = snapshot(workspace(dir));
+  assert.deepEqual(changes(before, after), { changed: true, files: ["a.txt", "new.txt"], coverage: "complete" });
+  assert.deepEqual(changes(after, snapshot(workspace(dir))).changed, false);
+  assert.equal(snapshot(workspace(tmp())).coverage, "unchecked");
+  for (let i = 0; i < 4; i++) fs.writeFileSync(path.join(dir, `f${i}.txt`), "x");
+  assert.equal(snapshot(workspace(dir), {}, { maxFiles: 2 }).coverage, "partial");
+});
+
+test("S5.3 hooks: a task reports edited paths relative to its cwd; a read-only turn that changed the workspace is incomplete", async () => {
+  const dir = repo();
+  fs.mkdirSync(path.join(dir, "sub"));
+  fs.writeFileSync(path.join(dir, "sub", "keep.txt"), "dirty before the turn\n");
+  const job = jobIn(path.join(dir, "sub"), { verb: "task", readOnly: false });
+  const ctx = { job, request: {}, cwd: job.cwd, env: { PATH: process.env.PATH } };
+  await gemini.beforeTurn(ctx);
+  fs.writeFileSync(path.join(dir, "sub", "made.txt"), "m\n");
+  fs.writeFileSync(path.join(dir, "a.txt"), "edited\n");
+  const outcome = await gemini.afterTurn(ctx, { cleanupConfirmed: true });
+  assert.deepEqual(outcome, { coverage: "complete", edited: ["../a.txt", "made.txt"] }, "the pre-existing dirty file is unchanged, so not edited");
+  assert.equal(job.mutationCoverage, "complete");
+  const ro = jobIn(dir);
+  const rctx = { job: ro, request: {}, cwd: dir, env: { PATH: process.env.PATH } };
+  await gemini.beforeTurn(rctx);
+  assert.deepEqual(await gemini.afterTurn(rctx, {}), { coverage: "complete" }, "an unchanged workspace");
+  const ro2 = jobIn(dir);
+  const r2 = { job: ro2, request: {}, cwd: dir, env: { PATH: process.env.PATH } };
+  await gemini.beforeTurn(r2);
+  fs.writeFileSync(path.join(dir, "touched.txt"), "t\n");
+  assert.deepEqual(await gemini.afterTurn(r2, {}), { coverage: "complete", incomplete: "the workspace changed during a read-only turn: touched.txt" });
+});
+
+test("S5.3 hooks: unavailable snapshots leave coverage unknown; a re-run of afterTurn (deferred cancel) reuses the stored after snapshot", async () => {
+  const outside = jobIn(tmp(), { verb: "task", readOnly: false });
+  const octx = { job: outside, request: {}, cwd: outside.cwd, env: { PATH: process.env.PATH } };
+  await gemini.beforeTurn(octx);
+  fs.writeFileSync(path.join(outside.cwd, "x.txt"), "x");
+  assert.deepEqual(await gemini.afterTurn(octx, {}), { coverage: "unknown" });
+  assert.equal(outside.mutationCoverage, "unknown");
+  const noBefore = jobIn(repo());
+  assert.deepEqual(await gemini.afterTurn({ job: noBefore, request: null, cwd: noBefore.cwd, env: {} }, { deferred: true }), { coverage: "unknown" }, "no before snapshot: unknown, never a clean result");
+  const dir = repo();
+  const job = jobIn(dir);
+  const ctx = { job, request: null, cwd: dir, env: { PATH: process.env.PATH } };
+  await gemini.beforeTurn(ctx);
+  fs.writeFileSync(path.join(dir, "during.txt"), "d");
+  const first = await gemini.afterTurn(ctx, { deferred: true, cleanupConfirmed: true });
+  assert.match(first.incomplete, /during\.txt/);
+  assert.equal(job.incomplete, first.incomplete, "a deferred run records the finding on the job the cancel saves");
+  fs.writeFileSync(path.join(dir, "later.txt"), "user's own work after the turn");
+  assert.deepEqual(await gemini.afterTurn(ctx, { deferred: true, cleanupConfirmed: true }), first, "the re-run compares the same stored snapshots");
+  await gemini.beforeTurn(ctx);
+  assert.deepEqual(await gemini.afterTurn(ctx, {}), first, "beforeTurn never replaces a stored before snapshot");
+});

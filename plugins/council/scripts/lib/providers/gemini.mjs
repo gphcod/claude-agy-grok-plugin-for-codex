@@ -94,6 +94,177 @@ export function allowCommandProblem(value) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Bounded Git snapshots (AGYX snapshot.mjs, synchronous): HEAD, the porcelain status, the staged and unstaged diffs,
+// and the hashes of the changed files, each git call bounded in time and bytes.
+
+function git(root, args, env, { timeoutMs = SNAPSHOT.timeoutMs, cap = SNAPSHOT.maxBytes } = {}) {
+  const r = spawnSync("git", args, { cwd: root, env: { ...env, LC_ALL: "C", TZ: "UTC", GIT_OPTIONAL_LOCKS: "0" }, encoding: null, shell: false, windowsHide: true,
+    timeout: timeoutMs, maxBuffer: cap, stdio: ["ignore", "pipe", "pipe"] });
+  return { code: r.error ? null : r.status, output: r.stdout ?? Buffer.alloc(0), limited: Boolean(r.error) };
+}
+/** The Git scope of a workspace: its realpath and repository root, or `git: false` outside Git. */
+export function workspace(cwd, env = {}) {
+  const real = fs.realpathSync(cwd);
+  const r = git(real, ["rev-parse", "--show-toplevel"], env);
+  return { cwd: real, root: r.code === 0 ? fs.realpathSync(r.output.toString("utf8").trim()) : real, git: r.code === 0 };
+}
+function readBounded(file, remaining) {
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
+  const fd = fs.openSync(file, flags);
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) return null;
+    const buffer = Buffer.alloc(Math.min(stat.size + 1, remaining + 1));
+    const read = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    const data = buffer.subarray(0, read);
+    return data.length > remaining || data.length !== stat.size || fs.fstatSync(fd).size !== stat.size ? null : data;
+  } finally { fs.closeSync(fd); }
+}
+/** One snapshot: coverage `tracked-and-unignored` (complete), `partial` (a bound was hit) or `unchecked` (outside Git). */
+export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxBytes = SNAPSHOT.maxBytes, timeoutMs = SNAPSHOT.timeoutMs } = {}) {
+  const start = Date.now();
+  if (!scope.git) return { coverage: "unchecked", reason: "outside Git", files: {} };
+  const opts = { timeoutMs, cap: maxBytes };
+  const head = git(scope.root, ["rev-parse", "--verify", "HEAD"], env, opts);
+  const status = git(scope.root, ["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"], env, opts);
+  const staged = git(scope.root, ["diff", "--cached", "--no-ext-diff", "--no-textconv", "--binary"], env, opts);
+  const diff = git(scope.root, ["diff", "--no-ext-diff", "--no-textconv", "--binary", ...(head.code === 0 ? ["HEAD"] : [])], env, opts);
+  let partial = [status, diff, staged].some((r) => r.code !== 0 || r.limited);
+  const entries = status.output.toString("utf8").split("\0");
+  const files = {};
+  let bytes = 0;
+  for (let i = 0; i < entries.length; i += 1) {
+    const entry = entries[i];
+    if (!entry) continue;
+    const state = entry.slice(0, 2), name = entry.slice(3);
+    if (state.includes("R") || state.includes("C")) i += 1;
+    if (Object.keys(files).length >= maxFiles || Date.now() - start > timeoutMs * 4) { partial = true; break; }
+    const file = path.resolve(scope.root, name);
+    if (!file.startsWith(scope.root + path.sep)) { partial = true; continue; }
+    try {
+      const stat = fs.lstatSync(file);
+      if (!stat.isFile() && !stat.isSymbolicLink()) { partial = true; files[name] = { state, kind: "non-file" }; continue; }
+      if (stat.size + bytes > maxBytes) { partial = true; files[name] = { state, hash: null }; continue; }
+      let data;
+      if (stat.isSymbolicLink()) data = Buffer.from(fs.readlinkSync(file));
+      else {
+        data = readBounded(file, maxBytes - bytes);
+        if (!data) { partial = true; files[name] = { state, hash: null }; continue; }
+      }
+      bytes += data.length;
+      files[name] = { state, hash: sha(data), ...(stat.isSymbolicLink() ? { symlink: true } : {}) };
+    } catch (error) {
+      if (error.code === "ENOENT") files[name] = { state, deleted: true };
+      else { partial = true; files[name] = { state, error: error.code }; }
+    }
+  }
+  return { coverage: partial ? "partial" : "tracked-and-unignored", root: scope.root, head: head.code === 0 ? head.output.toString("utf8").trim() : null,
+    diff: sha(diff.output), staged: sha(staged.output), files, bytes, ms: Date.now() - start };
+}
+/** What changed between two snapshots (AGYX `changes`); `coverage` is complete only when both snapshots were. */
+export function changes(before, after) {
+  const names = uniq([...Object.keys(before.files ?? {}), ...Object.keys(after.files ?? {})])
+    .filter((file) => JSON.stringify(before.files?.[file]) !== JSON.stringify(after.files?.[file])).sort();
+  const changed = before.head !== after.head || before.diff !== after.diff || before.staged !== after.staged || names.length > 0;
+  const coverage = before.coverage === "tracked-and-unignored" && after.coverage === "tracked-and-unignored" ? "complete" : "partial";
+  return { changed, files: names, coverage };
+}
+const snapshotFile = (job, which) => path.join(job.dir, `snapshot-${which}.json`);
+function readJsonFile(file) { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } }
+function takeSnapshot(cwd, env) {
+  try { return snapshot(workspace(cwd, env), env); }
+  catch (error) { return { coverage: "unavailable", reason: error.message, files: {} }; }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Events (AGYX native.mjs consume, outcome.mjs classify), as ParsedEvent.
+
+/** A tool-step denial (deny rule or refused approval), or null. */
+export function denial(step) {
+  const info = step?.tool_info;
+  const error = info?.error ?? step?.error;
+  const message = typeof error === "string" ? error : error?.message;
+  if (!message || !DENIAL.test(message)) return null;
+  const tool = step.tool_name ?? info?.name ?? "unknown";
+  return { tool, write: WRITE_TOOLS.test(tool), message: clip(message, 1000), parameters: info?.parameters ?? null };
+}
+const PATH_KEYS = ["TargetFile", "AbsolutePath", "Path", "FilePath", "file_path", "path"];
+const addUsage = (sum, usage) => {
+  for (const [key, value] of Object.entries(usage ?? {})) if (typeof value === "number") sum[key] = (sum[key] ?? 0) + value;
+  return sum;
+};
+
+function stepEvent(su, scratch) {
+  const out = { threadId: typeof su.conversation_id === "string" && su.conversation_id ? su.conversation_id : undefined };
+  const denied = denial(su);
+  if (denied) return { ...out, denied, toolStep: denied.tool, describe: `denied ${denied.tool}` };
+  if (su.step_type === "agent_response") {
+    if (typeof su.text_delta === "string" && su.text_delta) {
+      scratch.partialBytes = (scratch.partialBytes ?? 0) + Buffer.byteLength(su.text_delta);
+      if (scratch.partialBytes > LIMIT) return { fatal: "agy's partial answer exceeds the 4 MiB limit" };
+      scratch.partial = (scratch.partial ?? "") + su.text_delta;
+    }
+    if (su.state === "DONE" && su.usage) scratch.usage = addUsage(scratch.usage ?? {}, su.usage);
+    return { ...out, describe: "agent response" };
+  }
+  if (su.step_type === "tool" && ["DONE", "ERROR"].includes(su.state)) {
+    const tool = su.tool_name ?? su.tool_info?.name ?? "tool";
+    const parameters = su.tool_info?.parameters ?? {};
+    const result = { ...out, toolStep: tool, describe: `tool ${tool} ${su.state.toLowerCase()}` };
+    if (tool === "run_command") {
+      const command = typeof parameters.CommandLine === "string" ? parameters.CommandLine : "run_command";
+      const exit = /Command exited with code (-?\d+)/.exec(su.tool_info?.output ?? "")?.[1];
+      if (su.state === "ERROR" || (exit !== undefined && Number(exit) !== 0)) result.failedCommand = clip(command, 1000);
+    } else if (WRITE_TOOLS.test(tool) && su.state === "DONE") {
+      const target = PATH_KEYS.map((k) => parameters[k]).find((v) => typeof v === "string" && v);
+      if (scratch.readOnly) return { ...result, incomplete: `agy completed ${tool} on a read-only turn` };
+      if (target) result.edited = target;
+    }
+    return result;
+  }
+  return { ...out, describe: su.step_type ?? "step" };
+}
+
+function resultEvent(r, scratch) {
+  if (scratch.result) return { fatal: "agy sent a duplicate terminal result" };
+  scratch.result = true;
+  if (!r || typeof r !== "object" || typeof r.status !== "string") return { fatal: "agy sent a missing or malformed terminal result" };
+  const threadId = typeof r.conversation_id === "string" && r.conversation_id ? r.conversation_id : undefined;
+  const usage = { ...(scratch.usage ?? {}), ...(r.usage ? { conversation: r.usage } : {}) };
+  const response = typeof r.response === "string" ? r.response : "";
+  // A prompt-style denial (request-review, a tool headless mode cannot prompt for) empties the response; it is a denial
+  // (exit 10), checked before the empty-response rule because the reader latches the first fatal (A5.1, S1.9 F1).
+  if (Array.isArray(r.denied_actions) && r.denied_actions.length) {
+    const actions = r.denied_actions.map((a) => ({ action: a?.action ?? "unknown", display: a?.display_name ?? null }));
+    const text = response.trim() ? response : scratch.partial?.trim() ? scratch.partial
+      : `agy denied ${actions.map((a) => `${a.action}${a.display ? ` (${a.display})` : ""}`).join(", ")}: headless mode cannot prompt for this permission.\n`;
+    return { threadId, completed: true, denied: { tool: actions.map((a) => a.action).join(","), actions, prompt: true }, textDelta: text, usage, describe: "result (denied)" };
+  }
+  if (r.finished_reason === "print_timeout") return { fatal: "print_timeout: agy's --print-timeout passed with the turn in progress (partial output kept in events.jsonl)" };
+  if (r.status !== "SUCCESS") return { fatal: `agy status ${r.status}${r.error ? `: ${clip(r.error, 500)}` : ""}` };
+  const structured = r.structured_output && typeof r.structured_output === "object" ? r.structured_output : undefined;
+  if (!response.trim() && !structured) return { fatal: "agy returned an empty response" };
+  return { threadId, completed: true, textDelta: response.trim() ? response : `${JSON.stringify(structured)}\n`, ...(structured ? { structured } : {}), usage, describe: "result" };
+}
+
+/** One agy NDJSON line as a ParsedEvent; `state.adapter` is the per-turn scratch (seeded with readOnly). */
+export function parseEvent(line, state = { adapter: {} }) {
+  const scratch = state.adapter ?? (state.adapter = {});
+  let event;
+  try { event = JSON.parse(line); } catch { return { fatal: "agy emitted malformed NDJSON" }; }
+  if (!event || typeof event !== "object" || typeof event.event !== "string") return { fatal: "agy event name missing" };
+  switch (event.event) {
+    case "init": {
+      const id = event.conversation_id ?? event.init?.conversation_id;
+      return { threadId: typeof id === "string" && id ? id : undefined, describe: "init" };
+    }
+    case "step_update": return event.step_update && typeof event.step_update === "object" ? stepEvent(event.step_update, scratch) : null;
+    case "result": return resultEvent(event.result, scratch);
+    default: return null;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // The adapter.
 
 /** Gemini's static catalog entry (models.json); the entry merges the refreshed listing itself. */
@@ -187,9 +358,46 @@ const adapter = {
     if (!readOnly) args.push("--mode", "accept-edits");
     return { args, env: { ...env, ...depthEnv() }, stdin: stdinMessage(request), answerFile: null, readOnly, requestedThreadId: null, agent: null, contractCarrier: "stdin" };
   },
-  parseEvent() { return { fatal: "gemini events arrive in S5.3" }; },
+  /** The before snapshot, stored in the job directory so a deferred afterTurn in another process can compare (A7.5). */
+  beforeTurn(ctx) {
+    const file = snapshotFile(ctx.job, "before");
+    if (fs.existsSync(file)) return;
+    try { writeFileAtomic(file, JSON.stringify(takeSnapshot(ctx.cwd ?? ctx.job.cwd, ctx.env ?? {}))); } catch { /* afterTurn reads a missing before snapshot as unknown */ }
+  },
+  /**
+   * The after snapshot (taken once; a re-run reuses it) and the comparison: a task yields its edited paths; a read-only
+   * turn whose workspace changed is `incomplete` (exit 10); an unavailable or partial snapshot leaves the mutation
+   * coverage unknown (recorded in the job as `mutationCoverage`).
+   */
+  afterTurn(ctx, outcome = {}) {
+    const job = ctx.job;
+    const before = readJsonFile(snapshotFile(job, "before"));
+    let after = readJsonFile(snapshotFile(job, "after"));
+    if (!after) {
+      after = takeSnapshot(job.cwd ?? ctx.cwd, ctx.env ?? {});
+      try { writeFileAtomic(snapshotFile(job, "after"), JSON.stringify(after)); } catch { /* recomputed on a re-run */ }
+    }
+    const usable = (s) => s && ["tracked-and-unignored", "partial"].includes(s.coverage);
+    const diff = usable(before) && usable(after) ? changes(before, after) : null;
+    const coverage = !diff ? "unknown" : diff.coverage === "complete" ? "complete" : diff.changed ? "partial" : "unknown";
+    const cwd = job.cwd ?? ctx.cwd;
+    const root = after?.root ?? before?.root ?? cwd;
+    const paths = (diff?.files ?? []).map((f) => path.relative(cwd, path.join(root, f)).split(path.sep).join("/"));
+    job.mutationCoverage = coverage;
+    if (paths.length) job.mutationPaths = paths.slice(0, 50);
+    const result = { coverage };
+    if (job.readOnly === false || job.verb === "task") { if (paths.length) result.edited = paths; }
+    else if (diff?.changed) result.incomplete = `the workspace changed during a read-only turn${paths.length ? `: ${paths.slice(0, 5).join(", ")}` : ""}`;
+    if (outcome.deferred && result.incomplete) job.incomplete = result.incomplete;
+    return result;
+  },
+  parseEvent,
   reviewPlan() { throw new Error("gemini reviews arrive in S5.4"); },
-  finalizeReview() { throw new Error("gemini reviews arrive in S5.3"); },
+  /** result.structured_output, else the response text parsed as JSON; the core validates and maps it (A5.2). */
+  finalizeReview({ answerText, structured, unreviewed }) {
+    if (!structured && answerText) { try { structured = JSON.parse(answerText); } catch { /* malformed: the validator reports it */ } }
+    return { structured: structured ?? null, unreviewed };
+  },
 };
 
 export default adapter;
