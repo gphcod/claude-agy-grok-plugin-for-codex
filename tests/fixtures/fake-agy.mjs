@@ -3,8 +3,12 @@
 // streams come from the S1.2 probes (tests/fixtures/streams/agy.json carries the provenance). It validates the A5.1
 // launch contract (argv, the settings file, stdin, guard variables) before emitting and plays COUNCIL_FAKE_SCENARIO:
 // ok, resume, denied, denied-prompt, effort-error, effort-conflict, review-findings, review-malformed, large-review,
-// print-timeout, task, web, slow, hold-pipes.
+// print-timeout, task, web, slow, hold-pipes; and, for the S5.5 entry tests, task-edit (writes edited.txt in its cwd),
+// duplicate-result, missing-result and empty-response (synthetic mutations of ok), touch (a read-only turn during which the workspace changes), language-server (a long-lived child in agy's process
+// group, then no answer until stopped) and language-server-orphan (the child outlives agy, reparented to pid 1).
 import fs from "node:fs";
+import path from "node:path";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, holdPipes, log, mismatch, readStdin, repoSchema, requireDepth,
   scenario, sleep, spikeText, streams, SLOW_MS } from "./fake-common.mjs";
@@ -91,6 +95,21 @@ switch (which) {
   case "print-timeout": play(fill(fixtures["print-timeout"])); process.stderr.write(`${fixtures["print-timeout-stderr"]}\n`); break;
   case "task": play(fill(fixtures.task)); break;
   case "web": play(fill(fixtures.web)); break;
+  case "duplicate-result": { const events = fill(fixtures.ok); play([...events, events.at(-1)]); break; }
+  case "missing-result": play(fill(fixtures.ok).filter((e) => e.event !== "result")); break;
+  case "empty-response": play(fill(fixtures.ok).map((e) => (e.event === "result" ? { ...e, result: { ...e.result, response: "" } } : e))); break;
+  case "task-edit": fs.writeFileSync(path.join(process.cwd(), "edited.txt"), "written by the fake task\n"); play(fill(fixtures.task)); break;
+  case "touch": fs.writeFileSync(path.join(process.cwd(), "touched.txt"), "changed during a read-only turn\n"); play(fill(fixtures.ok)); break;
+  case "language-server": case "language-server-orphan": {
+    // agy's language server stands in as a child in the same process group (not detached), holding no pipes.
+    const server = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)", "language_server"], { stdio: "ignore" });
+    log({ languageServer: server.pid });
+    if (which === "language-server") { emitJson(fill(fixtures.ok)[0]); await sleep(60000); break; }
+    server.unref();
+    await sleep(Number(process.env.COUNCIL_FAKE_ORPHAN_MS || 800)); // long enough for a heartbeat to record the child
+    play(fill(fixtures.ok));
+    break;
+  }
   default: mismatch(`unknown scenario ${which}`);
 }
 process.exit(exitCode);
