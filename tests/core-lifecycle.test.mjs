@@ -9,7 +9,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { makeWorld, turnFor, ctxFor, adapter, alive, until } from "./helpers.mjs";
-import { runManagedTurn, cancelManaged, PIPE_WAIT_MS, SHUTDOWN_MS, RETRY_MS, DRAIN_MS } from "../plugins/council/scripts/lib/core/lifecycle.mjs";
+import { runManagedTurn, cancelManaged, PIPE_WAIT_MS, SHUTDOWN_MS, RETRY_MS, DRAIN_MS, lockedThreadMessage } from "../plugins/council/scripts/lib/core/lifecycle.mjs";
 import { loadJob, loadThread, stateOf, createJob, markDone, saveJob } from "../plugins/council/scripts/lib/core/jobs.mjs";
 import { claimThread, inspectClaim } from "../plugins/council/scripts/lib/core/claims.mjs";
 import { currentIdentity, executionController } from "../plugins/council/scripts/lib/core/execution.mjs";
@@ -135,7 +135,8 @@ test("held pipes on a clean exit: the turn waits PIPE_WAIT_MS, then locks the th
     const again = turnFor(w, { thread: turn.thread, confirmed: true, verb: "reply" });
     const blocked = await runTurn(w, again);
     assert.equal(blocked.job.code, 1);
-    assert.match(blocked.job.error, /is locked by job .*; cancel .* --confirm-ended after checking the process table/);
+    assert.equal(blocked.job.error, lockedThreadMessage(turn.thread, result.job.id));
+    assert.ok(Buffer.byteLength(blocked.job.error) <= 200, "the footer prints it whole");
     // Plain cancel refuses to release what nothing observed, even once the owner companion is gone and nothing owned is left.
     const gone = { snapshot: () => ({ state: "ok", rows: [] }), inspect: () => ({ state: "gone", rows: [] }), stop: () => "sent" };
     const plain = await cancelManaged(ctxFor(w), loadJob(w.home, result.job.id), { timeoutMs: 2000, control: gone });

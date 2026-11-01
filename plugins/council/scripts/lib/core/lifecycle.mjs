@@ -34,6 +34,9 @@ const label = (job) => job.done && job.outcome !== "cancelled" ? "finished" : "c
 const unique = (rows) => [...new Map(rows.map((r) => [`${r.pid}:${r.stamp}:${r.boot ?? ""}`, r])).values()];
 const release = (child) => { if (!child) return; for (const stream of [child.stdin, child.stdout, child.stderr]) stream?.destroy(); child.unref(); };
 
+/** A footer's `error:` is cut at 200 B: the action comes first, and the id, whose length the provider decides, after it. */
+export const lockedThreadMessage = (thread, job) => `start a new ask, or cancel ${job} --confirm-ended after checking the process table: thread ${thread} is locked; an unidentified process held that job's output`;
+
 export async function runManagedTurn(ctx, adapter, initial, prepare, options = {}, hooks = {}) {
   const platform = hooks.platform ?? process.platform;
   const control = hooks.control ?? executionController({ adapter, platform });
@@ -69,7 +72,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     catch (error) {
       if (error.claimLeft) { job.threadIds = [...new Set([...job.threadIds, id])]; try { save(job); } catch { /* finalization saves again */ } }
       const holder = error instanceof BusyError && error.job ? loadJob(ctx.home, error.job) : null;
-      if (holder?.done && holder.unattributedPipes && !holder.stopped) error.message = `thread ${id} is locked by job ${error.job}, whose output an unidentified process kept open; cancel ${error.job} --confirm-ended after checking the process table, or continue with a new ask`;
+      if (holder?.done && holder.unattributedPipes && !holder.stopped) error.message = lockedThreadMessage(id, error.job);
       throw error;
     }
     job.threadIds = [...new Set([...job.threadIds, id])];
