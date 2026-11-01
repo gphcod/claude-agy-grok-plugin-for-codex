@@ -58,6 +58,11 @@ test("macOS ownership needs the adapter's evidence and the complete recorded inv
   const npm = { ...job, argv: ["node", "/npm/lib/node_modules/grok/bin/grok", ...grokArgs] };
   assert.ok(ownsExecution(raw(`/Users/me/.grok/bin/grok ${grokArgs.join(" ")}`), npm, "darwin", grokLike), "F2: the native grok behind a multi-element node launcher");
   assert.ok(ownsRecordedInvocation(raw(`/opt/grok ${grokArgs.join(" ")}`), npm, "grok"), "the binary name is passed explicitly");
+  // S2.9: a program path with spaces is matched by suffix; it is owned when the path exists, and ambiguous (unknown) when not.
+  const spaced = raw(`/Users/First Last/.grok/bin/grok ${grokArgs.join(" ")}`);
+  assert.equal(ownsRecordedInvocation(spaced, npm, "grok", (p) => p === "/Users/First Last/.grok/bin/grok"), true);
+  assert.equal(ownsRecordedInvocation(spaced, npm, "grok", () => false), null, "a wrapper's arguments or a path: cannot tell");
+  assert.equal(ownsRecordedInvocation(raw(`/bin/sh -c /x/notgrok ${grokArgs.join(" ")}`), npm, "grok", () => false), false, "a program not ending in /grok is not ours");
   assert.equal(ownsRecordedInvocation(raw(`/opt/grok ${grokArgs.join(" ")}`), npm, null), false, "without a binary name only the recorded launcher matches");
   assert.equal(ownsExecution(raw(`/usr/bin/notgrok ${grokArgs.join(" ")}`), npm, "darwin", grokLike), false);
   assert.equal(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), job, "darwin", null), false, "no adapter, no ownership");
@@ -79,25 +84,45 @@ test("startTime: numeric ticks as BigInt, macOS lstart text as local epoch secon
   for (const bad of [undefined, null, "", "0x10", "Sat Foo 31 12:00:00 2026", "Sat Oct 31 12:00 2026"]) assert.equal(startTime(bad), null, String(bad));
 });
 
-test("macOS groups (S2.8 F1): followed under a live owned leader; once the leader is gone only through a persisted identity", () => {
+test("macOS groups (S2.8 F1, S2.9): followed under a live owned leader; otherwise adopted only by a persisted identity, the rest unverified", () => {
   const at = (sec, min = 0) => `Sat Oct 31 12:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} 2026`;
   const ms = (sec, min = 0) => new Date(2026, 9, 31, 12, min, sec).getTime();
-  const base = { ...job, pid: 201, pidWindow: [ms(0), ms(0) + 30], execution: [] };
+  const base = { ...job, pid: 201, leader: { pid: 201, stamp: at(0) }, execution: [] };
   const leader = row(201, { argv: null, raw: `grok ${grokArgs.join(" ")}`, pgid: 201, stamp: at(0) });
   const child = row(202, { ppid: 201, pgid: 201, argv: null, raw: "sh -c sleep 60", stamp: at(1) });
   const member = row(203, { ppid: 1, pgid: 201, argv: null, raw: "node helper.js", stamp: at(2) });
   const stranger = row(300, { ppid: 1, pgid: 300, argv: null, raw: "node other.js", stamp: at(2) });
   assert.deepEqual(owned(base, table(leader, child, member, stranger), "darwin"), ["owned", [201, 202, 203]], "the live leader's group is followed");
   const early = row(204, { ppid: 1, pgid: 201, argv: null, raw: "node early.js", stamp: "Sat Oct 31 11:59:00 2026" });
-  assert.deepEqual(owned(base, table(leader, early), "darwin"), ["owned", [201]], "a member born before its leader is not pulled in");
+  const before = ownedExecution(base, table(leader, early), "darwin", [], grokLike);
+  assert.deepEqual([before.state, before.rows.map((r) => r.pid), before.unverified.map((r) => r.pid)], ["unknown", [201], [204]], "a member born before its leader is not adopted, and not ignored");
   // The leader is gone: a real descendant recorded at a heartbeat and reparented to pid 1 is adopted by its identity.
   const recorded = { ...base, execution: [{ pid: 203, stamp: at(2) }] };
   assert.deepEqual(owned(recorded, table(member, stranger), "darwin"), ["owned", [203]]);
-  // A replacement leader reusing pid 201 after the job ended spawned an unrelated process and exited: never adopted.
+  // S2.9 (b): without the leader's own recorded identity a persisted row adopts nothing; the member is unverified.
+  const { leader: _, ...leaderless } = recorded;
+  const noLeader = ownedExecution(leaderless, table(member), "darwin", [], grokLike);
+  assert.deepEqual([noLeader.state, noLeader.rows, noLeader.unverified.map((r) => r.pid)], ["unknown", [], [203]]);
+  // S2.9 (a), Argon's reproduction: pid 201 now held by a process created 12:00:05; member 206 from 12:00:01 predates it.
+  const holder = row(201, { ppid: 1, pgid: 201, argv: null, raw: "node new-leader.js", stamp: at(5) });
+  const predates = row(206, { ppid: 1, pgid: 201, argv: null, raw: "node helper.js", stamp: at(1) });
+  const argon = ownedExecution(base, table(holder, predates), "darwin", [], grokLike);
+  assert.deepEqual([argon.state, argon.rows, argon.unverified.map((r) => r.pid)], ["unknown", [], [206]]);
+  // S2.9: a member born after the cleanup-pending job ended (12:00:10 > 12:00:05) may be a surviving descendant's child:
+  // not adopted, unverified, never gone, so the confirming cancel keeps the claim.
   const ended = { ...recorded, endedAt: new Date(ms(5)).toISOString() };
+  const afterEnd = ownedExecution(ended, table(row(203, { ppid: 1, pgid: 201, argv: null, raw: "node helper.js", stamp: at(10) })), "darwin", [], { ...grokLike });
+  assert.deepEqual([afterEnd.state, afterEnd.rows, afterEnd.unverified.map((r) => r.pid)], ["unknown", [], [203]]);
   const unrelated = row(205, { ppid: 1, pgid: 201, argv: null, raw: "node unrelated.js", stamp: at(1, 10) });
-  const replaced = ownedExecution(ended, table(unrelated), "darwin", [], grokLike);
-  assert.deepEqual([replaced.state, replaced.rows, replaced.unverified], ["gone", [], undefined]);
+  assert.equal(ownedExecution(ended, table(unrelated), "darwin", [], grokLike).state, "unknown", "with the new leader gone nothing proves the group id was reused");
+  // A live process holds pid 201 with another creation time: the group id was reused. Members born at or after that new
+  // leader are unrelated (gone); one that predates it stays unverified.
+  const reused = row(201, { ppid: 1, pgid: 201, argv: null, raw: "node new-leader.js", stamp: at(0, 10) });
+  const fresh = ownedExecution(ended, table(reused, unrelated), "darwin", [], grokLike);
+  assert.deepEqual([fresh.state, fresh.rows, fresh.unverified], ["gone", [], undefined]);
+  const older = row(207, { ppid: 1, pgid: 201, argv: null, raw: "node older.js", stamp: at(0, 5) });
+  const mixed = ownedExecution(ended, table(reused, unrelated, older), "darwin", [], grokLike);
+  assert.deepEqual([mixed.state, mixed.unverified.map((r) => r.pid)], ["unknown", [207]]);
   // A descendant spawned after the last snapshot, while the job runs: not adopted, reported unverified, so not gone.
   const late = row(206, { ppid: 1, pgid: 201, argv: null, raw: "node late.js", stamp: at(30) });
   const pending = ownedExecution(recorded, table(late), "darwin", [], grokLike);

@@ -6,8 +6,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { makeWorld, jobIdOf, footerOf, alive, until, turnFor, ctxFor, adapter, ENTRY } from "./helpers.mjs";
-import { claimRequest, createJob, loadJob, loadThread, lookupRequest, requestFingerprint, requestKey, stateOf } from "../plugins/council/scripts/lib/core/jobs.mjs";
-import { inspectClaim } from "../plugins/council/scripts/lib/core/claims.mjs";
+import { claimRequest, createJob, loadJob, markDone, loadThread, lookupRequest, requestFingerprint, requestKey, stateOf } from "../plugins/council/scripts/lib/core/jobs.mjs";
+import { claimThread, inspectClaim } from "../plugins/council/scripts/lib/core/claims.mjs";
+import { executionController, ownedExecution } from "../plugins/council/scripts/lib/core/execution.mjs";
 import { runManagedTurn, cancelManaged } from "../plugins/council/scripts/lib/core/lifecycle.mjs";
 
 const { main } = await import(ENTRY);
@@ -283,4 +284,70 @@ test("F19: checkRequest refuses before any job record, freeing the request id; t
   assert.equal(longer.status, 0, longer.stdout + longer.stderr);
   assert.equal(longer.stdout, first.stdout, "a retry with a longer deadline replays the first call");
   assert.equal(w.fakeCalls().length, 2);
+});
+
+// S2.9: the three resolutions Codex's confirmation found incomplete.
+
+test("S2.9 fix 1: an unrecorded member born after a cleanup-pending job ended keeps ownership unknown; the confirming cancel keeps the claim", async () => {
+  const w = makeWorld();
+  const ms = (sec) => new Date(2026, 9, 31, 12, 0, sec).getTime();
+  // `pidWindow` is the S2.8 record shape, kept so this test also fails against that rule.
+  const job = createJob(w.home, { provider: "null", verb: "ask", status: "failed", cwd: w.workspace, session: null, threadId: "t-1", threadIds: ["t-1"], admitted: true, pid: 201,
+    leader: { pid: 201, stamp: "Sat Oct 31 12:00:00 2026" }, pidWindow: [ms(0), ms(0) + 20], execution: [], childArgs: ["--thread", "t-1"], argv: ["node", "fake", "--thread", "t-1"], cleanupPending: true, endedAt: new Date(ms(5)).toISOString(),
+    companionPid: 999999, companionIdentity: { pid: 999999, stamp: "1" } });
+  markDone(job);
+  claimThread(w.home, "null", "t-1", job);
+  const member = { pid: 203, ppid: 1, pgid: 201, stamp: "Sat Oct 31 12:00:10 2026", argv: null, raw: "node helper.js", name: "node" };
+  const control = executionController({ adapter, platform: "darwin", snapshot: () => ({ state: "ok", rows: [member] }) });
+  assert.equal(ownedExecution(loadJob(w.home, job.id), { state: "ok", rows: [member] }, "darwin", [], adapter).state, "unknown");
+  const result = await cancelManaged(ctxFor(w), loadJob(w.home, job.id), { control, adapter, timeoutMs: 3000 });
+  assert.equal(result.code, 1, JSON.stringify(result));
+  assert.match(result.error, /cannot be confirmed; claim and cancellation request retained/);
+  assert.equal(inspectClaim(w.home, "null", "t-1").state, "owned");
+  assert.ok(!fs.existsSync(path.join(job.dir, "stopped")));
+});
+
+test("S2.9 fix 2: a native binary under a path with spaces is owned when the path exists, and unknown (never gone) when it cannot be told apart", () => {
+  const w = makeWorld();
+  const bin = path.join(w.dir, "First Last", ".grok", "bin", "grok");
+  fs.mkdirSync(path.dirname(bin), { recursive: true });
+  fs.writeFileSync(bin, "");
+  const childArgs = ["--prompt-file", "/state/jobs/j/prompt.md", "--output-format", "streaming-json"];
+  const job = { dir: "/state/jobs/j", argv: ["node", "/npm/grok", ...childArgs], childArgs, promptFile: "/state/jobs/j/prompt.md" };
+  const grok = { id: "grok", ownsProcess: (r, j, platform, has) => has(r, "--prompt-file", j.promptFile, platform) };
+  const at = (raw) => ({ state: "ok", rows: [{ pid: 401, ppid: 1, pgid: 401, stamp: "Sat Oct 31 12:00:00 2026", argv: null, raw, name: "grok" }] });
+  const found = ownedExecution(job, at(`${bin} ${childArgs.join(" ")}`), "darwin", [], grok);
+  assert.deepEqual([found.state, found.rows.map((r) => r.pid)], ["owned", [401]]);
+  const ambiguous = ownedExecution(job, at(`${path.join(w.dir, "No Such", "grok")} ${childArgs.join(" ")}`), "darwin", [], grok);
+  assert.deepEqual([ambiguous.state, ambiguous.rows], ["unknown", []], "not signalled, not gone");
+});
+
+test("S2.9 fix 3: the deferred afterTurn is reserved before stop and release; ENOSPC on its marker keeps the claim and a retry runs it once", async () => {
+  const w = makeWorld();
+  const turn = turnFor(w);
+  const result = await runManagedTurn(ctxFor(w), adapter, turn, null, timers, { control: blind });
+  assert.equal(result.job.cleanupPending, true);
+  const io = { ...fs, writeFileSync(file, ...rest) { if (path.basename(String(file)) === "after-turn") throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" }); return fs.writeFileSync(file, ...rest); } };
+  const first = await cancelManaged(ctxFor(w), loadJob(w.home, result.job.id), { control: empty, adapter, io, timeoutMs: 2000 });
+  assert.equal(first.code, 1, JSON.stringify(first));
+  assert.match(first.error, /afterTurn could not be reserved \(no space left on device\); cleanup is confirmed but the claim is kept/);
+  assert.equal(inspectClaim(w.home, "null", turn.thread).state, "owned");
+  assert.ok(!fs.existsSync(path.join(result.job.dir, "stopped")));
+  assert.deepEqual(w.hooks().map((h) => h.hook), ["beforeTurn"]);
+  const second = await cancelManaged(ctxFor(w), loadJob(w.home, result.job.id), { control: empty, adapter, timeoutMs: 2000 });
+  assert.equal(second.code, 0, JSON.stringify(second));
+  assert.deepEqual(w.hooks().map((h) => [h.hook, h.outcome?.deferred ?? null]), [["beforeTurn", null], ["afterTurn", true]]);
+  assert.equal(inspectClaim(w.home, "null", turn.thread).state, "absent");
+  await cancelManaged(ctxFor(w), loadJob(w.home, result.job.id), { control: empty, adapter, timeoutMs: 2000 });
+  assert.equal(w.hooks().length, 2, "once");
+});
+
+test("S2.9 (c): the leader's identity is recorded right after spawn, so even a turn shorter than a heartbeat has evidence", { skip: process.platform === "win32" }, async () => {
+  const w = makeWorld();
+  const result = await runManagedTurn(ctxFor(w), adapter, turnFor(w), null, timers);
+  assert.equal(result.job.code, 0);
+  const stored = loadJob(w.home, result.job.id);
+  assert.equal(stored.leader.pid, stored.pid);
+  assert.ok(stored.leader.stamp, "pid and creation time");
+  assert.ok(stored.execution.some((r) => r.pid === stored.pid && r.stamp === stored.leader.stamp), "persisted with the launch");
 });

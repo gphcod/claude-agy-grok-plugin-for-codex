@@ -193,11 +193,9 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
           for (const [signal, fn] of handlers) process.off(signal, fn);
           resolve();
         };
-        const spawnFrom = Date.now();
         try {
           child = (hooks.spawn ?? spawnChild)(turn.launcher, built.args, { cwd: turn.cwd, env: built.env ?? ctx.env, stdin: built.stdin !== undefined ? "pipe" : "ignore", platform });
         } catch (error) { spawnError = error; cleanupConfirmed = true; finish(); return; }
-        job.pidWindow = [spawnFrom, Date.now()]; // the leader's start lies in here (macOS group rule)
         child.on("error", (error) => { spawnError = error; finish(); });
         child.on("exit", () => {
           exitedAt = Date.now();
@@ -230,6 +228,14 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
           else if (now - lastEventAt >= options.inactivityMs) stop(`${provider} printed nothing before the inactivity deadline`);
         }, Math.max(20, Math.min(250, Math.min(options.deadlineMs, options.inactivityMs) / 10)));
         job.pid = child.pid ?? null;
+        // The leader's own identity (one scoped query), persisted with the launch: without it no persisted identity
+        // adopts a reparented group member (macOS rule). Not on Windows, whose query costs most of a second.
+        if (job.pid && platform !== "win32") {
+          try {
+            const leader = control.identify?.(job.pid, queryMs);
+            if (leader) { job.leader = { pid: leader.pid, stamp: leader.stamp, ...(leader.boot ? { boot: leader.boot } : {}) }; job.execution = unique([...job.execution, leader]); }
+          } catch { /* no leader identity: group members stay unverified */ }
+        }
         try {
           save(job); // Recovery finds the child by its recorded operands; no per-turn process query.
           if (cancelled()) stop("cancelled"); // Covers the cancellation-before/while-spawning race.
@@ -380,15 +386,17 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
 }
 
 /**
- * The afterTurn a turn deferred because its cleanup was unverified, run once (an `after-turn` marker, created exclusively)
- * by the cancel that confirms cleanup; `request` is null there and its result changes no finalized record.
+ * The afterTurn a turn deferred because its cleanup was unverified, run once by the cancel that confirms cleanup, before
+ * that cancel marks the job stopped and releases its claims: the `after-turn` marker is created exclusively first, so a
+ * failure before the hook begins (`{blocked}`) leaves the job cleanup-pending with its claim and a retry runs it; once
+ * the marker exists the hook never runs again. `request` is null there and its result changes no finalized record.
  */
 async function deferredAfterTurn(ctx, job, adapter, io) {
-  if (!job.afterTurnPending || !adapter?.afterTurn) return null;
+  if (!job.afterTurnPending || !adapter?.afterTurn) return {};
   try { io.writeFileSync(path.join(job.dir, "after-turn"), "", { flag: "wx" }); }
-  catch (error) { return error.code === "EEXIST" ? null : `afterTurn not run: ${error.message}`; }
-  try { await adapter.afterTurn({ job, request: null, cwd: job.cwd, env: ctx.env }, { ...job.afterTurnPending, cleanupConfirmed: true, deferred: true }); return null; }
-  catch (error) { return `afterTurn failed: ${error.message}`; }
+  catch (error) { return error.code === "EEXIST" ? {} : { blocked: `afterTurn could not be reserved (${error.message}); cleanup is confirmed but the claim is kept: run cancel ${job.id} again` }; }
+  try { await adapter.afterTurn({ job, request: null, cwd: job.cwd, env: ctx.env }, { ...job.afterTurnPending, cleanupConfirmed: true, deferred: true }); return {}; }
+  catch (error) { return { error: `afterTurn failed: ${error.message}` }; }
 }
 
 /**
@@ -417,11 +425,12 @@ export async function cancelManaged(ctx, job, { timeoutMs = 30000, control = exe
       if (found.state === "unknown") unsure = "execution ownership/cleanup cannot be confirmed; claim and cancellation request retained";
       else if (found.state === "gone") {
         if (job.unattributedPipes && !confirmEnded) return { status: "unknown", code: 1, job: view(), error: `an unidentified process held job ${job.id}'s output; the thread stays locked until cancel ${job.id} --confirm-ended after checking the process table` };
+        const hook = await deferredAfterTurn(ctx, job, adapter, io);
+        if (hook.blocked) return { status: "unknown", code: 1, job: view(), error: hook.blocked };
         markStopped(job);
         releaseClaims(ctx.home, job);
-        const hookError = await deferredAfterTurn(ctx, job, adapter, io);
         const current = view();
-        return { status: current.claimHeld ? "unknown" : label(job), code: current.claimHeld ? 1 : 0, job: current, ...(confirmEnded ? { released: true } : {}), ...(hookError ? { error: hookError } : {}) };
+        return { status: current.claimHeld ? "unknown" : label(job), code: current.claimHeld ? 1 : 0, job: current, ...(confirmEnded ? { released: true } : {}), ...(hook.error ? { error: hook.error } : {}) };
       } else {
         if (confirmEnded) return { status: "refused", code: 10, job: view(), error: `--confirm-ended refused: ${found.rows.length} owned process${found.rows.length > 1 ? "es are" : " is"} still live (pid ${found.rows.map((r) => r.pid).join(", ")})` };
         try { recordRecoveryEvidence(job, found.rows); }
