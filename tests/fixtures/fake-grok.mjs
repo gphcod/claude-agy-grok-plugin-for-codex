@@ -3,7 +3,7 @@
 // from the S1.3 probes (tests/fixtures/streams/grok.json carries the provenance). It validates the A5.1 launch contract
 // (recipe flags, prompt file, rules text or schema carrier, compatEnv and guard variables) before emitting and plays
 // COUNCIL_FAKE_SCENARIO: ok, resume, denied, effort-error, review-findings, review-malformed, large-review, slow, hold-pipes,
-// and the synthetic review-reject and no-session (S4.5), permission-cancelled, review-stop-other and review-max-turns (S4.8).
+// and the synthetic review-reject and no-session (S4.5), permission-cancelled, review-stop-other and review-max-turns (S4.8), stop-no-session (S4.9).
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { ROOT, UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, flagValues, holdPipes, log, mismatch, readStdin, repoSchema,
@@ -114,6 +114,8 @@ switch (which) {
     play([...events.filter((e) => e.type === "available_commands"), { type: "text", data: json.slice(0, 40) }, { type: "text", data: json.slice(40) }, { type: "max_turns_reached" }]);
     break;
   }
+  // Synthetic (S4.9): a resumed turn whose end stops for another reason and names no session.
+  case "stop-no-session": play(fill(fixtures.resume).map((e) => { if (e.type !== "end") return e; const { sessionId, ...rest } = e; return { ...rest, stopReason: "max_tokens" }; })); break;
   // Synthetic (S4.5): an end event that names no session (session not confirmed).
   case "no-session": play(fill(fixtures.ok).map((e) => { if (e.type !== "end") return e; const { sessionId, ...rest } = e; return rest; })); break;
   default: mismatch(`unknown scenario ${which}`);

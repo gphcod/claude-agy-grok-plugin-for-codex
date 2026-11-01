@@ -284,10 +284,12 @@ export default {
         // end.modelUsage may name a cost-accounting id (grok-4.7-build for grok-4.7); the requested id is reported, never this.
         const data = { ...(typeof ev.total_cost_usd === "number" ? { costUsd: ev.total_cost_usd } : {}), ...(ev.usage ? { usage: ev.usage } : {}),
           ...(structured !== undefined && structured !== null ? { structured } : {}) };
-        // Any other stop keeps the answer, structured output, usage and cost, and fails the turn as incomplete (exit 1).
-        if (!NORMAL_STOPS.has(stop) && stop !== "cancelled") return { fatal: `incomplete: Grok stopped with reason ${JSON.stringify(stop)}`, ...data, describe };
         // An end without a session keeps the answer and exit code; the thread is not resumable (review Q3 ruling).
-        const thread = returned === null ? { unconfirmed: UNCONFIRMED } : { threadId: returned };
+        const unconfirmed = returned === null ? { unconfirmed: UNCONFIRMED } : {};
+        // Any other stop keeps the answer, structured output, usage and cost, and fails the turn as incomplete (exit 1);
+        // without a session it also leaves the thread non-resumable.
+        if (!NORMAL_STOPS.has(stop) && stop !== "cancelled") return { fatal: `incomplete: Grok stopped with reason ${JSON.stringify(stop)}`, ...data, ...unconfirmed, describe };
+        const thread = returned === null ? unconfirmed : { threadId: returned };
         // Grok's own `cancelled` is a provider-reported permission refusal: a denial (exit 10), never a failure. Council's own
         // cancel stops Grok by signal, which ends the stream without an end event.
         if (stop === "cancelled") return { completed: true, ...thread, ...data, denied: { reason: PERMISSION_STOP, stopReason: stop }, ...(state.hasText ? {} : { textDelta: PERMISSION_STOP }), describe };

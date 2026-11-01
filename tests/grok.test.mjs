@@ -152,6 +152,20 @@ test("an end event without a session id keeps the answer and exit 0, prints the 
   assert.equal(w.launches().length, launches + 2, "only the new ask and its reply ran");
 });
 
+test("a non-end_turn stop without a session id fails (exit 1) with the answer kept and leaves the resumed thread non-resumable", () => {
+  const w = world();
+  const ask = jobIdOf(w.grok(["ask", "--to", "grok", "--", "q"]).stderr);
+  const session = w.job(ask).threadId;
+  const r = w.grok(["reply", ask, "--", "more"], { scenario: "stop-no-session" });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(r.stdout.split("\n")[0], "pong 2");
+  assert.match(footerOf(r.stdout), /error: incomplete: Grok stopped with reason "max_tokens" · session not confirmed: start a new ask$/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(w.home, "threads", `grok-${session}.json`), "utf8")).resumable, false);
+  const again = w.grok(["reply", session, "--to", "grok", "--", "again"], { scenario: "resume" });
+  assert.equal(again.status, 2);
+  assert.match(again.stderr, /session not confirmed: start a new ask/);
+});
+
 test("Grok's own `cancelled` stop is a permission refusal: denied (exit 10), answer kept or the refusal named; council's cancel is unchanged", () => {
   const w = world();
   const r = w.grok(["ask", "--to", "grok", "--json", "--", "q"], { scenario: "permission-cancelled" });
