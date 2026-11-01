@@ -225,7 +225,7 @@ function planTurn(ctx, adapter, verb, o, text, memo) {
       deadlineMs: seconds(o.deadline, DEADLINE_S, "deadline") * 1000, // agy's --print-timeout is set from it (A3.3)
     };
     // The adapter's own refusals (A5 checkRequest): exit 2 before any job record and before the request id is tombstoned.
-    const refusal = adapter.checkRequest ? adapter.checkRequest(request, ctx.env) : null;
+    const refusal = adapter.checkRequest ? adapter.checkRequest(request, ctx.env, ctx.platform ?? process.platform) : null;
     if (refusal) throw new UsageError(refusal);
     return {
       verb, cwd, ...settings, thread: thread?.threadId ?? null, confirmed: resume, round, rounds, roundsSet, prompt, launcher, web: request.web,
@@ -306,6 +306,25 @@ async function replay(ctx, o, record, fingerprint, out, deps) {
   return awaitJob(ctx, o, record.job, Math.max(1, end - Date.now()), out);
 }
 
+/** The provider of a turn (--to, or the job or thread record on reply and task --thread), with its flag scoping (A3.3). */
+function resolveProvider(ctx, verb, o) {
+  let provider = o.to;
+  if (verb === "reply" || (verb === "task" && (o.thread || o.last))) {
+    const thread = resolveThread(ctx, verb, o);
+    if (o.to && o.to !== thread.provider) throw new UsageError(`the thread belongs to ${thread.provider}; --to ${o.to} conflicts with it`);
+    provider = thread.provider;
+  } else if (!provider) throw new UsageError(`${verb} needs --to ${PROVIDERS.join("|")}`);
+  checkFlags(verb, o, provider);
+  if (o["allow-command"] && verb !== "task") throw new UsageError("--allow-command applies only to task");
+  return provider;
+}
+/** Control verbs that write (models --refresh, setup --set, cancel): the same state-root line before the first write. */
+async function requireWritableRoot(ctx) {
+  const root = stateRootDescriptor(ctx.home);
+  const writable = await runDescriptor(root, { env: ctx.env, platform: ctx.platform });
+  if (!writable.ok) throw new PreflightBlocked(root, writable.detail);
+}
+
 /**
  * ask, reply, review, task. A request id is reserved first, provider-neutral (A7.4); the reservation is bound to the
  * provider and job once resolved, then preflight → prepare → tombstone → run. Any failure before the tombstone frees it.
@@ -314,14 +333,26 @@ async function runTurnVerb(ctx, parsed, text, io, deps) {
   const { verb, options: o } = parsed;
   checkFlags(verb, o);
   const timers = { inactivityMs: seconds(o["inactivity-timeout"], INACTIVITY_S, "inactivity-timeout") * 1000, deadlineMs: seconds(o.deadline, DEADLINE_S, "deadline") * 1000 };
-  // The state root must be writable before anything is written there (the reservation below): a sandbox that blocks it
-  // (Codex workspace-write, S1.4) is preflight_blocked with the state-root action line, not a raw EACCES/EPERM.
-  const root = stateRootDescriptor(ctx.home);
-  const writable = await runDescriptor(root, { env: ctx.env, platform: deps.platform ?? process.platform });
-  if (!writable.ok) throw new PreflightBlocked(root, writable.detail);
-  // (3) The request id before anything else: an exclusive reservation, or a replay of the existing one.
+  // (3) The request id before anything else: a recorded request replays (read-only, A7.4), whatever the sandbox allows.
   const fingerprint = requestFingerprint(verb, o, text);
   const key = o["request-id"] !== undefined ? requestKey(ctx.session, ctx.cwd, o["request-id"]) : null;
+  if (key) {
+    const recorded = lookupRequest(ctx.home, key);
+    if (recorded) return replay(ctx, o, recorded, fingerprint, writer(io.stdout), deps);
+  }
+  // The state root must be writable before the first write (the reservation, the job, claims, the preflight cache): a
+  // sandbox that blocks it (Codex workspace-write, S1.4) is preflight_blocked with the state-root action line, never a
+  // raw EACCES/EPERM. Invalid input still wins: the call is validated read-only first, so its exit 2 stands.
+  const root = stateRootDescriptor(ctx.home);
+  const writable = await runDescriptor(root, { env: ctx.env, platform: ctx.platform });
+  if (!writable.ok) {
+    try {
+      const provider = resolveProvider(ctx, verb, o);
+      const adapter = await requireAdapter(provider, ctx.env);
+      planTurn(ctx, adapter, verb, o, text, {}).prepare(null); // checkRequest and settings, nothing written
+    } catch (error) { if (error instanceof UsageError) throw error; }
+    throw new PreflightBlocked(root, writable.detail);
+  }
   if (key) {
     const claimed = claimRequest(ctx.home, { key, requestId: o["request-id"], session: ctx.session, cwd: ctx.cwd, fingerprint,
       companionIdentity: executionController({ platform: deps.platform }).self() });
@@ -336,14 +367,7 @@ async function runTurnVerb(ctx, parsed, text, io, deps) {
   let result;
   try {
     // (4) Provider: --to, or the job or thread record on reply and task --thread.
-    let provider = o.to;
-    if (verb === "reply" || (verb === "task" && (o.thread || o.last))) {
-      const thread = resolveThread(ctx, verb, o);
-      if (o.to && o.to !== thread.provider) throw new UsageError(`the thread belongs to ${thread.provider}; --to ${o.to} conflicts with it`);
-      provider = thread.provider;
-    } else if (!provider) throw new UsageError(`${verb} needs --to ${PROVIDERS.join("|")}`);
-    checkFlags(verb, o, provider);
-    if (o["allow-command"] && verb !== "task") throw new UsageError("--allow-command applies only to task");
+    const provider = resolveProvider(ctx, verb, o);
     const adapter = await requireAdapter(provider, ctx.env);
     if (key) { jobId = requestJobId(provider, ctx.session, ctx.cwd, o["request-id"]); bindRequest(ctx.home, key, { provider, jobId }); }
     // (5) Preflight through the cached runner: a blocked resource exits 1 with zero submissions.
@@ -394,6 +418,7 @@ async function cancelVerb(ctx, { options: o }, io, deps) {
   const job = o.job ? findJob(ctx.home, o.job, o.to ?? null) : latestOf(candidates(ctx.home, ctx).filter((j) => cleanupNeeded(j) || claimHeld(ctx.home, j)), "cancel is ambiguous");
   if (o.job && !job) throw new UsageError(`no job or thread ${o.job}; an unidentified claim requires quiescent manual recovery`);
   if (!job) { out(o.json ? '{"status":"none","exit":0}\n' : "no running council job to cancel\n"); return 0; }
+  await requireWritableRoot(ctx); // the cancel marker, the stop record and the claim release are written there
   // Without the provider module there is no ownership evidence: the scan reads unknown, so nothing is stopped or released.
   let adapter = null, loadError = null;
   try { adapter = await loadAdapter(job.provider, ctx.env); } catch (error) { loadError = error.message; }
@@ -413,6 +438,8 @@ const providerList = (o, env) => (o.to ? [o.to] : [...PROVIDERS, ...(env.COUNCIL
 async function modelsVerb(ctx, { options: o }, io) {
   checkFlags("models", o);
   const out = writer(io.stdout), report = [];
+  for (const provider of providerList(o, ctx.env)) if (!knownProvider(provider, ctx.env)) throw new UsageError(`unknown provider ${JSON.stringify(provider)}`);
+  if (o.refresh) await requireWritableRoot(ctx); // the refreshed catalog is written there; probe nothing first
   for (const provider of providerList(o, ctx.env)) {
     if (!knownProvider(provider, ctx.env)) throw new UsageError(`unknown provider ${JSON.stringify(provider)}`);
     const adapter = await loadAdapter(provider, ctx.env);
@@ -444,7 +471,9 @@ async function setupVerb(ctx, parsed, io, deps) {
   checkFlags("setup", o);
   const out = writer(io.stdout), report = [];
   if (o.set !== undefined) {
-    const policy = setPolicy(ctx.home, readJson(path.resolve(ctx.cwd, o.set)) ?? (() => { throw new UsageError(`cannot read policy file ${o.set}`); })());
+    const supplied = readJson(path.resolve(ctx.cwd, o.set)) ?? (() => { throw new UsageError(`cannot read policy file ${o.set}`); })();
+    await requireWritableRoot(ctx); // policy.json lives there
+    const policy = setPolicy(ctx.home, supplied);
     out(o.json ? "" : `policy ${policy.version} stored: read roots ${policy.readRoots.length}, web ${policy.web}, MCP ${policy.allowMcp}\n`);
   }
   for (const provider of providerList(o, ctx.env)) {
@@ -515,7 +544,7 @@ export async function main(argv, env = process.env, io = { stdout: process.stdou
     if (nested) throw new StateError(nested);
     const home = homeDir(env);
     assertStateOutsideWorkspace(home, cwd);
-    const ctx = { env, home, cwd, session: hostSession(env) };
+    const ctx = { env, home, cwd, session: hostSession(env), platform: deps.platform ?? process.platform };
     const text = await readText(parsed, { stream: io.stdin, env }); // control verbs, bare review and --next-input read no stdin
     if (CONTROL[parsed.verb]) {
       if (parsed.positionals.length) throw new UsageError(`${parsed.verb} takes no text`);
