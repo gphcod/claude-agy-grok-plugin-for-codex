@@ -290,7 +290,22 @@ export default {
         return { describe }; // thought, usage, and anything newer: ignored
     }
   },
-  /** S4.4 implements the inline schema carrier and the answer mapping. */
-  reviewPlan() { return { native: false, batches: null, promptTemplate: "review", schemaCarrier: "inline" }; },
-  finalizeReview({ structured, unreviewed }) { return { structured: structured ?? null, unreviewed }; },
+  /** Batching is the core's (≤ 180,000 B); the schema travels inline, so the batch prompt does not embed it. */
+  reviewPlan(review, request = {}) {
+    return { native: false, batches: review?.batch ?? null, promptTemplate: request.adversarial ? "adversarial-review" : "review", schemaCarrier: "inline" };
+  },
+  /**
+   * The schema-shaped answer: `end.structuredOutput`, or the complete streamed answer parsed as JSON when that is absent
+   * or fails the shared validator while the text passes it. The core validates again, maps into A5.2, reconciles the
+   * ledger and publishes coverage.
+   */
+  finalizeReview({ answerText, structured, unreviewed }) {
+    let fromText = null;
+    if (typeof answerText === "string" && answerText.trim()) {
+      const raw = answerText.trim().replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```$/, "");
+      try { fromText = JSON.parse(raw); } catch { fromText = null; }
+    }
+    const chosen = structured && !reviewProblem(structured) ? structured : fromText && !reviewProblem(fromText) ? fromText : structured ?? fromText;
+    return { structured: chosen ?? null, unreviewed };
+  },
 };
