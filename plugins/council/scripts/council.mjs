@@ -19,7 +19,7 @@ import { priorFindingsNote } from "./lib/core/findings.mjs";
 import { depthGuard, executionController, companionState, processSnapshot } from "./lib/core/execution.mjs";
 import { runManagedTurn, cancelManaged } from "./lib/core/lifecycle.mjs";
 import { elapsed, elapsedOf, readAnswer, renderResult, resultJson, startLine } from "./lib/core/output.mjs";
-import { PreflightBlocked, runPreflight, getPolicy, setPolicy } from "./lib/core/preflight.mjs";
+import { PreflightBlocked, runPreflight, runDescriptor, stateRootDescriptor, getPolicy, setPolicy } from "./lib/core/preflight.mjs";
 import { LauncherError, resolveLauncher } from "./lib/core/launcher.mjs";
 import { assertAdapter } from "./lib/core/types.mjs";
 import { loadCatalog, loadStatic, resolveEffort, resolveModel, saveRefreshedCatalog } from "./lib/core/catalog.mjs";
@@ -314,6 +314,11 @@ async function runTurnVerb(ctx, parsed, text, io, deps) {
   const { verb, options: o } = parsed;
   checkFlags(verb, o);
   const timers = { inactivityMs: seconds(o["inactivity-timeout"], INACTIVITY_S, "inactivity-timeout") * 1000, deadlineMs: seconds(o.deadline, DEADLINE_S, "deadline") * 1000 };
+  // The state root must be writable before anything is written there (the reservation below): a sandbox that blocks it
+  // (Codex workspace-write, S1.4) is preflight_blocked with the state-root action line, not a raw EACCES/EPERM.
+  const root = stateRootDescriptor(ctx.home);
+  const writable = await runDescriptor(root, { env: ctx.env, platform: deps.platform ?? process.platform });
+  if (!writable.ok) throw new PreflightBlocked(root, writable.detail);
   // (3) The request id before anything else: an exclusive reservation, or a replay of the existing one.
   const fingerprint = requestFingerprint(verb, o, text);
   const key = o["request-id"] !== undefined ? requestKey(ctx.session, ctx.cwd, o["request-id"]) : null;

@@ -19,6 +19,13 @@ export class PreflightBlocked extends Error {
     this.action = descriptor.action ?? "Grant access to the named resource; if the host forbids escalation, stop without retrying.";
   }
 }
+/**
+ * The state root as a preflight resource (S1.4: Codex's workspace-write sandbox does not let the companion write
+ * ~/.codex/council). Every provider lists it first, and the entry checks it before it writes anything (a request-id
+ * reservation), so the action line names council's own blocked directory, never a later symptom.
+ */
+export const stateRootDescriptor = (stateRoot) => ({ kind: "dir", target: stateRoot, access: "write", timeoutMs: 1000, why: "council job records",
+  action: `Grant write access to the council state root ${stateRoot} (under Codex workspace-write, add it as a writable root or run with danger-full-access), or set COUNCIL_CODEX_HOME to a writable directory outside the workspace.` });
 const describeTarget = (target) => typeof target === "string" ? target : target?.command ? [target.command, ...(target.args ?? [])].join(" ") : JSON.stringify(target);
 const PROBE_BYTES = 2_000_000;
 const DRAIN_MS = 500;
