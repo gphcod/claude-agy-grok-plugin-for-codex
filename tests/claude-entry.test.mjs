@@ -235,3 +235,11 @@ test("setup and models: the claude row from the probes, no listing to refresh", 
   assert.match(models.stdout, /^claude \(static catalog\)\n {2}default: low, medium, high, xhigh, max\n/);
   assert.ok(!w.probes().some((p) => p.argv.includes("models")), "claude models would be a paid prompt");
 });
+
+test("S3.7: a denial that made Claude's result is_error (and its exit 1) ends needs attention, exit 10, with the error text", () => {
+  const w = world();
+  const r = w.claude(["ask", "--to", "claude", "--", "read the secret"], "denied-error");
+  assert.equal(r.status, 10, r.stdout + r.stderr);
+  assert.match(r.stdout, /^claude error_during_execution: Partial answer\.\n/);
+  assert.match(footerOf(r.stdout), /^council claude needs attention · /);
+});

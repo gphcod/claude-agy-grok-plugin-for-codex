@@ -76,5 +76,5 @@ if (scenario === "hold-pipes") {
   child.unref();
   if (process.env.COUNCIL_FAKE_HOLD_PID) fs.writeFileSync(process.env.COUNCIL_FAKE_HOLD_PID, String(child.pid));
 }
-leave(0);
+leave(Number(process.env.COUNCIL_FAKE_EXIT_CODE ?? 0)); // COUNCIL_FAKE_EXIT_CODE: a completed turn that still exits non-zero
 }

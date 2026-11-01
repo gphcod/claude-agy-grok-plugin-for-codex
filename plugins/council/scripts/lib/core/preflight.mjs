@@ -9,6 +9,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readJson, writeFileAtomic } from "./fs.mjs";
 import { processSnapshot } from "./execution.mjs";
+import { guardedEnv } from "./host.mjs";
 
 export class PreflightBlocked extends Error {
   constructor(descriptor, detail) {
@@ -86,7 +87,8 @@ async function checkNetwork(descriptor, env) {
 }
 async function checkExec(descriptor, env) {
   const { command, args = [], expectStatus = 0, expectText = null, recordOutput = true } = descriptor.target;
-  const result = await startProbe(command, args, { env, timeoutMs: descriptor.timeoutMs ?? 15000 });
+  // An exec descriptor starts a provider child: it gets the five guard variables like every turn (A5.1).
+  const result = await startProbe(command, args, { env: guardedEnv(env), timeoutMs: descriptor.timeoutMs ?? 15000 });
   if (result.error) return { ok: false, detail: `probe failed: ${result.error}` };
   const text = `${result.stdout}${result.stderr}`;
   if (expectText && !new RegExp(expectText).test(text)) return { ok: false, detail: `probe output did not match ${expectText}` };

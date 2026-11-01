@@ -11,7 +11,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { UsageError, USAGE, TURN_VERBS, parseArgv, positiveInt, seconds } from "./lib/core/args.mjs";
 import { readText } from "./lib/core/stdin.mjs";
 import { canonical, readJson } from "./lib/core/fs.mjs";
-import { BINARIES, PROVIDERS, ROUNDS_ENV, hostSession, depthEnv } from "./lib/core/host.mjs";
+import { BINARIES, PROVIDERS, ROUNDS_ENV, hostSession, guardedEnv } from "./lib/core/host.mjs";
 import { StateError, assertStateOutsideWorkspace, candidates, claimHeld, cleanupNeeded, findJob, homeDir, jobView, lastEvent, latestOnThread, listJobs, loadJob,
   loadThread, lookupRequest, onThread, providersOf, releaseRequest, requestFingerprint, requestJobId, requestKey, resultRecord, stateOf, threadProviders,
   claimRequest, bindRequest } from "./lib/core/jobs.mjs";
@@ -223,7 +223,7 @@ function planTurn(ctx, adapter, verb, o, text, memo) {
       target, unreviewed, reviewState, reviewFiles, batch, structuredReview, nextInput, policyVersion: policy.version,
       build: (jobDir) => {
         const built = adapter.buildTurn({ ...request, jobDir });
-        return { ...built, env: { ...(built.env ?? ctx.env), ...depthEnv() } };
+        return { ...built, env: guardedEnv(built.env ?? ctx.env) };
       },
       finalizeReview: ({ seen, job, answerText = null }) => {
         let structured = seen?.structured ?? null;
@@ -409,7 +409,7 @@ async function modelsVerb(ctx, { options: o }, io) {
     }
     let refreshed = null;
     if (o.refresh && adapter.catalog?.listing !== false) {
-      const probe = await adapter.probe(adapter.resolveLauncher(ctx.env), ctx.env);
+      const probe = await adapter.probe(adapter.resolveLauncher(ctx.env), guardedEnv(ctx.env)); // a probe is a provider child too (A5.1)
       if (probe?.models) refreshed = saveRefreshedCatalog(ctx.home, provider, probe.models).updatedAt;
     }
     const catalog = catalogFor(adapter, ctx.home);
@@ -448,7 +448,7 @@ async function setupVerb(ctx, parsed, io, deps) {
       const launcher = adapter.resolveLauncher(ctx.env);
       if (!launcher) throw new LauncherError(`${provider} not found: install its CLI or set ${adapter.binEnv}`);
       Object.assign(entry, { binary: launcher.path, kind: launcher.kind });
-      const probe = await adapter.probe(launcher, ctx.env);
+      const probe = await adapter.probe(launcher, guardedEnv(ctx.env)); // a probe is a provider child too (A5.1)
       Object.assign(entry, { version: probe?.version ?? null, loggedIn: probe?.loggedIn ?? null });
       entry.warnings.push(...(Array.isArray(probe?.warnings) ? probe.warnings : []));
       const pre = await runPreflight({ home: ctx.home, provider, launcher, descriptors: adapter.preflight({ stateRoot: ctx.home, env: ctx.env, platform: deps.platform ?? process.platform, verb: "setup", cwd: ctx.cwd }),

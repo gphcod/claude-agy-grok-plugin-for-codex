@@ -13,6 +13,8 @@ export const ROUNDS_ENV = "COUNCIL_CODEX_ROUNDS";
 /** Guard variables: every provider child receives all five; admission refuses when any is set (A5.1). */
 export const DEPTH_VARIABLES = ["COUNCIL_DEPTH", "CLAUDE_PLUGIN_CODEX_DEPTH", "GROK_CODEX_DEPTH", "GROK_BUILD_DEPTH", "AGY_BRIDGE_DEPTH"];
 export const depthEnv = () => Object.fromEntries(DEPTH_VARIABLES.map((name) => [name, "1"]));
+/** The environment of every provider child: turns, probes and exec preflight descriptors alike (A5.1). */
+export const guardedEnv = (env = process.env) => ({ ...env, ...depthEnv() });
 /** Provider ids in the order `models` and `setup` iterate them (S2.6). */
 export const PROVIDERS = ["claude", "gemini", "grok"];
 /** Binary names and their override variables (A5.1). */

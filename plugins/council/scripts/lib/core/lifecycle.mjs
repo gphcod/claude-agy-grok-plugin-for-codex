@@ -326,7 +326,9 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
   else if (!error && spawnError) error = `could not start ${provider}: ${spawnError.message}`;
   else if (!error && (streamFailure || seen?.failed)) error = streamFailure ?? seen.failed;
   else if (!error && !seen?.completed) error = job.stderrTail?.trim().split(/\r?\n/).at(-1) || `${provider} ended without completing the turn`;
-  else if (!error && child?.exitCode !== 0) error = `${provider} exited with code ${child?.exitCode}`;
+  // A completed turn whose provider recorded a denial ends in attention (exit 10) even when the CLI exits non-zero for it
+  // (Claude exits 1 on an is_error result that a denial caused); any other non-zero exit fails the turn.
+  else if (!error && child?.exitCode !== 0 && !(seen?.completed && seen?.denials?.length && typeof child?.exitCode === "number")) error = `${provider} exited with code ${child?.exitCode}`;
   if (!error && outcome === "failed" && !turn.structuredReview && turn.finalizeTurn) {
     try { Object.assign(job, turn.finalizeTurn({ seen, job }) ?? {}); } catch (failure) { error = failure.message; }
   }
