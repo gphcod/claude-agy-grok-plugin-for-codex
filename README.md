@@ -138,22 +138,24 @@ State lives under `~/.codex/council/` (override `COUNCIL_CODEX_HOME`), never in 
 
 The companion runs inside Codex's sandbox. Before any submission it checks the resources the provider needs; a blocked one exits 1 with `preflight_blocked` and one resource-specific `action:` line, never `cleanup pending`, and zero submissions. The line grants no escalation. Probe results are cached under `preflight/` by executable path, size and modification time, so a warm call starts no probe; filesystem, listener and process-table checks run every call.
 
-| Provider | Resource | Check | Cached |
-|---|---|---|---|
-| all | the state root | directory writable | no |
-| claude | `<CLAUDE_CONFIG_DIR or ~/.claude>/projects` | directory writable (Claude stores sessions there) | no |
-| claude | `claude --version`, `auth status --json`, `--help` (every flag council passes), a deliberate missing-file capability failure | four non-billable probes, no model call | yes |
-| claude | `ANTHROPIC_BASE_URL` or `https://api.anthropic.com` | network reachable (unverified behind a proxy variable) | yes |
-| gemini | `~/.gemini/antigravity-cli/` | directory writable (agy's backend state) | no |
-| gemini | `127.0.0.1` | loopback listener can bind | no |
-| gemini | `ps` | process table readable | no |
-| gemini | `agy --version`, `agy models` | non-billable probes (login evidence) | yes |
-| gemini | `https://generativelanguage.googleapis.com/` | network reachable (provisional target) | yes |
-| grok | `~/.grok/auth.json` | readable (skipped when `GROK_API_KEY` is set) | no |
-| grok | `ps`, or PowerShell `Win32_Process` on Windows | process table readable | no |
-| grok | `grok --version`, `grok models` | non-billable probes (`not logged in` blocks) | yes |
+Each provider checks council's state root first, so the action line names the real cause. The two right-hand columns are the outcomes measured inside real Codex sessions (codex-cli 0.163.0, macOS) on 2026-11-01 (`docs/spike/codex-host.md`, S1.4); "not measured" means the probe did not run that exact check.
 
-Recorded facts that shaped the table: on Windows session A, `--sandbox workspace-write` blocked Grok's login and the process query while `danger-full-access` passed; agy needs network, a loopback listener, process inspection and writes under `~/.gemini/antigravity-cli/`. The per-mode outcomes inside a Codex chat are recorded in S7.1.
+| Provider | Resource | Check | Cached | `workspace-write` | `danger-full-access` |
+|---|---|---|---|---|---|
+| all | the state root `~/.codex/council` (`COUNCIL_CODEX_HOME`) | directory writable; checked first, before any write | no | **blocked** (EPERM) | ok |
+| claude | `<CLAUDE_CONFIG_DIR or ~/.claude>/projects` | directory writable (Claude stores sessions there) | no | **blocked** (EPERM) | ok |
+| claude | `claude --version`, `auth status --json`, `--help` (every flag council passes), a deliberate missing-file capability failure | four non-billable probes, no model call | yes | `auth status` **exit 1**; the others not measured | `auth status` exit 0 |
+| claude | `ANTHROPIC_BASE_URL` or `https://api.anthropic.com` | network reachable (unverified behind a proxy variable) | yes | **blocked** (network disabled) | ok |
+| gemini | `~/.gemini/antigravity-cli/` | directory writable (agy's backend state) | no | **blocked** (EPERM) | ok |
+| gemini | `127.0.0.1` | loopback listener can bind | no | **blocked** (EPERM) | ok |
+| gemini | `ps` | process table readable | no | **blocked** (exit 127) | ok |
+| gemini | `agy --version`, `agy models` | non-billable probes (login evidence) | yes | `agy models` **exit 1** | ok |
+| gemini | `https://generativelanguage.googleapis.com/` | network reachable (provisional target) | yes | not measured; the network is disabled | not measured |
+| grok | `~/.grok/auth.json` | readable (skipped when `GROK_API_KEY` is set) | no | ok | ok |
+| grok | `ps`, or PowerShell `Win32_Process` on Windows | process table readable | no | **blocked** (exit 127) | ok |
+| grok | `grok --version`, `grok models` | non-billable probes (`not logged in` blocks) | yes | not measured | not measured |
+
+**Under `workspace-write`, council cannot run any provider:** its own state root and the network are blocked (and so are Claude's session storage, agy's directory, the loopback listener and the process table). Every turn stops at once with `preflight_blocked` naming the state root, and nothing is submitted. Run Codex with `--sandbox danger-full-access`, or keep `workspace-write` and add `~/.codex/council` plus each provider's directories (`~/.claude`, `~/.gemini/antigravity-cli`, `~/.grok`) as writable roots and enable network; the loopback listener (agy) and the process table (all providers' cleanup) must also be allowed, and they were blocked in the measured `workspace-write` session. Windows session A had shown the same for Grok (login and process query blocked under `workspace-write`).
 
 Every provider child, probe and preflight probe carries the five guard variables `COUNCIL_DEPTH`, `CLAUDE_PLUGIN_CODEX_DEPTH`, `GROK_CODEX_DEPTH`, `GROK_BUILD_DEPTH` and `AGY_BRIDGE_DEPTH`, and council refuses to start when any is set, so neither council nor the three replaced plugins can nest from a child.
 
