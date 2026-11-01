@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { ENTRY, makeWorld, jobIdOf, footerOf } from "./helpers.mjs";
+import { ENTRY, makeWorld, jobIdOf, footerOf, built, BINARY } from "./helpers.mjs";
 import { DEPTH_VARIABLES } from "../plugins/council/scripts/lib/core/host.mjs";
 
 test("--help prints the usage line and exits 0; no verb, an unknown verb or an unknown flag exits 2 with the usage", () => {
@@ -27,8 +27,10 @@ test("ask, review and task need --to; an unknown provider and a provider this bu
   assert.equal(w.call(["review"]).status, 2);
   assert.match(w.call(["ask", "--to", "openai", "--", "q"]).stderr, /unknown provider "openai"/);
   for (const provider of ["claude", "gemini", "grok"]) {
-    const r = w.call(["ask", "--to", provider, "--", "q"]);
-    assert.deepEqual([r.status, r.stderr.trim()], [2, `council: provider ${provider} not available in this build`]);
+    // PATH is empty so a provider this build ships finds no binary (exit 1, nothing started) and no real CLI is ever called.
+    const r = w.call(["ask", "--to", provider, "--", "q"], { env: { PATH: "" } });
+    if (built(provider)) assert.deepEqual([r.status, r.stderr.trim()], [1, `council: ${provider} not found: install its CLI or set ${BINARY[provider][1]}`]);
+    else assert.deepEqual([r.status, r.stderr.trim()], [2, `council: provider ${provider} not available in this build`]);
   }
   const off = w.call(["ask", "--to", "null", "--", "q"], { env: { COUNCIL_TEST_NULL_ADAPTER: "" } });
   assert.match(off.stderr, /unknown provider "null"/, "the null adapter exists only under COUNCIL_TEST_NULL_ADAPTER=1");
@@ -126,4 +128,16 @@ test("a replay bypasses preflight: a finished request with a now-blocked descrip
   assert.equal(footerOf(replayed.stdout), footerOf(first.stdout));
   assert.equal(replayed.stderr, "", "a replay prints no start line");
   assert.deepEqual([w.probes().length, w.fakeCalls().length], [probes, calls], "zero submissions while blocked, zero processes for the replay");
+});
+
+test("COUNCIL_TEST_ABSENT_PROVIDERS hides a shipped provider only under COUNCIL_TEST_NULL_ADAPTER=1, and no test world can reach a real CLI", () => {
+  const w = makeWorld();
+  for (const provider of ["claude", "gemini", "grok"]) {
+    const hidden = w.call(["ask", "--to", provider, "--", "q"], { env: { COUNCIL_TEST_ABSENT_PROVIDERS: `x,${provider}` } });
+    assert.deepEqual([hidden.status, hidden.stderr.trim()], [2, `council: provider ${provider} not available in this build`]);
+    const r = w.call(["ask", "--to", provider, "--", "q"], { env: { COUNCIL_TEST_ABSENT_PROVIDERS: provider, COUNCIL_TEST_NULL_ADAPTER: "" } });
+    if (built(provider)) assert.deepEqual([r.status, r.stderr.trim()], [1, `council: ${provider} not found: install its CLI or set ${BINARY[provider][1]}`], "the seam is inert outside tests; the world's binary override names a missing file");
+    else assert.equal(r.status, 2);
+  }
+  assert.equal(w.fakeCalls().length + w.probes().length, 0);
 });

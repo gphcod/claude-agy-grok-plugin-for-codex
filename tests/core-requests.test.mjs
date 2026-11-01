@@ -70,7 +70,7 @@ test("a call that fails before preparing frees its request id for a corrected re
   const w = makeWorld();
   const jobs = () => (fs.existsSync(path.join(w.home, "jobs")) ? fs.readdirSync(path.join(w.home, "jobs")).length : 0);
   for (const args of [["reply", "nosuchjob"], ["ask", "--to", "null", "--deadline", "NaN"], ["ask", "--to", "null", "--inactivity-timeout", "0"], ["ask", "--to", "claude"]]) {
-    const bad = w.call([...args, "--request-id", "r6", "--", "q"]);
+    const bad = w.call([...args, "--request-id", "r6", "--", "q"], { env: { COUNCIL_TEST_ABSENT_PROVIDERS: "claude" } });
     assert.equal(bad.status, 2, `${args.join(" ")}: ${bad.stdout}${bad.stderr}`);
     assert.equal(jobs(), 0, `${args.join(" ")}: no claim is left behind`);
   }

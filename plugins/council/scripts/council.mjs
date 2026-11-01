@@ -54,6 +54,9 @@ export async function loadAdapter(provider, env = process.env) {
     return fs.existsSync(file) ? assertAdapter((await import(pathToFileURL(file).href)).default, provider) : null;
   }
   if (!PROVIDERS.includes(provider)) return null;
+  // Test seam: under COUNCIL_TEST_NULL_ADAPTER=1, COUNCIL_TEST_ABSENT_PROVIDERS (comma-separated) hides shipped provider
+  // modules, so a test that needs an absent provider never resolves and starts the real CLI on PATH.
+  if (env.COUNCIL_TEST_NULL_ADAPTER === "1" && String(env.COUNCIL_TEST_ABSENT_PROVIDERS ?? "").split(",").includes(provider)) return null;
   const file = path.join(PLUGIN_ROOT, "scripts", "lib", "providers", `${provider}.mjs`);
   return fs.existsSync(file) ? assertAdapter((await import(pathToFileURL(file).href)).default, provider) : null;
 }

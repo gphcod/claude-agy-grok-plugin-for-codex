@@ -174,3 +174,9 @@ Found while implementing S4 (Grok); a frozen-contract change (S2.7), so it needs
 ## 2026-10-31 S5 core: the TurnRequest carries the deadline
 
 - **`deadlineMs` added to the frozen TurnRequest** (council.mjs `planTurn`, types.mjs). A3.3 and A5.1 set agy's `--print-timeout` from the execution deadline, but S2.8's request carried no timing, so `buildTurn` could not honour `--deadline`. The field is the `--deadline` value (default 14400 s) in milliseconds; it stays out of the request fingerprint (S2.8 F19). Additive: adapters that ignore it are unaffected. Test: tests/core-turn-request.test.mjs. Touches S5.2; the twin needs the same field if its agy adapter derives `--print-timeout` likewise.
+
+## 2026-10-31 core (S5): shared tests derive the provider surface from the shipped modules
+
+- Five shared tests assumed no provider module exists (core-setup tests 1 and 5, cli-smoke test 2, core-requests test 5, manifests test 3); each S3–S5 branch broke them, and with a module present some would have resolved the real CLI on PATH. They now derive each provider's expected line from whether `providers/<p>.mjs` exists (`built()` in tests/helpers.mjs), so they pass with zero, one or three adapters.
+- **No test may start a real CLI.** `makeWorld` points `COUNCIL_CLAUDE_BIN`, `COUNCIL_AGY_BIN` and `COUNCIL_GROK_BIN` at a missing file unless a test overrides them with a fake; the absent-provider cases run with `PATH=""` as well.
+- **Test seam (council.mjs `loadAdapter`):** under `COUNCIL_TEST_NULL_ADAPTER=1`, `COUNCIL_TEST_ABSENT_PROVIDERS=<comma list>` hides shipped provider modules (the twin's seam of the same name); inert otherwise. core-requests test 5 uses it to keep `ask --to claude` a pre-prepare usage error. Test: tests/cli-smoke.test.mjs (seam active only under the null-adapter flag).

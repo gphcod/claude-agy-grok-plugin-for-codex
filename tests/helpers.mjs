@@ -13,6 +13,10 @@ for (const name of Object.keys(process.env)) if (/^(CLAUDE|CODEX|GROK|AGY|COUNCI
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const PLUGIN_ROOT = path.join(ROOT, "plugins", "council");
 export const ENTRY = path.join(PLUGIN_ROOT, "scripts", "council.mjs");
+/** Whether this build ships a provider's module (S3–S5 each add one): tests derive the expected surface from it. */
+export const built = (provider) => fs.existsSync(path.join(PLUGIN_ROOT, "scripts", "lib", "providers", `${provider}.mjs`));
+/** The binary and override variable of each provider (A5.1). */
+export const BINARY = { claude: ["claude", "COUNCIL_CLAUDE_BIN"], gemini: ["agy", "COUNCIL_AGY_BIN"], grok: ["grok", "COUNCIL_GROK_BIN"] };
 export { adapter, FAKE_CHILD };
 export const tmp = (prefix = "council-test-") => fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 export const run = (command, args, options = {}) => spawnSync(command, args, { cwd: options.cwd, env: options.env, input: options.input, encoding: "utf8", shell: false, windowsHide: true, timeout: options.timeout ?? 60000 });
@@ -36,7 +40,9 @@ export function makeWorld({ git = true } = {}) {
   fs.mkdirSync(workspace);
   if (git) { initGitRepo(workspace); commitFile(workspace, "README.md", "# work\n"); }
   const env = { ...process.env, COUNCIL_CODEX_HOME: path.join(dir, "state"), COUNCIL_TEST_NULL_ADAPTER: "1", COUNCIL_FAKE_LOG: path.join(dir, "fake.log"),
-    COUNCIL_FAKE_HOOKS: path.join(dir, "hooks.log"), COUNCIL_STDIN_DEADLINE_MS: "2000", HOME: dir, USERPROFILE: dir, TMPDIR: dir, TEMP: dir, TMP: dir };
+    COUNCIL_FAKE_HOOKS: path.join(dir, "hooks.log"), COUNCIL_STDIN_DEADLINE_MS: "2000", HOME: dir, USERPROFILE: dir, TMPDIR: dir, TEMP: dir, TMP: dir,
+    // No test may start a real provider CLI: each binary override names a missing file unless a test points it at a fake.
+    ...Object.fromEntries(Object.values(BINARY).map(([, name]) => [name, path.join(dir, "no-real-cli", name)])) };
   const world = {
     dir, workspace, env, home: path.join(dir, "state"),
     call(args, { input, cwd = workspace, env: extra = {}, timeout = 60000 } = {}) {

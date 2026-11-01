@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { makeWorld } from "./helpers.mjs";
+import { makeWorld, built, BINARY } from "./helpers.mjs";
 import { runDescriptor } from "../plugins/council/scripts/lib/core/preflight.mjs";
 
 test("setup reports each provider: the unavailable three by binary, the null adapter by binary, kind, version, login, tiers and preflight", () => {
@@ -13,9 +13,14 @@ test("setup reports each provider: the unavailable three by binary, the null ada
   const r = w.call(["setup"], { env: { PATH: "" } });
   assert.equal(r.status, 0, r.stderr);
   const lines = r.stdout.trim().split("\n");
-  assert.deepEqual(lines.slice(0, 3), ["claude: claude not found · provider not available in this build", "gemini: agy not found · provider not available in this build",
-    "grok: grok not found · provider not available in this build"]);
-  assert.match(lines[3], /^null: .*fake-child\.mjs \(node-script\) · null 0\.0\.1 · logged in · tiers consult=null-model\/high exec=null-fast\/high deep=null-model\/xhigh · preflight ok$/);
+  const heads = lines.filter((l) => !l.startsWith("  "));
+  assert.deepEqual(heads.slice(0, 3).map((l) => l.split(":")[0]), ["claude", "gemini", "grok"]);
+  for (const [i, provider] of ["claude", "gemini", "grok"].entries()) {
+    // A provider this build ships is loaded and reports its missing binary; one it lacks is named by binary only.
+    if (built(provider)) assert.match(heads[i], new RegExp(`^${provider}: not found · tiers consult=\\S+ exec=\\S+ deep=\\S+ · preflight not run$`));
+    else assert.equal(heads[i], `${provider}: ${BINARY[provider][0]} not found · provider not available in this build`);
+  }
+  assert.match(heads[3], /^null: .*fake-child\.mjs \(node-script\) · null 0\.0\.1 · logged in · tiers consult=null-model\/high exec=null-fast\/high deep=null-model\/xhigh · preflight ok$/);
   assert.deepEqual(w.probes().map((p) => p.probe), ["version", "models", "version"], "setup's own version and listing probes, then the cold preflight probe");
   const warm = w.call(["setup", "--to", "null"]);
   assert.match(warm.stdout, /preflight ok \(cached\)\n$/);
@@ -63,8 +68,10 @@ test("models prints the static catalog, says which providers this build lacks, a
   const w = makeWorld({ git: false });
   const r = w.call(["models"]);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /^claude: provider not available in this build · static catalog: default, fable, opus, sonnet, haiku, claude-opus-5-5, claude-sonnet-5-5\n/);
-  assert.match(r.stdout, /\ngemini: provider not available in this build · static catalog: gemini-4-argon, gemini-3\.8-flash\n/);
+  if (built("claude")) assert.match(r.stdout, /^claude \(static catalog\)\n/);
+  else assert.match(r.stdout, /^claude: provider not available in this build · static catalog: default, fable, opus, sonnet, haiku, claude-opus-5-5, claude-sonnet-5-5\n/);
+  if (built("gemini")) assert.match(r.stdout, /\ngemini \(static catalog\)\n  gemini-4-argon: low, medium, high\n/);
+  else assert.match(r.stdout, /\ngemini: provider not available in this build · static catalog: gemini-4-argon, gemini-3\.8-flash\n/);
   assert.match(r.stdout, /\nnull \(static catalog\)\n  null-model: low, medium, high, xhigh\n  null-fast: low, medium, high\n  aliases: fast=null-fast\n$/);
   assert.equal(w.probes().length, 0, "models reads static and cached data only");
   const refreshed = w.call(["models", "--to", "null", "--refresh"]);
