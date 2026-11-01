@@ -1,22 +1,36 @@
 # Spike record: Codex host (codex-cli 0.163.0)
 
-Recorded 2026-10-31. S1.4's paid parts run inside a Codex chat and are **[user]**; this record holds what was established without a chat (CLI help, read-only config and cache inspection) and marks the rest "pending user probe". Where a later S1 action depends on a pending probe, `docs/decisions.md` records the provisional default.
+Recorded 2026-10-31; S1.4's in-chat probes recorded 2026-11-01. The paid probes ran, with the user's authorization, inside two real Codex sessions on this Mac (`codex exec`, codex-cli 0.163.0, model gpt-6.1-sol at low effort), one under `--sandbox workspace-write` and one under `--sandbox danger-full-access`, each told to run fixed shell commands and change nothing. Two `agy` checks the first sessions' approval review rejected (because the command contained `rm -f`) were rerun in a second pair of sessions. Evidence (outside the repository, in the coordinator's session scratchpad `hostprobe/`): `prompt-a.md`/`prompt-b.md` and `prompt-c.md` (the commands), `events-a.jsonl` (workspace-write) and `events-b.jsonl` (danger-full-access), each line prefixed with an epoch timestamp, `events-c-workspace-write.jsonl` and `events-c-danger-full-access.jsonl` (the agy reruns), `answer-*.md` (the sessions' result tables) and `stderr-*.txt`.
 
 ## Thread id env
 
-`CODEX_THREAD_ID` presence and shape inside a Codex shell call: **pending user probe** (`printenv CODEX_THREAD_ID`). Both Codex-hosted donors read it (GROKX `jobs.mjs`, CLAUDEX `state.mjs`); A7.2 scopes `--last`, bare `wait` and bare `cancel` by it. Provisional: the variable is treated as optional (`session: null` when absent), as both donors do.
+`CODEX_THREAD_ID` is present in every shell call and equals the session's thread id from the event stream, a UUID v7 (`01a197a0-f83d-7c91-a56d-8bc2b213cca7` in events-a, `01a197a1-05a6-7922-b1dc-3f99563d73a1` in events-b). Also present: `CODEX_SESSION_ID`, `CODEX_TOOL_CALL_ID`, `CODEX_CI`, `CODEX_VERSION`, `CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS`; under `workspace-write` also `CODEX_SANDBOX` and `CODEX_SANDBOX_NETWORK_DISABLED`. A7.2 scopes `--last`, bare `wait` and bare `cancel` by it, as both Codex-hosted donors do; the code still treats it as optional (`session: null` when absent, for calls outside Codex).
 
 ## Shell concurrency
 
-Two independent shell calls in one turn (`sleep 20; date` each): **pending user probe**. Provisional (A6): fan-out is sequential, one `ask` per provider; the skill does not say to issue the asks in one turn until the probe shows overlap.
+Two shell calls issued in one turn (`node -e 'console.log(…, Date.now())'; sleep 20; node -e …` each) ran fully in parallel: both started at epoch ms 1793545280348 and both ended at 1793545300401, 20.05 s later (events-a, answer-a). A fan-out may therefore issue its asks as parallel shell calls in one turn (A6, amended 2026-11-01).
 
 ## Yield and collection
 
-A yielding call (`sleep 400`) and how Codex collects it: **pending user probe**. Provisional: the handbook rule kept in A1/A3.5 (keep collecting the yielded shell with the longest wait; `wait <job>` only after a lost handle; never resubmit).
+`sleep 400; echo slept-400` yielded after 10.0 s with the process still running (events-a: the tool returned a session handle and no output). In `codex exec` the model then ended its turn without collecting the shell, so the command's result was never read. The skill's rule is therefore essential: keep collecting the same shell session with the longest wait allowed; `wait <job>` only after the handle is lost; never resubmit.
 
 ## Sandbox modes per provider and resource
 
-Per-provider resource checks under `workspace-write` and `danger-full-access` (`$claude setup`, `$grok setup`, `agy models`, a write under `~/.gemini/antigravity-cli/`, a loopback listener bind, `ps -axo pid,command`): **pending user probe**. Provisional preflight descriptors come from A2's recorded facts (Windows session A: `workspace-write` blocked Grok's login file read and the process query; agy needs network, a loopback listener, process inspection and writes under `~/.gemini/antigravity-cli/`; Claude needs its config directory, the state root and network). `~/.codex/config.toml` sets no `sandbox_mode`/`approval_policy` keys at the top level (read-only grep), so the chat default applies. No `CODEX_*` variable was present in this (Claude Code) shell.
+| Check | `workspace-write` (events-a, events-c-workspace-write) | `danger-full-access` (events-b, events-c-danger-full-access) |
+|---|---|---|
+| council state root `~/.codex/council` (mkdir) | write failed, EPERM | ok |
+| network (`fetch` HEAD to api.anthropic.com) | fails: node exits 139 (`SecItemCopyMatching failed -50`); `CODEX_SANDBOX_NETWORK_DISABLED` is set | ok (HTTP 404) |
+| `~/.claude/projects` (mkdir) | write failed, EPERM | ok |
+| `claude auth status --json` | exit 1 | exit 0 |
+| claude_plugin_for_codex 0.5.0 `setup` | exit 1, `preflight_blocked` for its state directory (EPERM) | exit 0 |
+| loopback listener on 127.0.0.1 | EPERM | ok |
+| `ps -axo pid,command` | exit 127 | ok |
+| `agy models` | exit 1 | exit 0 |
+| write under `~/.gemini/antigravity-cli/` | EPERM | ok |
+| `~/.grok/auth.json` readable | ok | ok |
+| grok_plugin_for_codex 1.1.0 `setup` | exit 0, "ready" (it checks only the login file) | exit 0 |
+
+Consequence: under `workspace-write` council cannot run any provider: its own state root and the network are blocked, and so are Claude's session storage, agy's backend directory, the loopback listener and the process table. Council's preflight stops every turn with `preflight_blocked` and zero submissions. Run Codex with `danger-full-access`, or add `~/.codex/council` and each provider's directories (`~/.claude`, `~/.gemini/antigravity-cli`) as writable roots and enable network; the process table and the loopback listener must also be allowed (they were blocked here). `~/.codex/config.toml` sets no `sandbox_mode`/`approval_policy` keys at the top level (read-only grep), so the chat default applies.
 
 ## PowerShell boundary
 
@@ -35,4 +49,6 @@ Established from the CLI and read-only inspection:
 
 ## Surprises
 
-None established without a chat.
+- A yielded shell is not collected by `codex exec` unless the model keeps polling it: the turn ended with `sleep 400` still running.
+- grok_plugin_for_codex 1.1.0's `setup` reports ready under `workspace-write` because it checks only the login file, although the process table and the network are blocked there; council's Grok preflight checks the state root and the process table too.
+- Codex's approval review rejected commands containing `rm -f` even under `danger-full-access`; the agy checks were rerun without it.
