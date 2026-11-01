@@ -106,12 +106,22 @@ test("denials exit 10: a deny-rule tool error, and denied_actions with an empty 
 test("failures exit 1: duplicate result, missing result, status ERROR, empty response, print_timeout", () => {
   const w = world();
   for (const [scenario, pattern] of [["duplicate-result", /error: agy sent a duplicate terminal result/], ["missing-result", /error: gemini ended without completing the turn/],
-    ["effort-error", /error: agy status ERROR: invalid model selection/], ["empty-response", /error: agy returned an empty response/], ["print-timeout", /error: print_timeout: /]]) {
+    ["effort-error", /error: agy status ERROR: invalid model selection/], ["empty-response", /error: agy returned an empty response/], ["print-timeout", /error: \[agy\] print timeout after 5s with turn in progress/]]) {
     const r = w.gemini(["ask", "--to", "gemini", "--", "q"], scenario);
     assert.equal(r.status, 1, `${scenario}: ${r.stdout}${r.stderr}`);
     assert.match(footerOf(r.stdout), /^council gemini failed · /, scenario);
     assert.match(footerOf(r.stdout), pattern, scenario);
   }
+});
+
+test("review fixes: print_timeout exits 1 and keeps agy's answer; a deny-rule denial before an empty result exits 10 with the denial as answer", () => {
+  const w = world();
+  const timeout = w.gemini(["ask", "--to", "gemini", "--", "q"], "print-timeout-answer");
+  assert.equal(timeout.status, 1, timeout.stdout);
+  assert.match(timeout.stdout, /^kept terminal answer\ncouncil gemini failed · .* · error: \[agy\] print timeout after 5s/);
+  const denied = w.gemini(["ask", "--to", "gemini", "--", "write"], "denied-empty");
+  assert.equal(denied.status, 10, denied.stdout + denied.stderr);
+  assert.match(denied.stdout, /^agy denied write_file: permission check failed[\s\S]*\ncouncil gemini needs attention/);
 });
 
 test("model and effort: a suffix conflict exits 2 before any spawn; xhigh is clamped to high in the footer; a suffixed id travels alone", () => {
@@ -184,6 +194,7 @@ test("snapshots: a task reports its edited files; a read-only turn whose workspa
   assert.equal(r.status, 0, r.stderr);
   const outside = plain.job(jobIdOf(r.stderr));
   assert.deepEqual([outside.mutationCoverage, outside.edited], ["unknown", []], "unknown coverage, never a claimed clean result");
+  assert.match(footerOf(r.stdout), / · edited 0 · coverage unknown$/, "the footer names it (milestone 3 review Q6)");
 });
 
 test("two concurrent jobs are told apart by their settings paths: cancelling one leaves the other running to completion", darwinOnly, async () => {

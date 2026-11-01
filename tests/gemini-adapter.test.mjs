@@ -244,7 +244,6 @@ test("S5.3 denials: a deny-rule tool error is denied with the answer kept; denie
 test("S5.3 failures: status ERROR, print_timeout, empty response, duplicate result, missing result, malformed lines", () => {
   assert.match(read(fill(STREAMS["effort-error"])).failed, /^agy status ERROR: invalid model selection/);
   assert.equal(read(fill(STREAMS["effort-error"])).threadId, null, "an empty conversation id is no thread");
-  assert.match(read(fill(STREAMS["print-timeout"])).failed, /^print_timeout: /);
   const empty = fill(STREAMS.ok).map((l) => l.replace('"response":"pong\\n"', '"response":"  "'));
   assert.equal(read(empty).failed, "agy returned an empty response");
   const ok = fill(STREAMS.ok);
@@ -371,9 +370,52 @@ test("S5.7 parity: AGYX's stderr host-denial heuristics, skipped when the stream
   assert.equal((await gemini.afterTurn(ctx, { denials: [{ tool: "command" }] })).incomplete, undefined, "a recorded denial already explains the notice");
 });
 
+test("review fix 1: print_timeout keeps the answer (the terminal response, else the streamed deltas) and leaves the turn uncompleted (exit 1)", () => {
+  const recorded = read(fill(STREAMS["print-timeout"]));
+  assert.deepEqual([recorded.completed, recorded.failed, recorded.text], [false, null, ""], "the S1.2 stream: denials, then an empty print_timeout result");
+  assert.match(recorded.incomplete, /^print_timeout: /);
+  const result = (fields) => JSON.stringify({ event: "result", result: { conversation_id: "conv-1", status: "SUCCESS", finished_reason: "print_timeout", ...fields } });
+  const delta = (text) => JSON.stringify({ event: "step_update", step_update: { conversation_id: "conv-1", step_type: "agent_response", state: "ACTIVE", text_delta: text } });
+  const terminal = read([delta("partial "), result({ response: "kept terminal answer" })]);
+  assert.deepEqual([terminal.completed, terminal.failed, terminal.text], [false, null, "kept terminal answer"]);
+  const deltas = read([delta("first half, "), delta("second half"), result({ response: "" })]);
+  assert.deepEqual([deltas.completed, deltas.failed, deltas.text], [false, null, "first half, second half"]);
+  assert.match(deltas.incomplete, /^print_timeout: /);
+});
+
+test("review fix 3: a deny-rule denial followed by an empty or failed result is denied with the denial as the answer", () => {
+  const events = fill(STREAMS.denied);
+  const quiet = (e) => (e.event === "result" ? { ...e, result: { ...e.result, response: "" } } : e.step_update?.text_delta ? { ...e, step_update: { ...e.step_update, text_delta: undefined } } : e);
+  const empty = read(events.map((l) => JSON.stringify(quiet(JSON.parse(l)))));
+  assert.deepEqual([empty.completed, empty.failed, empty.denials.length], [true, null, 2]);
+  assert.match(empty.text, /^agy denied write_file: permission check failed for write_file .*\nagy denied run_command: permission check failed for command "which node"/);
+  const failed = read(events.map((l) => (l.startsWith('{"event":"result"') ? l.replace('"status":"SUCCESS"', '"status":"ERROR"') : l)));
+  assert.deepEqual([failed.completed, failed.failed], [true, null]);
+  assert.match(failed.text, /^Step 1: Failed/, "a response, when agy gave one, stays the answer");
+  const deltasOnly = read(events.map((l) => (l.startsWith('{"event":"result"') ? JSON.stringify(quiet(JSON.parse(l))) : l)));
+  assert.match(deltasOnly.text, /^Step 1: Failed/, "streamed text, when there was some, is the answer");
+  assert.match(read(fill(STREAMS["effort-error"])).failed, /^agy status ERROR/, "without a denial, a failed result stays fatal");
+});
+
+test("review fix 2: an untracked path named __proto__ is a snapshot entry, so a read-only change to it is caught", async () => {
+  const dir = repo();
+  const job = jobIn(dir);
+  const ctx = { job, request: {}, cwd: dir, env: { PATH: process.env.PATH } };
+  await gemini.beforeTurn(ctx);
+  fs.writeFileSync(path.join(dir, "__proto__"), "x\n");
+  const after = snapshot(workspace(dir));
+  assert.ok(Object.hasOwn(after.files, "__proto__"));
+  assert.deepEqual(await gemini.afterTurn(ctx, {}), { coverage: "complete", incomplete: "the workspace changed during a read-only turn: __proto__" });
+  const job2 = jobIn(dir);
+  const ctx2 = { job: job2, request: {}, cwd: dir, env: { PATH: process.env.PATH } };
+  await gemini.beforeTurn(ctx2);
+  fs.writeFileSync(path.join(dir, "__proto__"), "changed\n");
+  assert.match((await gemini.afterTurn(ctx2, {})).incomplete, /__proto__/, "an edit to it after a JSON round trip of the before snapshot");
+});
+
 // ---------------------------------------------------------------------------------------------------------------- S5.4
 
 test("S5.4 review plan: agy enforces --json-schema (S1.2), so the schema travels by path; --adversarial picks its template", () => {
-  assert.deepEqual(gemini.reviewPlan({ batch: { index: 1, total: 2 } }, { adversarial: false }), { native: false, batches: { index: 1, total: 2 }, promptTemplate: "review", schemaCarrier: "path" });
+  assert.deepEqual(gemini.reviewPlan({ batches: [["u1"], ["u2"]], batch: { index: 1, total: 2 } }, { adversarial: false }), { native: false, batches: [["u1"], ["u2"]], promptTemplate: "review", schemaCarrier: "path" });
   assert.equal(gemini.reviewPlan({ snapshot: null }, { adversarial: true }).promptTemplate, "adversarial-review");
 });

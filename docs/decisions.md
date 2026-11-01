@@ -204,3 +204,10 @@ Found while implementing S4 (Grok); a frozen-contract change (S2.7), so it needs
 ## 2026-10-31 core (milestone 3 review Q6): unknown mutation coverage in the footer
 
 - `output.mjs` `recoveryHint` ends with `coverage unknown` when the job records `mutationCoverage: "unknown"` (Gemini's snapshots were unavailable or partial without a detected change), after every recovery hint, so a recovery step still wins. No new `--json` key (the footer grammar's hint slot, A3.4). Test: tests/core-output.test.mjs.
+
+## 2026-10-31 S5 milestone 3 review fixes (Codex gpt-6.1-sol and Gemini 4 Argon)
+
+- **print_timeout keeps the answer.** The result event carries agy's response (else the streamed text) as `textDelta` with an `incomplete: "print_timeout: …"` marker and **without** `completed`: in this repository's lifecycle `incomplete` on a completed turn is exit 10 (lifecycle.mjs outcome mapping), so the not-completed path is what fails the turn (exit 1, error = agy's `[agy] print timeout …` stderr line) while the spooled answer is printed. A fatal would have dropped the text (pinned reader). Supersedes the S5.3 "a print-timeout partial stays in events.jsonl" wording.
+- **Snapshot `files` is `Object.create(null)`** (AGYX did the same): an untracked `__proto__` path is an entry, not the prototype.
+- **A deny-rule denial explains an empty or failed result**: with a denial recorded earlier in the stream, an empty-response or non-SUCCESS result is `completed` with the streamed text, else one `agy denied <tool>: <message>` line per denial, as the answer → `denied` (exit 10). For non-SUCCESS results agy itself exits 1, and the core fails a non-zero exit before it looks at denials, so that combination still exits 1 through the entry; changing it needs a core rule (open question).
+- **`reviewPlan` returns `review.batches`**; the parity file marks the outside-Git case intentionally different (AGYX printed a `warning` with `coverage=unchecked`; council prints the `coverage unknown` footer hint, core commit c2a3a03).

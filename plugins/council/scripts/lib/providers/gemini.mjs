@@ -131,7 +131,7 @@ export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxByt
   const diff = git(scope.root, ["diff", "--no-ext-diff", "--no-textconv", "--binary", ...(head.code === 0 ? ["HEAD"] : [])], env, opts);
   let partial = [status, diff, staged].some((r) => r.code !== 0 || r.limited);
   const entries = status.output.toString("utf8").split("\0");
-  const files = {};
+  const files = Object.create(null); // a path named __proto__ is an entry, never the prototype (AGYX)
   let bytes = 0;
   for (let i = 0; i < entries.length; i += 1) {
     const entry = entries[i];
@@ -231,7 +231,12 @@ function stepEvent(su, scratch) {
   return { ...out, describe: su.step_type ?? "step" };
 }
 
-function resultEvent(r, scratch) {
+/** The answer of a turn that agy ended on a denial without a response: one line per denied tool. */
+function denialText(denials) {
+  return `${denials.slice(0, 5).map((d) => `agy denied ${d.tool}: ${clip(String(d.message ?? "permission denied").split("\n")[0], 300)}`).join("\n")}\n`;
+}
+
+function resultEvent(r, scratch, state) {
   if (scratch.result) return { fatal: "agy sent a duplicate terminal result" };
   scratch.result = true;
   if (!r || typeof r !== "object" || typeof r.status !== "string") return { fatal: "agy sent a missing or malformed terminal result" };
@@ -246,7 +251,18 @@ function resultEvent(r, scratch) {
       : `agy denied ${actions.map((a) => `${a.action}${a.display ? ` (${a.display})` : ""}`).join(", ")}: headless mode cannot prompt for this permission.\n`;
     return { threadId, completed: true, denied: { tool: actions.map((a) => a.action).join(","), actions, prompt: true }, textDelta: text, usage, describe: "result (denied)" };
   }
-  if (r.finished_reason === "print_timeout") return { fatal: "print_timeout: agy's --print-timeout passed with the turn in progress (partial output kept in events.jsonl)" };
+  const kept = response.trim() ? response : scratch.partial?.trim() ? scratch.partial : null;
+  // print_timeout (status SUCCESS, exit 0) fails the turn (exit 1) but keeps what agy answered: the event carries the
+  // text and an `incomplete` marker without `completed`, so the lifecycle's not-completed path fails it (a fatal would
+  // drop the text, and `incomplete` on a completed turn means exit 10). agy's stderr line names the timeout.
+  if (r.finished_reason === "print_timeout") {
+    return { threadId, ...(kept ? { textDelta: kept } : {}), incomplete: "print_timeout: agy's --print-timeout passed with the turn in progress", usage, describe: "result (print_timeout)" };
+  }
+  // A deny-rule denial earlier in the stream explains an empty or failed result: denied (exit 10), not a failure.
+  const denials = state.denials ?? [];
+  if (denials.length && (r.status !== "SUCCESS" || !response.trim())) {
+    return { threadId, completed: true, textDelta: kept ?? denialText(denials), usage, describe: "result (denied)" };
+  }
   if (r.status !== "SUCCESS") return { fatal: `agy status ${r.status}${r.error ? `: ${clip(r.error, 500)}` : ""}` };
   const structured = r.structured_output && typeof r.structured_output === "object" ? r.structured_output : undefined;
   if (!response.trim() && !structured) return { fatal: "agy returned an empty response" };
@@ -265,7 +281,7 @@ export function parseEvent(line, state = { adapter: {} }) {
       return { threadId: typeof id === "string" && id ? id : undefined, describe: "init" };
     }
     case "step_update": return event.step_update && typeof event.step_update === "object" ? stepEvent(event.step_update, scratch) : null;
-    case "result": return resultEvent(event.result, scratch);
+    case "result": return resultEvent(event.result, scratch, state);
     default: return null;
   }
 }
@@ -403,7 +419,7 @@ const adapter = {
   parseEvent,
   /** agy enforces --json-schema (S1.2: the model answers through `finish`; result.structured_output), so the schema travels by path. */
   reviewPlan(review, request = {}) {
-    return { native: false, batches: review?.batch ?? null, promptTemplate: request.adversarial ? "adversarial-review" : "review", schemaCarrier: "path" };
+    return { native: false, batches: review?.batches ?? null, promptTemplate: request.adversarial ? "adversarial-review" : "review", schemaCarrier: "path" };
   },
   /** result.structured_output, else the response text parsed as JSON; the core validates and maps it (A5.2). */
   finalizeReview({ answerText, structured, unreviewed }) {

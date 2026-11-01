@@ -4,7 +4,8 @@
 // launch contract (argv, the settings file, stdin, guard variables) before emitting and plays COUNCIL_FAKE_SCENARIO:
 // ok, resume, denied, denied-prompt, effort-error, effort-conflict, review-findings, review-malformed, large-review,
 // print-timeout, task, web, slow, hold-pipes; and, for the S5.5 entry tests, task-edit (writes edited.txt in its cwd),
-// duplicate-result, missing-result and empty-response (synthetic mutations of ok), host-denied (ok plus a backend
+// duplicate-result, missing-result, empty-response, print-timeout-answer and denied-empty (synthetic mutations of
+// ok, print-timeout and denied), host-denied (ok plus a backend
 // persistence error on stderr, AGYX docs/P0.md's sandbox finding), touch (a read-only turn during which the workspace changes), language-server (a long-lived child in agy's process
 // group, then no answer until stopped) and language-server-orphan (the child outlives agy, reparented to pid 1).
 import fs from "node:fs";
@@ -100,6 +101,12 @@ switch (which) {
   case "missing-result": play(fill(fixtures.ok).filter((e) => e.event !== "result")); break;
   case "empty-response": play(fill(fixtures.ok).map((e) => (e.event === "result" ? { ...e, result: { ...e.result, response: "" } } : e))); break;
   case "host-denied": play(fill(fixtures.ok)); process.stderr.write("backend: attempt to write a readonly database\n"); break;
+  case "print-timeout-answer": play(fill(fixtures["print-timeout"]).map((e) => (e.event === "result" ? { ...e, result: { ...e.result, response: "kept terminal answer" } } : e))); process.stderr.write(`${fixtures["print-timeout-stderr"]}\n`); break;
+  case "denied-empty": { // the denied stream with no answer text at all: no deltas, an empty response
+    const quiet = (e) => (e.event === "result" ? { ...e, result: { ...e.result, response: "" } } : e.step_update?.text_delta ? { ...e, step_update: { ...e.step_update, text_delta: undefined } } : e);
+    play(fill(fixtures.denied).map(quiet));
+    break;
+  }
   case "task-edit": fs.writeFileSync(path.join(process.cwd(), "edited.txt"), "written by the fake task\n"); play(fill(fixtures.task)); break;
   case "touch": fs.writeFileSync(path.join(process.cwd(), "touched.txt"), "changed during a read-only turn\n"); play(fill(fixtures.ok)); break;
   case "language-server": case "language-server-orphan": {
