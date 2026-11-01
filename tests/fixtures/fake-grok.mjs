@@ -3,7 +3,7 @@
 // from the S1.3 probes (tests/fixtures/streams/grok.json carries the provenance). It validates the A5.1 launch contract
 // (recipe flags, prompt file, rules text or schema carrier, compatEnv and guard variables) before emitting and plays
 // COUNCIL_FAKE_SCENARIO: ok, resume, denied, effort-error, review-findings, review-malformed, large-review, slow, hold-pipes,
-// and the synthetic review-reject and no-session (S4.5).
+// and the synthetic review-reject and no-session (S4.5), permission-cancelled, review-stop-other and review-max-turns (S4.8).
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { ROOT, UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, flagValues, holdPipes, log, mismatch, readStdin, repoSchema,
@@ -101,6 +101,17 @@ switch (which) {
         : e.structuredOutput.findings.map((f) => ({ ...f, decision: "REJECT" }));
       return { ...e, structuredOutput: { ...e.structuredOutput, verdict: "approve", summary: "Rejected.", findings } };
     }));
+    break;
+  }
+  // Synthetic (S4.8): Grok's own `cancelled` stop (a permission headless Grok cannot ask for), with and without text.
+  case "permission-cancelled": play(fill(fixtures.ok).map((e) => (e.type === "end" ? { ...e, stopReason: "cancelled" } : e.type === "text" && process.env.COUNCIL_FAKE_GROK_SILENT ? { ...e, data: "" } : e))); break;
+  // Synthetic (S4.8): a review whose end stops for another reason, carrying structured output, usage and cost, no text.
+  case "review-stop-other": play(fill(fixtures["review-findings"]).filter((e) => e.type !== "text").map((e) => (e.type === "end" ? { ...e, stopReason: "max_tokens" } : e))); break;
+  // Synthetic (S4.8): a review that streams its JSON text, then hits the turn limit.
+  case "review-max-turns": {
+    const events = fill(fixtures["review-findings"]);
+    const json = JSON.stringify(events.find((e) => e.type === "end").structuredOutput);
+    play([...events.filter((e) => e.type === "available_commands"), { type: "text", data: json.slice(0, 40) }, { type: "text", data: json.slice(40) }, { type: "max_turns_reached" }]);
     break;
   }
   // Synthetic (S4.5): an end event that names no session (session not confirmed).

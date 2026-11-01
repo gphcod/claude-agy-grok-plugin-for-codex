@@ -117,7 +117,10 @@ function gitTop(cwd, env) {
 const EDIT_TOOLS = new Set(["search_replace", "write"]);
 /** Stop reasons recorded as a finished turn; anything else is a failure. */
 export const NORMAL_STOPS = new Set(["end_turn"]);
-const STOP_TEXT = { cancelled: "Grok cancelled the turn (a tool needed permission headless Grok cannot ask for)" };
+/** Grok's own `cancelled` stop: a tool needed a permission headless Grok cannot ask for. A provider-reported refusal (exit 10). */
+export const PERMISSION_STOP = "Grok cancelled the turn (a tool needed permission headless Grok cannot ask for)";
+/** The footer hint for an end event that names no session (review Q3 ruling): the answer stands, the thread cannot be resumed. */
+export const UNCONFIRMED = "session not confirmed: start a new ask";
 // Grok names MCP tools server__tool; a read-only turn that calls one fails.
 const MCP_TOOL = /__/;
 const nameOf = (ev) => ev.toolName ?? ev.tool_name ?? ev.name ?? ev.tool?.name ?? null;
@@ -274,28 +277,35 @@ export default {
       case "end": {
         if (readOnly && !s.toolChecked) return { fatal: "Grok ended before the read-only tool list was validated" };
         const returned = ev.sessionId ?? ev.session_id ?? null;
-        if (returned === null) return { fatal: "session not confirmed: Grok's end event names no session" };
-        if (typeof returned !== "string" || !returned) return { fatal: `Grok answered on session ${JSON.stringify(returned)}` };
+        // A different session id fails in the core reader; a non-string one is refused here.
+        if (returned !== null && (typeof returned !== "string" || !returned)) return { fatal: `Grok answered on session ${JSON.stringify(returned)}` };
         const stop = ev.stopReason ?? ev.stop_reason ?? null;
-        if (!NORMAL_STOPS.has(stop)) return { fatal: STOP_TEXT[stop] ?? `Grok stopped with reason ${JSON.stringify(stop)}` };
         const structured = ev.structuredOutput ?? ev.structured_output;
         // end.modelUsage may name a cost-accounting id (grok-4.7-build for grok-4.7); the requested id is reported, never this.
-        return { completed: true, threadId: returned, ...(typeof ev.total_cost_usd === "number" ? { costUsd: ev.total_cost_usd } : {}),
-          ...(ev.usage ? { usage: ev.usage } : {}), ...(structured !== undefined && structured !== null ? { structured } : {}), describe };
+        const data = { ...(typeof ev.total_cost_usd === "number" ? { costUsd: ev.total_cost_usd } : {}), ...(ev.usage ? { usage: ev.usage } : {}),
+          ...(structured !== undefined && structured !== null ? { structured } : {}) };
+        // Any other stop keeps the answer, structured output, usage and cost, and fails the turn as incomplete (exit 1).
+        if (!NORMAL_STOPS.has(stop) && stop !== "cancelled") return { fatal: `incomplete: Grok stopped with reason ${JSON.stringify(stop)}`, ...data, describe };
+        // An end without a session keeps the answer and exit code; the thread is not resumable (review Q3 ruling).
+        const thread = returned === null ? { unconfirmed: UNCONFIRMED } : { threadId: returned };
+        // Grok's own `cancelled` is a provider-reported permission refusal: a denial (exit 10), never a failure. Council's own
+        // cancel stops Grok by signal, which ends the stream without an end event.
+        if (stop === "cancelled") return { completed: true, ...thread, ...data, denied: { reason: PERMISSION_STOP, stopReason: stop }, ...(state.hasText ? {} : { textDelta: PERMISSION_STOP }), describe };
+        return { completed: true, ...thread, ...data, describe };
       }
       case "error":
         // Informational until the turn ends without `end` (GROKX); the stderr line carries the message then.
         s.error = typeof ev.message === "string" ? ev.message.slice(0, 2000) : "Grok reported an error";
         return { describe };
       case "max_turns_reached":
-        return { fatal: "Grok stopped: max turns reached" };
+        return { fatal: "incomplete: Grok stopped: max turns reached" };
       default:
         return { describe }; // thought, usage, and anything newer: ignored
     }
   },
   /** Batching is the core's (≤ 180,000 B); the schema travels inline, so the batch prompt does not embed it. */
   reviewPlan(review, request = {}) {
-    return { native: false, batches: review?.batch ?? null, promptTemplate: request.adversarial ? "adversarial-review" : "review", schemaCarrier: "inline" };
+    return { native: false, batches: review?.batches, promptTemplate: request.adversarial ? "adversarial-review" : "review", schemaCarrier: "inline" };
   },
   /**
    * The schema-shaped answer: `end.structuredOutput`, or the complete streamed answer parsed as JSON when that is absent

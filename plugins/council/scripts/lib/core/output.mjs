@@ -44,6 +44,8 @@ export function modelToken(job) {
 export function recoveryHint(job) {
   if (job.threadLocked) return `thread locked; next: cancel ${job.id} --confirm-ended after checking the process table; do not resume`;
   if (pendingCleanup(job)) return `cleanup pending; next: cancel ${job.id}; do not resume`;
+  // The provider finished without confirming its thread (Grok's end without a session id): the thread is not resumable.
+  if (job.unconfirmed) return oneLine(job.unconfirmed);
   if (job.outcome === "failed" && job.admitted && !job.threadId && job.requestedThreadId) return "thread not confirmed; start a new ask";
   if (job.reviewState?.pending || job.reviewState?.synthesisPending) return `next: reply ${job.id} --next-input`;
   return null;

@@ -14,6 +14,7 @@ import { spawnChild } from "./launcher.mjs";
 import { createReader } from "./reader.mjs";
 import { readAnswer } from "./output.mjs";
 import { writeFileAtomic } from "./fs.mjs";
+import { UsageError } from "./args.mjs";
 
 /** Production defaults; tests inject shorter ones through hooks. */
 export const SHUTDOWN_MS = 60000;
@@ -59,7 +60,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
   };
   let turn = initial, built = null, child = null, reason = null, persistenceFailed = false, spawnError = null;
   let drainExpired = false, pipesClosed = false, exhausted = false, announced = false, answer = "", queryError = null;
-  let afterTurnDone = false, hookOutcome = null;
+  let afterTurnDone = false, hookOutcome = null, refusal = null;
   const announce = () => { if (!announced && !options.json) { announced = true; hooks.announce?.(job); } };
   const claim = (id) => {
     if (!id) return;
@@ -305,6 +306,8 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     if (child && running(child)) { stop(error.message); cleanupConfirmed = false; }
     release(child);
     reason ??= error.message;
+    // A usage refusal while preparing under the claim (a thread found not resumable after the claim): exit 2 once released.
+    if (error instanceof UsageError && !job.admitted && !job.spawnAttempted) refusal = error;
   }
 
   const seen = reader?.state;
@@ -356,18 +359,29 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     if (review?.error) error = review.error;
     else if (review) {
       try {
-        if (review.text !== undefined) { io.writeFileSync(answerFile, review.text); parsed = readAnswer(answerFile); answer = parsed.answer; }
+        let text = review.text;
+        if (text !== undefined && review.incomplete) {
+          // An incomplete review still shows what it received (no coverage is granted for it).
+          const received = answerText?.trim() ? answerText.trim() : seen?.structured != null ? JSON.stringify(seen.structured, null, 2) : "";
+          if (received) text = `${text.trimEnd()}\n\nReceived output (not accepted):\n${received}\n`;
+        }
+        if (text !== undefined) { io.writeFileSync(answerFile, text); parsed = readAnswer(answerFile); answer = parsed.answer; }
         Object.assign(job, { verdict: review.verdict ?? null, findings: review.findings ?? null, reviewState: review.reviewState ?? job.reviewState, unreviewed: review.unreviewed ?? job.unreviewed });
         if (review.attention) job.reviewAttention = review.attention;
         outcome = job.reviewAttention || (job.unreviewed ?? []).length > 0 || job.reviewState?.synthesisPending || job.reviewState?.pending || job.reviewState?.blocking ? "attention" : "ok";
       } catch (failure) { error = `answer storage failed: ${failure.message}`; }
     }
   }
+  if (outcome === "failed" && turn.structuredReview && !parsed?.nonempty && seen?.structured != null) {
+    // A failed review keeps the structured output it received as its answer (no coverage is granted for it).
+    try { io.writeFileSync(answerFile, `${JSON.stringify(seen.structured, null, 2)}\n`); parsed = readAnswer(answerFile); answer = parsed.answer; } catch { /* the job record keeps it */ }
+  }
   Object.assign(job, {
     status: ["ok", "attention"].includes(outcome) ? "done" : outcome, outcome, code: outcome === "ok" ? 0 : outcome === "attention" ? 10 : 1,
     error, cleanupPending: !cleanupConfirmed, endedAt: new Date().toISOString(),
     edited: [...(seen?.edited ?? [])], failedCommands: [...(seen?.failedCommands ?? []), ...(hookOutcome?.failedCommands ?? [])], cost: seen?.costUsd ?? null, usage: seen?.usage ?? null,
     answerClipped: parsed?.answerClipped ?? false, denied: denied.length ? denied : undefined,
+    unconfirmed: seen?.unconfirmed ?? null, ...(outcome === "failed" && seen?.structured ? { structured: seen.structured } : {}),
   });
   delete job.stderrTail;
   try {
@@ -378,7 +392,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     if (job.threadId && job.admitted) {
       (hooks.saveThread ?? saveThread)(ctx.home, { provider, threadId: job.threadId, cwd: job.cwd, session: job.session, model: job.model, modelInput: job.modelInput ?? null, effort: job.effort,
         requestedEffort: job.requestedEffort ?? null, tier: job.tier, round: job.round, rounds: job.rounds, roundsSet: job.roundsSet, agent: job.agent ?? null, web: job.web, readOnly: job.readOnly,
-        policyVersion: turn.policyVersion ?? null, lastJob: job.id });
+        policyVersion: turn.policyVersion ?? null, lastJob: job.id, ...(job.unconfirmed ? { resumable: false, unconfirmed: job.unconfirmed } : {}) });
     }
     save(job); finishMarker(job);
     if (cleanupConfirmed) releaseClaims(ctx.home, job);
@@ -387,6 +401,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     if (!job.done && job.reviewStateBase) job.reviewState = job.reviewStateBase;
     if (!job.done) { try { save(job); finishMarker(job); } catch { /* storage is gone: the heartbeat lapses and recovery reads the job as lost */ } }
   }
+  if (refusal) throw refusal;
   announce();
   return { job: jobView(ctx.home, job), answer };
 }

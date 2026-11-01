@@ -87,7 +87,9 @@ export default {
       case "start": return { threadId: event.thread, ...(event.model ? { model: event.model } : {}) };
       case "text": return { textDelta: event.data };
       case "tool": return event.denied ? { denied: { tool: event.name, path: event.path } } : event.ok === false ? { failedCommand: event.command ?? event.name } : event.name === "edit" ? { edited: event.path, toolStep: event.name } : { toolStep: event.name };
-      case "end": return { completed: true, threadId: event.thread, costUsd: event.cost, ...(event.structured ? { structured: event.structured } : {}) };
+      case "end":
+        if (event.fatal) return { fatal: event.fatal, costUsd: event.cost, usage: { fatal: true }, ...(event.structured ? { structured: event.structured } : {}) };
+        return { completed: true, threadId: event.thread, costUsd: event.cost, ...(event.structured ? { structured: event.structured } : {}), ...(event.unconfirmed ? { unconfirmed: event.unconfirmed } : {}) };
       default: return null;
     }
   },

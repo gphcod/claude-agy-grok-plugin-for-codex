@@ -22,7 +22,9 @@ let prompt = "";
 const promptFile = flag("--prompt-file");
 if (promptFile !== undefined) prompt = fs.readFileSync(promptFile, "utf8");
 else { for await (const chunk of process.stdin) prompt += chunk; }
-const thread = flag("--thread") ?? `discovered-${process.pid}`;
+// COUNCIL_FAKE_UNCONFIRMED: no event names the thread, and the end event carries that hint (a provider that never confirms).
+const unconfirmed = process.env.COUNCIL_FAKE_UNCONFIRMED || null;
+const thread = unconfirmed ? undefined : flag("--thread") ?? `discovered-${process.pid}`;
 const answerFile = flag("--answer-file");
 const depth = Object.fromEntries(Object.entries(process.env).filter(([k]) => /DEPTH$/.test(k)));
 log({ argv, cwd: process.cwd(), prompt, thread, depth, scenario, pid: process.pid });
@@ -70,7 +72,8 @@ if (answerFile) fs.writeFileSync(answerFile, answer);
 else if (!review || process.env.COUNCIL_FAKE_REVIEW_TEXT) { const text = review ? process.env.COUNCIL_FAKE_REVIEW_TEXT : answer; const half = Math.ceil(text.length / 2); out({ type: "text", data: text.slice(0, half) }); out({ type: "text", data: text.slice(half) }); }
 if (scenario === "no-completion") { leave(0); return; }
 if (process.env.COUNCIL_FAKE_HANG) await new Promise(() => setInterval(() => {}, 1000));
-out({ type: "end", thread, cost: 0.001, ...(structured ? { structured } : {}) });
+// COUNCIL_FAKE_END_FATAL: the end event is fatal yet carries cost and structured output.
+out({ type: "end", thread, cost: 0.001, ...(structured ? { structured } : {}), ...(unconfirmed ? { unconfirmed } : {}), ...(process.env.COUNCIL_FAKE_END_FATAL ? { fatal: process.env.COUNCIL_FAKE_END_FATAL } : {}) });
 if (scenario === "hold-pipes") {
   const child = spawn(process.execPath, ["-e", `setTimeout(() => {}, ${Number(process.env.COUNCIL_FAKE_HOLD_MS ?? 2000)})`], { stdio: ["ignore", "inherit", "inherit"], detached: true, windowsHide: true });
   child.unref();

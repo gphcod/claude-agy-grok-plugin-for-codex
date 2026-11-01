@@ -130,11 +130,52 @@ test("Grok's effort error (an unverified model passes max through) fails with Gr
   assert.match(footerOf(r.stdout), /grok-9\/max · .* · model unverified · error: .*unknown effort level 'max'/);
 });
 
-test("an end event without a session id fails: session not confirmed, with the start-a-new-ask hint", () => {
+test("an end event without a session id keeps the answer and exit 0, prints the hint, and the thread cannot be resumed", () => {
   const w = world();
   const r = w.grok(["ask", "--to", "grok", "--", "q"], { scenario: "no-session" });
-  assert.equal(r.status, 1);
-  assert.match(footerOf(r.stdout), /error: session not confirmed: Grok's end event names no session · thread not confirmed; start a new ask$/);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(r.stdout.split("\n")[0], "pong");
+  assert.match(footerOf(r.stdout), /^council grok ok · .* · round 1\/9 · session not confirmed: start a new ask$/);
+  const job = jobIdOf(r.stderr);
+  const launches = w.launches().length;
+  for (const args of [["reply", job, "--", "more"], ["reply", "--last", "--", "more"], ["task", "--to", "grok", "--thread", job, "--", "edit"]]) {
+    const again = w.grok(args, { scenario: "resume" });
+    assert.equal(again.status, 2, args.join(" "));
+    assert.match(again.stderr, /session not confirmed: start a new ask/);
+  }
+  // A resumed turn that ends unconfirmed marks its thread not resumable.
+  const ask = jobIdOf(w.grok(["ask", "--to", "grok", "--", "q2"]).stderr);
+  const reply = w.grok(["reply", ask, "--", "more"], { scenario: "no-session" });
+  assert.equal(reply.status, 0, reply.stdout + reply.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(w.home, "threads", `grok-${w.job(ask).threadId}.json`), "utf8")).resumable, false);
+  assert.equal(w.grok(["reply", ask, "--", "again"], { scenario: "resume" }).status, 2);
+  assert.equal(w.launches().length, launches + 2, "only the new ask and its reply ran");
+});
+
+test("Grok's own `cancelled` stop is a permission refusal: denied (exit 10), answer kept or the refusal named; council's cancel is unchanged", () => {
+  const w = world();
+  const r = w.grok(["ask", "--to", "grok", "--json", "--", "q"], { scenario: "permission-cancelled" });
+  const out = JSON.parse(r.stdout);
+  assert.deepEqual([out.exit, out.status, out.answer], [10, "attention", "pong"]);
+  assert.equal(w.job(out.job).denied[0].stopReason, "cancelled");
+  const silent = JSON.parse(w.grok(["ask", "--to", "grok", "--json", "--", "q"], { scenario: "permission-cancelled", env: { COUNCIL_FAKE_GROK_SILENT: "1" } }).stdout);
+  assert.deepEqual([silent.exit, silent.answer], [10, "Grok cancelled the turn (a tool needed permission headless Grok cannot ask for)"]);
+});
+
+test("a review whose end stops for another reason keeps its structured output, usage and cost; exit 1 incomplete, no coverage", () => {
+  const w = world();
+  fs.writeFileSync(path.join(w.workspace, "README.md"), "# changed\n");
+  const r = w.grok(["review", "--to", "grok"], { scenario: "review-stop-other" });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /^\{\n {2}"verdict": "needs-attention",/);
+  assert.match(footerOf(r.stdout), /error: incomplete: Grok stopped with reason "max_tokens" · thread not confirmed; start a new ask$/);
+  const job = w.job(jobIdOf(r.stderr));
+  assert.deepEqual([job.cost, job.usage.output_tokens, job.structured.findings[0].id], [0.01866, 411, "F1"]);
+  assert.equal(JSON.parse(w.grok(["wait", job.id, "--json"]).stdout).coverage.reviewed, 0);
+  const turns = w.grok(["review", "--to", "grok"], { scenario: "review-max-turns" });
+  assert.equal(turns.status, 1);
+  assert.match(turns.stdout, /^\{"verdict":"needs-attention"/, "the streamed partial review is the answer");
+  assert.match(footerOf(turns.stdout), /error: incomplete: Grok stopped: max turns reached · thread not confirmed; start a new ask$/);
 });
 
 test("review: explore, inline --json-schema equal to the repository schema, no --rules, the batch prompt in the prompt file; findings → 10", () => {
