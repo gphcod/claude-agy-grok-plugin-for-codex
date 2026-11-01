@@ -20,6 +20,68 @@ export const BIN_ENV = "COUNCIL_GROK_BIN";
 export const LINE_CAP = 1024 * 1024;
 const PATH_CAP = 10000;
 
+// ---- lib/recipes.mjs (grok_plugin_for_codex 1.1.0), ported whole ----
+// Grok argv per access mode. The read-only guard itself is parseEvent's check of the advertised catalogue against
+// FORBIDDEN; these flags only shape it.
+export const HOSTILE = ["Agent", "ask_user_question", "enter_plan_mode", "exit_plan_mode", "image_gen", "image_edit", "image_to_video", "reference_to_video"];
+// search_tool and use_tool are the default agent's way to MCP and other deferred tools.
+export const FORBIDDEN = ["search_replace", "write", "run_terminal_command", "spawn_subagent", "search_tool", "use_tool"];
+// Fallback for a session that runs the default agent (it has written) and cannot switch to explore: the verified
+// read-only denylist. Grok removes the shell only by its flag id, run_terminal_cmd; its event name is listed too.
+export const RESUME_DENY = [
+  "search_replace",
+  "write",
+  "run_terminal_cmd", "run_terminal_command",
+  "search_tool",
+  "use_tool",
+  "todo_write",
+  "monitor",
+  "workflow",
+  "scheduler_create",
+  "scheduler_delete",
+  "scheduler_list",
+  "send_feedback",
+  ...HOSTILE,
+];
+// Read-only turns also deny every MCP tool; parseEvent's guard stays the check.
+const NO_MCP = ["--deny", "MCPTool(*)"];
+
+/** `agent` is the Grok agent the turn runs; the job and thread record keep it so later turns on the session follow it. */
+export function recipe(kind, { web = false, defaultAgent = false } = {}) {
+  const common = ["--always-approve", "--no-subagents", ...(web ? [] : ["--disable-web-search"]), "--disallowed-tools"];
+  if (kind === "read-only") {
+    if (defaultAgent) return { readOnly: true, agent: "default", args: [...common, RESUME_DENY.join(","), ...NO_MCP], forbidden: FORBIDDEN };
+    return { readOnly: true, agent: "explore", args: ["--agent", "explore", ...common, HOSTILE.join(","), ...NO_MCP], forbidden: FORBIDDEN };
+  }
+  if (kind === "write") {
+    return { readOnly: false, agent: "default", args: [...common, HOSTILE.join(","), "--deny", "Bash(git push*)", "--deny", "Bash(rm -rf *)"], forbidden: [] };
+  }
+  throw new Error(`unknown recipe ${kind}`);
+}
+
+/**
+ * Child environment. Claude skills, agents, hooks and MCP stay off inside Grok (hook recursion); read-only turns also
+ * skip Claude's rules directories; a task drops an inherited disabled setting so Grok's default applies. The guard
+ * variables Grok's own plugins read (GROK_CODEX_DEPTH, GROK_BUILD_DEPTH) and COUNCIL_DEPTH are set here; the core adds
+ * all five (A5.1).
+ */
+export function compatEnv(base, readOnly) {
+  const env = {
+    ...base,
+    GROK_DISABLE_AUTOUPDATER: "1",
+    GROK_CLAUDE_SKILLS_ENABLED: "0",
+    GROK_CLAUDE_AGENTS_ENABLED: "0",
+    GROK_CLAUDE_HOOKS_ENABLED: "0",
+    GROK_CLAUDE_MCPS_ENABLED: "0",
+    GROK_CODEX_DEPTH: "1",
+    GROK_BUILD_DEPTH: "1",
+    COUNCIL_DEPTH: "1",
+  };
+  if (readOnly) env.GROK_CLAUDE_RULES_ENABLED = "0";
+  else delete env.GROK_CLAUDE_RULES_ENABLED;
+  return env;
+}
+
 // ---- lib/setup.mjs ----
 /** `grok models` text: a login line, then `* model (default)` / `- model` rows. */
 export function parseModels(text) {
@@ -34,9 +96,22 @@ export function parseModels(text) {
 const firstLine = (run) => (run.stderr || run.stdout || run.error?.message || `exit ${run.status}`).trim().split(/\r?\n/)[0];
 
 // ---- grok.mjs ----
+/** Grok trims the edges of its input, so text with whitespace at either edge is framed (GROKX `framePrompt`). */
+export function framePrompt(text, tag) {
+  return /^\s|\s$/.test(text) ? `<r-${tag}>\n${text}\n</r-${tag}>` : text;
+}
+/** The standing contract on one line: argv carries it, and nothing in it needs a newline (GROKX). */
+export const contractText = (file) => fs.readFileSync(file, "utf8").replace(/\s*\r?\n\s*/g, " ").trim();
+/** The repository review schema, inline (A5.2: Grok receives it as a `--json-schema` operand). */
+export const schemaText = (file = SCHEMA_PATH) => JSON.stringify(JSON.parse(fs.readFileSync(file, "utf8")));
 const homeOf = (env, platform) => (platform === "win32" ? env.USERPROFILE : env.HOME) || null;
 /** Grok's login evidence (S1.3): `~/.grok/auth.json` under the per-call environment's home, unless GROK_API_KEY is set. */
 export const loginFile = (env, platform = process.platform) => { const home = homeOf(env, platform); return home ? path.join(home, ".grok", "auth.json") : null; };
+const realOr = (p) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
+function gitTop(cwd, env) {
+  const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd, env, encoding: "utf8", shell: false, windowsHide: true, timeout: 15000 });
+  return r.status === 0 ? r.stdout.trim() : null;
+}
 
 export default {
   id: "grok",
@@ -101,7 +176,33 @@ export default {
     }
     return out;
   },
-  buildTurn() { throw new Error("grok: buildTurn is not implemented in this build (S4.2)"); },
+  /** Grok sessions work only in their cwd (`--add-dir` is refused, S1.3): a review runs at the repository root. */
+  checkRequest(request, env = process.env) {
+    if (request.verb !== "review") return null;
+    const top = gitTop(request.cwd, env);
+    if (top && realOr(top) !== realOr(request.cwd)) {
+      return `grok reviews run at the repository root (a Grok session cannot reach folders outside its cwd); rerun from ${top} or pass --cwd ${top}`;
+    }
+    return null;
+  },
+  buildTurn(request) {
+    const readOnly = request.readOnly !== false && request.verb !== "task";
+    // Grok keeps a session's agent: once a session ran the default agent (a task), later read-only turns on it use RESUME_DENY.
+    const plan = recipe(readOnly ? "read-only" : "write", { web: Boolean(request.web), defaultAgent: readOnly && request.resume && request.agent === "default" });
+    const thread = request.resume ? request.threadId : randomUUID();
+    const session = request.resume ? ["-r", thread] : ["--session-id", thread];
+    const promptFile = path.join(request.jobDir, "prompt.md");
+    // The review answers in the schema, so the text contract is left out there (GROKX).
+    const carrier = request.structured ? ["--json-schema", schemaText(request.schemaPath ?? SCHEMA_PATH)] : ["--rules", contractText(request.contractPath)];
+    const args = ["--prompt-file", promptFile, "--output-format", "streaming-json", ...(request.model ? ["--model", request.model] : []),
+      ...(request.effort ? ["--effort", request.effort] : []), "--no-auto-update", ...plan.args, ...carrier, ...session];
+    // The per-turn instructions travel in the input (contract.md); reviews carry them in the batch prompt.
+    // Only the user's text is framed (GROKX): a structured turn's prompt is the core's own composition.
+    const body = request.structured ? request.prompt ?? "" : framePrompt(request.prompt ?? "", path.basename(request.jobDir));
+    const promptText = request.instructions ? `${request.instructions.trimEnd()}\n\n${body}` : body;
+    return { args, env: compatEnv(request.env ?? {}, plan.readOnly), promptFile, promptText, answerFile: null, readOnly: plan.readOnly,
+      requestedThreadId: request.resume ? null : thread, agent: plan.agent, contractCarrier: request.structured ? "none" : "rules" };
+  },
   parseEvent() { return { fatal: "grok: parseEvent is not implemented in this build (S4.3)" }; },
   /** S4.4 implements the inline schema carrier and the answer mapping. */
   reviewPlan() { return { native: false, batches: null, promptTemplate: "review", schemaCarrier: "inline" }; },

@@ -234,11 +234,13 @@ test("fake-agy refuses a non-conforming launch", () => {
 
 // Grok launches.
 const HOSTILE = "Agent,ask_user_question,enter_plan_mode,exit_plan_mode,image_gen,image_edit,image_to_video,reference_to_video";
+// Grok's --rules is text (grok help: "Extra rules to append to the system prompt"): the contract on one line (S4).
+const grokRules = fs.readFileSync(path.join(ROOT, "plugins", "council", "contract.md"), "utf8").replace(/\s*\r?\n\s*/g, " ").trim();
 const grokArgs = ({ prompt = "hello", resume = false, write = false, review = false, effort = "low", web = false } = {}) => [
   "--prompt-file", promptFile(prompt), "--output-format", "streaming-json", "--model", "grok-4.7", "--effort", effort, "--no-auto-update",
   ...(write ? [] : ["--agent", "explore"]), "--always-approve", "--no-subagents", ...(web ? [] : ["--disable-web-search"]), "--disallowed-tools", HOSTILE,
   ...(write ? ["--deny", "Bash(git push*)", "--deny", "Bash(rm -rf *)"] : ["--deny", "MCPTool(*)"]),
-  ...(review ? ["--json-schema", fs.readFileSync(SCHEMA, "utf8")] : ["--rules", contract]), ...(resume ? ["-r", UUID] : ["--session-id", UUID]),
+  ...(review ? ["--json-schema", fs.readFileSync(SCHEMA, "utf8")] : ["--rules", grokRules]), ...(resume ? ["-r", UUID] : ["--session-id", UUID]),
 ];
 const grokEnv = (write = false) => ({ ...DEPTH, ...COMPAT, ...(write ? {} : { GROK_CLAUDE_RULES_ENABLED: "0" }) });
 const grok = (scenario, opts = {}) => run("fake-grok.mjs", grokArgs(opts), { env: grokEnv(opts.write), scenario });
