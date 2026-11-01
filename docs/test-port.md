@@ -235,7 +235,7 @@ For every test case this plan takes from the twin or a donor: the source (reposi
 | GROKX | 148bc55 | `tests/launcher.test.mjs` | a Windows command shim runs its JavaScript entry through node, never through cmd.exe | tests/core-launcher.test.mjs (S2.2), tests/grok.test.mjs (S4.5) | planned; GROK_BINARY → COUNCIL_GROK_BIN |
 | GROKX | 148bc55 | `tests/launcher.test.mjs` | npm's shim for an extensionless node script runs that script through node | tests/core-launcher.test.mjs (S2.2), tests/grok.test.mjs (S4.5) | planned; GROK_BINARY → COUNCIL_GROK_BIN |
 | GROKX | 148bc55 | `tests/launcher.test.mjs` | PATH order decides, every candidate is reported, and Windows falls back to the native install | tests/core-launcher.test.mjs (S2.2), tests/grok.test.mjs (S4.5) | planned; GROK_BINARY → COUNCIL_GROK_BIN |
-| GROKX | 148bc55 | `tests/launcher.test.mjs` | models output gives the model list and the login state | tests/core-launcher.test.mjs (S2.2), tests/grok.test.mjs (S4.5) | ported now: `parseModelListing("grok")` in tests/catalog.test.mjs; login state in S4.1 |
+| GROKX | 148bc55 | `tests/launcher.test.mjs` | models output gives the model list and the login state | tests/core-launcher.test.mjs (S2.2), tests/grok.test.mjs (S4.5) | ported now: `parseModelListing("grok")` in tests/core-catalog.test.mjs; login state in S4.1 |
 | GROKX | 148bc55 | `tests/launcher.test.mjs` | setup reports the binary, version and login, and warns about tier models Grok does not list | tests/core-launcher.test.mjs (S2.2), tests/grok.test.mjs (S4.5) | planned; GROK_BINARY → COUNCIL_GROK_BIN |
 | GROKX | 148bc55 | `tests/launcher.test.mjs` | several grok executables on PATH warn only when GROK_BINARY does not choose one | tests/core-launcher.test.mjs (S2.2), tests/grok.test.mjs (S4.5) | planned; GROK_BINARY → COUNCIL_GROK_BIN |
 | GROKX | 148bc55 | `tests/launcher.test.mjs` | the setup command prints one line per fact and exits 1 when Grok is not ready | tests/core-launcher.test.mjs (S2.2), tests/grok.test.mjs (S4.5) | planned; GROK_BINARY → COUNCIL_GROK_BIN |
@@ -407,19 +407,19 @@ For every test case this plan takes from the twin or a donor: the source (reposi
 | twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S0.7 commands.test.mjs: gen-commands --check | — | dropped: Codex has no slash commands |
 | twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S0.7 skill-size.test.mjs | tests/skill.test.mjs (S0) | ported (3,000 B and 170 B) |
 | twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S0.7 manifests.test.mjs | tests/manifests.test.mjs (S0) | ported with the Codex manifests |
-| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `gemini --effort xhigh` → high clamped | tests/catalog.test.mjs | ported |
-| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `gemini-4-argon-high --effort medium` → UsageError | tests/catalog.test.mjs | ported; explicit-only conflict (S1.9 F3) |
-| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `gemini-4-argon-high` alone → id unchanged, effort high | tests/catalog.test.mjs | ported |
-| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `gemini-4-argon` verified against the listing | tests/catalog.test.mjs | ported; listing docs/spike/agy-models.txt |
-| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `grok --effort max` → xhigh clamped | tests/catalog.test.mjs | ported |
-| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `grok --effort low` → low | tests/catalog.test.mjs | ported |
+| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `gemini --effort xhigh` → high clamped | tests/core-catalog.test.mjs | ported |
+| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `gemini-4-argon-high --effort medium` → UsageError | tests/core-catalog.test.mjs | ported; explicit-only conflict (S1.9 F3) |
+| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `gemini-4-argon-high` alone → id unchanged, effort high | tests/core-catalog.test.mjs | ported |
+| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `gemini-4-argon` verified against the listing | tests/core-catalog.test.mjs | ported; listing docs/spike/agy-models.txt |
+| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `grok --effort max` → xhigh clamped | tests/core-catalog.test.mjs | ported |
+| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `grok --effort low` → low | tests/core-catalog.test.mjs | ported |
 | twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `codex --effort ultra` on `gpt-6-luna` → UsageError | — | dropped: Codex provider and `ultra` |
 | twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 `codex --effort ultra` on `gpt-6.1-sol` → pass-through | — | dropped: Codex provider and `ultra` |
-| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 unknown id → `verified: false` | tests/catalog.test.mjs | ported for all three providers |
-| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 refresh honours `COUNCIL_HOME` | tests/catalog.test.mjs | ported; host variable COUNCIL_CODEX_HOME (the test passes the root directly) |
+| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 unknown id → `verified: false` | tests/core-catalog.test.mjs | ported for all three providers |
+| twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.6 refresh honours `COUNCIL_HOME` | tests/core-catalog.test.mjs | ported; host variable COUNCIL_CODEX_HOME (the test passes the root directly) |
 | twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.4 fakes.test.mjs: every fake in every scenario against the recorded streams | tests/fakes.test.mjs | ported; fake-codex → fake-claude |
 | twin (codex-agy-grok-plugin-for-claude) | e89c98e | `PLAN.md` | S1.0 schema.test.mjs: schema equals the committed fixture | tests/schema.test.mjs | ported; draft-07 and validator cases added |
-| S1 (this plan) | — | `PLAN.md S1.7` | `claude --model default`, `claude --effort max` (no clamp), `claude --model gpt-6.1-sol` → unverified, `claude --effort low` on sonnet, lower-bound rule, suffix versus tier effort, alias target absent after refresh | tests/catalog.test.mjs | new |
+| S1 (this plan) | — | `PLAN.md S1.7` | `claude --model default`, `claude --effort max` (no clamp), `claude --model gpt-6.1-sol` → unverified, `claude --effort low` on sonnet, lower-bound rule, suffix versus tier effort, alias target absent after refresh | tests/core-catalog.test.mjs | new |
 | CODEXCC | 2.3.2 (cache) | `scripts/lib/jobs.mjs, scripts/lib/lifecycle.mjs (no tests shipped)` | job-body pruning past 100 through trash/, 16-char ids, 12 s held-pipe wait → `thread locked` | tests/core-jobs.test.mjs, tests/core-lifecycle.test.mjs (S2.3, S2.4) | behaviour ported; cases written new |
 | GEMINICC | 2.1.0 (cache) | `—` | — | — | dropped: no license file; review templates and review-output.mjs behaviour reimplemented in S2.5 |
 
