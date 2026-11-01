@@ -4,7 +4,8 @@
 // launch contract (argv, the settings file, stdin, guard variables) before emitting and plays COUNCIL_FAKE_SCENARIO:
 // ok, resume, denied, denied-prompt, effort-error, effort-conflict, review-findings, review-malformed, large-review,
 // print-timeout, task, web, slow, hold-pipes; and, for the S5.5 entry tests, task-edit (writes edited.txt in its cwd),
-// duplicate-result, missing-result and empty-response (synthetic mutations of ok), touch (a read-only turn during which the workspace changes), language-server (a long-lived child in agy's process
+// duplicate-result, missing-result and empty-response (synthetic mutations of ok), host-denied (ok plus a backend
+// persistence error on stderr, AGYX docs/P0.md's sandbox finding), touch (a read-only turn during which the workspace changes), language-server (a long-lived child in agy's process
 // group, then no answer until stopped) and language-server-orphan (the child outlives agy, reparented to pid 1).
 import fs from "node:fs";
 import path from "node:path";
@@ -98,6 +99,7 @@ switch (which) {
   case "duplicate-result": { const events = fill(fixtures.ok); play([...events, events.at(-1)]); break; }
   case "missing-result": play(fill(fixtures.ok).filter((e) => e.event !== "result")); break;
   case "empty-response": play(fill(fixtures.ok).map((e) => (e.event === "result" ? { ...e, result: { ...e.result, response: "" } } : e))); break;
+  case "host-denied": play(fill(fixtures.ok)); process.stderr.write("backend: attempt to write a readonly database\n"); break;
   case "task-edit": fs.writeFileSync(path.join(process.cwd(), "edited.txt"), "written by the fake task\n"); play(fill(fixtures.task)); break;
   case "touch": fs.writeFileSync(path.join(process.cwd(), "touched.txt"), "changed during a read-only turn\n"); play(fill(fixtures.ok)); break;
   case "language-server": case "language-server-orphan": {

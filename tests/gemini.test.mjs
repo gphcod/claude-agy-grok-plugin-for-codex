@@ -260,3 +260,10 @@ test("setup, models --refresh, wait and cancel: warnings, the listing, a replay 
   assert.match(w.call(["wait", job]).stdout, /^pong\ncouncil gemini ok/);
   assert.match(w.call(["cancel", job]).stdout, /^finished · gemini · job [a-z0-9]{16}/);
 });
+
+test("a backend persistence error on agy's stderr makes a successful turn need attention (AGYX's host-denial check)", () => {
+  const w = world();
+  const r = w.gemini(["ask", "--to", "gemini", "--json", "--", "q"], "host-denied");
+  assert.equal(r.status, 10, r.stdout);
+  assert.equal(w.job(JSON.parse(r.stdout).job).incomplete, "agy's diagnostics report denied host access (stderr); the turn may not have persisted");
+});

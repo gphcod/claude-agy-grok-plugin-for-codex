@@ -169,6 +169,12 @@ export function changes(before, after) {
   const coverage = before.coverage === "tracked-and-unignored" && after.coverage === "tracked-and-unignored" ? "complete" : "partial";
   return { changed, files: names, coverage };
 }
+/** AGYX native.mjs: a diagnostic on stderr that reports denied host access or an unclassified permission notice. */
+export function hostNotice(stderr = "") {
+  if (/operation not permitted|readonly database|read.only file system|permission denied/i.test(stderr)) return "agy's diagnostics report denied host access (stderr); the turn may not have persisted";
+  if (/permission|approval/i.test(stderr) && /denied|not allowed|requires/i.test(stderr)) return "agy's diagnostics report an unclassified permission notice (stderr)";
+  return null;
+}
 const snapshotFile = (job, which) => path.join(job.dir, `snapshot-${which}.json`);
 function readJsonFile(file) { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } }
 function takeSnapshot(cwd, env) {
@@ -388,6 +394,9 @@ const adapter = {
     const result = { coverage };
     if (job.readOnly === false || job.verb === "task") { if (paths.length) result.edited = paths; }
     else if (diff?.changed) result.incomplete = `the workspace changed during a read-only turn${paths.length ? `: ${paths.slice(0, 5).join(", ")}` : ""}`;
+    // agy can finish "successfully" while its backend could not persist (a sandbox denying writes): AGYX's stderr checks.
+    const notice = !outcome.deferred && !outcome.denials?.length ? hostNotice(job.stderrTail) : null;
+    if (notice && !result.incomplete) result.incomplete = notice;
     if (outcome.deferred && result.incomplete) job.incomplete = result.incomplete;
     return result;
   },

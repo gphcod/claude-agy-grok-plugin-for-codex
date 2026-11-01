@@ -358,6 +358,19 @@ test("S5.3 hooks: unavailable snapshots leave coverage unknown; a re-run of afte
   assert.deepEqual(await gemini.afterTurn(ctx, {}), first, "beforeTurn never replaces a stored before snapshot");
 });
 
+test("S5.7 parity: AGYX's stderr host-denial heuristics, skipped when the stream already carried a denial or on a deferred run", async () => {
+  assert.match(G.hostNotice("Error: attempt to write a readonly database"), /denied host access/);
+  assert.match(G.hostNotice("operation not permitted: ~/.gemini/antigravity-cli/brain"), /denied host access/);
+  assert.match(G.hostNotice("approval requires a prompt that was not allowed"), /unclassified permission notice/);
+  assert.equal(G.hostNotice("[agy] print timeout after 5s"), null);
+  const dir = repo();
+  const job = { ...jobIn(dir), stderrTail: "readonly database" };
+  const ctx = { job, request: {}, cwd: dir, env: { PATH: process.env.PATH } };
+  await gemini.beforeTurn(ctx);
+  assert.match((await gemini.afterTurn(ctx, { denials: [] })).incomplete, /denied host access/);
+  assert.equal((await gemini.afterTurn(ctx, { denials: [{ tool: "command" }] })).incomplete, undefined, "a recorded denial already explains the notice");
+});
+
 // ---------------------------------------------------------------------------------------------------------------- S5.4
 
 test("S5.4 review plan: agy enforces --json-schema (S1.2), so the schema travels by path; --adversarial picks its template", () => {
