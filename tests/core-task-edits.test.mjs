@@ -179,3 +179,19 @@ test("R1: a cancel marker written during the before snapshot stops the turn with
   assert.deepEqual([job.outcome, job.code, job.error, Boolean(job.spawnAttempted), w.fakeCalls().length], ["cancelled", 1, "cancelled", false, 0]);
   assert.ok(fs.existsSync(path.join(job.dir, "snapshot-before.json")), "the marker came during the snapshot, which finished");
 });
+
+test("X-A2: a staged rename counts both names; a copy's source did not change, so it stays out", () => {
+  const w = makeWorld();
+  commitFile(w.workspace, "old.txt", "o\n");
+  assert.deepEqual(edited(task(w, { git: [["mv", "old.txt", "new.txt"]] })), [2, ["new.txt", "old.txt"]]);
+  const copies = makeWorld();
+  commitFile(copies.workspace, "src.txt", "s\n".repeat(20));
+  run("git", ["config", "status.renames", "copies"], { cwd: copies.workspace });
+  run("git", ["config", "diff.renames", "copies"], { cwd: copies.workspace });
+  assert.deepEqual(edited(task(copies, { "copy.txt": "s\n".repeat(20), "src.txt": "s\n".repeat(20), git: [["add", "copy.txt"]] })), [1, ["copy.txt"]], "with status.renames=copies too");
+  const moved = makeWorld();
+  commitFile(moved.workspace, "a.txt", "a\n");
+  fs.writeFileSync(path.join(moved.workspace, "b.txt"), "dirty before\n");
+  run("git", ["add", "b.txt"], { cwd: moved.workspace });
+  assert.deepEqual(edited(task(moved, { git: [["mv", "b.txt", "c.txt"]] })), [2, ["b.txt", "c.txt"]], "a rename of a file staged before the turn");
+});

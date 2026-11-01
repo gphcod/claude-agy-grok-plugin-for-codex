@@ -43,7 +43,7 @@ export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxByt
   if (!scope.git) return { coverage: "unchecked", reason: "outside Git", files: {} };
   const opts = { timeoutMs, cap: maxBytes };
   const head = git(scope.root, ["rev-parse", "--verify", "HEAD"], env, opts);
-  const status = git(scope.root, ["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"], env, opts);
+  const status = git(scope.root, ["--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames"], env, opts);
   const staged = git(scope.root, ["diff", "--cached", "--no-ext-diff", "--no-textconv", "--binary"], env, opts);
   const diff = git(scope.root, ["diff", "--no-ext-diff", "--no-textconv", "--binary", ...(head.code === 0 ? ["HEAD"] : [])], env, opts);
   let partial = [status, diff, staged].some((r) => r.code !== 0 || r.limited);
@@ -56,7 +56,6 @@ export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxByt
     const entry = entries[i];
     if (!entry) continue;
     const state = entry.slice(0, 2), name = entry.slice(3);
-    if (state.includes("R") || state.includes("C")) i += 1;
     if (Object.keys(files).length >= maxFiles || Date.now() - start > timeoutMs * 4) { partial = true; listed = false; break; }
     const file = path.resolve(scope.root, name);
     if (!file.startsWith(scope.root + path.sep)) { partial = true; continue; }
