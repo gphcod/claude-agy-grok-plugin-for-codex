@@ -118,3 +118,13 @@ Files taken, with source SHA-256 (appended by the step that takes them):
   - GROKX tests/fake-grok.mjs (f68ae519d76c2bfb7f4584048ea3d0876d7dbbd458ef40424ce13430d6b960bc) -> tests/fixtures/fake-grok.mjs,
     adapted (the `denied` catalogue is its DEFAULT tool list).
   - GEMINICC: nothing copied (no license file).
+  S2 (2026-10-31):
+  - GROKX plugins/grok/scripts/lib/review-input.mjs (2a6be74ac43f554bcb9b9a3345f137db41e1262cc6c39449a12595b2403a3128, byte-identical to CLAUDEX's)
+    -> plugins/council/scripts/lib/core/review-input.mjs, copied whole; its tests -> tests/core-review-input.test.mjs.
+  - GROKX plugins/grok/scripts/lib/{args,jobs,claims,fs,reader,execution,winargs,lifecycle,output,answer,launcher,review}.mjs and grok.mjs
+    -> plugins/council/scripts/lib/core/ (args, jobs, claims, heartbeat, fs unchanged, reader, execution with winargs inline,
+    lifecycle, output with answer, launcher, git, review), adapted per the PLAN.md S2 mapping table; contract.md -> plugins/council/contract.md, adapted.
+  - CLAUDEX plugins/claude-code-advisor/scripts/lib/{review,review-findings,preflight,process}.mjs and profiles/{advice,review,adversarial}.txt
+    -> core/git.mjs, core/findings.mjs, core/preflight.mjs, core/lifecycle.mjs (held-output rule), prompts/*.md, adapted.
+  - CODEXCC scripts/lib/{jobs,claims,lifecycle,requests,launcher}.mjs -> core/jobs.mjs (16-character ids, trash pruning, request records),
+    core/claims.mjs (claimHeld), core/lifecycle.mjs (PIPE_WAIT_MS, unattributed pipes), core/launcher.mjs (shim to native .exe), adapted.
