@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 // A stand-in for the Grok CLI (1.0.70). Adapted from grok_plugin_for_codex 1.1.0 tests/fake-grok.mjs; the streams come
 // from the S1.3 probes (tests/fixtures/streams/grok.json carries the provenance). It validates the A5.1 launch contract
-// (recipe flags, prompt file, rules or schema carrier, compatEnv and guard variables) before emitting and plays
-// COUNCIL_FAKE_SCENARIO: ok, resume, denied, effort-error, review-findings, review-malformed, large-review, slow, hold-pipes.
+// (recipe flags, prompt file, rules text or schema carrier, compatEnv and guard variables) before emitting and plays
+// COUNCIL_FAKE_SCENARIO: ok, resume, denied, effort-error, review-findings, review-malformed, large-review, slow, hold-pipes,
+// and the synthetic review-reject and no-session (S4.5).
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
-import { UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, flagValues, holdPipes, log, mismatch, readStdin, repoSchema,
+import { ROOT, UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, flagValues, holdPipes, log, mismatch, readStdin, repoSchema,
   requireDepth, scenario, sleep, spikeText, streams, SLOW_MS } from "./fake-common.mjs";
 
 const argv = process.argv.slice(2);
 const which = scenario();
+const contractLine = () => fs.readFileSync(`${ROOT}/plugins/council/contract.md`, "utf8").replace(/\s*\r?\n\s*/g, " ").trim();
 const HOSTILE = ["Agent", "ask_user_question", "enter_plan_mode", "exit_plan_mode", "image_gen", "image_edit", "image_to_video", "reference_to_video"];
 const RESUME_DENY_MARKERS = ["search_replace", "write", "run_terminal_cmd", "search_tool", "use_tool"];
 
@@ -56,7 +58,8 @@ if (schemaText !== undefined) {
   expect(deepEqual(schema, repoSchema()), "--json-schema must be the repository review schema");
 }
 if (schema) expect(!argv.includes("--rules"), "reviews carry --json-schema and no --rules");
-else expect(fileExists(flagValue(argv, "--rules")), "non-review turns carry --rules <contract file>", flagValue(argv, "--rules"));
+// `--rules <RULES>` is text appended to the system prompt (grok help), not a path: the contract, on one line (GROKX).
+else expect(flagValue(argv, "--rules") === contractLine(), "non-review turns carry --rules <contract.md on one line>", flagValue(argv, "--rules"));
 if (which.startsWith("review") || which === "large-review") expect(schema, `${which} needs --json-schema`);
 const web = !argv.includes("--disable-web-search");
 for (const [k, v] of Object.entries({ GROK_DISABLE_AUTOUPDATER: "1", GROK_CLAUDE_SKILLS_ENABLED: "0", GROK_CLAUDE_AGENTS_ENABLED: "0", GROK_CLAUDE_HOOKS_ENABLED: "0", GROK_CLAUDE_MCPS_ENABLED: "0" })) {
@@ -84,7 +87,24 @@ switch (which) {
   case "effort-error": play(fill(fixtures["effort-error"])); process.stderr.write(`${fixtures["effort-error-stderr"]}\n`); break;
   case "review-findings": play(fill(fixtures["review-findings"])); break;
   case "review-malformed": play(fill(fixtures["review-malformed"])); break;
-  case "large-review": { const b = batchOf(prompt); play(fill(b && b.index >= b.total ? fixtures["structured-clean"] : fixtures["review-findings"])); break; }
+  // Text batches answer findings; the synthesis pass (or a last `batch n/n`) answers a clean approval.
+  case "large-review": { const b = batchOf(prompt); play(fill(/Batch units: synthesis/.test(prompt) || (b && b.index >= b.total) ? fixtures["structured-clean"] : fixtures["review-findings"])); break; }
+  // Synthetic (S4.5): an approval that REJECTs, by id, every open finding the prompt's prior-findings note lists (else the
+  // fixture's own findings), for an identified resolution.
+  case "review-reject": {
+    const listed = [...prompt.matchAll(/^- (\S+) (?:BLOCKER|MAJOR|MINOR) (\S+):(\d+) /gm)];
+    play(fill(fixtures["review-findings"]).map((e) => {
+      if (e.type === "text") return { ...e, data: "" };
+      if (e.type !== "end") return e;
+      const [base] = e.structuredOutput.findings;
+      const findings = listed.length ? listed.map(([, id, file, line]) => ({ ...base, id, file, line_start: Number(line), line_end: Number(line), decision: "REJECT" }))
+        : e.structuredOutput.findings.map((f) => ({ ...f, decision: "REJECT" }));
+      return { ...e, structuredOutput: { ...e.structuredOutput, verdict: "approve", summary: "Rejected.", findings } };
+    }));
+    break;
+  }
+  // Synthetic (S4.5): an end event that names no session (session not confirmed).
+  case "no-session": play(fill(fixtures.ok).map((e) => { if (e.type !== "end") return e; const { sessionId, ...rest } = e; return rest; })); break;
   default: mismatch(`unknown scenario ${which}`);
 }
 process.exit(exitCode);
