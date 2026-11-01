@@ -88,3 +88,20 @@ All 40 cells have their expected outcome. Rows 1 and 5 exit 10 for reasons the p
 - Offline cells: `cx/scripts/off.sh <scenario> <council args…>` runs the installed `council.mjs` through `clean.sh` with the fakes and a scratch state root.
 - Zero-submission check for row 39: `grep -rl <session id> ~/.codex/council` and the job sessions in `meta.json` (none); the state root is checked first, before any probe or reservation.
 - Cost: 32 council provider submissions (claude 10, gemini 10, grok 12, including `setup --live`) plus one old-plugin Grok call; reported provider cost claude $0.576, grok $0.231 (+ $0.02 old plugin), gemini not reported by agy. Codex: 11 sessions, 34 turns, 7.43 M input tokens (6.92 M cached), 29,861 output tokens.
+
+## Fixes after the matrix
+
+Branch `s7-fixes-cx`, 2026-11-01. Re-runs used this branch's `plugins/council/scripts/council.mjs` directly, not the installed copy, which the coordinator reinstalls after the push; no installed-route cell was repeated. Evidence is in the same scratchpad, `install/fix-cx/`: `offline-rerun.txt` (fakes, scratch state root), `live-x2.out`. Full default suite after the fixes: 516 tests, 514 pass, 0 fail, 2 skipped (before: 491, 489, 0, 2). `npm run validate`, `core:check` (9 pins) and the ratio (1.74) pass; framing unchanged (165–176 B).
+
+| Issue | Fix | Commit | Re-run evidence |
+|---|---|---|---|
+| I1 denial or incomplete turn invisible | footer `attention: <reason>`, `--json` `attention` | 364dc66 | Row 5's shape on the fake: `council gemini needs attention · job … · attention: denied write_file(…/denied.txt) (+1 more)`, exit 10, and `--json` `"attention":"denied write_file(…) (+1 more)"`. Claude `attention: denied Read(/restricted/private.txt)`; Grok `attention: denied a tool call: Grok cancelled the turn (…)`; Gemini `attention: agy's diagnostics report denied host access (stderr); …`; malformed review, all three, `attention: review finding 1 needs an id`; findings, all three, no token |
+| I2 `error:` clipped at 200 B | locked-thread message rewritten, action first | 5641bb6 | Row 34's reply, all three, whole in the footer: `error: start a new ask, or cancel <job> --confirm-ended after checking the process table: thread <uuid> is locked; an unidentified process held that job's output` (195 B) |
+| I3 open questions undocumented | README exit table, skill exit line, X1's `attention: open questions in the answer` | 364dc66, fbb10ab | tests/core-attention.test.mjs through the entry with the null adapter (the provider fakes' answers carry no open question); not re-run live |
+| I4 bare `wait` unknown to Codex | skill: `wait` lists this session's jobs | fbb10ab | tests/skill.test.mjs; whether Codex now uses it is not re-run, since that needs the reinstalled skill |
+| I5 polling every 1 s | not fixed: host behaviour, harmless | none | recorded only |
+| I6 tier of a task unstated | skill: `task` at default tier `exec` | fbb10ab | tests/skill.test.mjs; Codex's behaviour not re-run, same reason |
+| `edited N` missed shell edits (shared ruling X2) | every task unions a before/after Git snapshot, `core/snapshot.mjs` | b199f5b | One live run: `task --to claude --effort low`, prompt demanding a shell edit, scratch repo. The stream has one `Bash` tool use and no edit tool; `calc.js` changed one line; footer `council claude ok · job f4af107e9d2b2a81 · sonnet/low · 9s · round 1/9 · edited 1` |
+| Stale `fake-child` processes (21132, 41454) | helpers stop a world's fakes at process exit; a hanging fake ends after 5 minutes | be8c626 | Both pids killed. tests/test-leak.test.mjs; after the full suite `ps -axo pid,command` shows no fake-child from this repository |
+
+Skill: 2,997 B before, 2,998 B after (budget 3,000 B). S7.0's record is `docs/qualification/baseline.md`.
