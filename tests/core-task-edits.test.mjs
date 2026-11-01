@@ -250,3 +250,28 @@ test("R3: a commit naming a raw-byte path cannot be listed, so HEAD moving gives
   commitFile(dir, "after.txt", "a\n");
   assert.deepEqual(workspaceEdits(job2, dir, env), ["after.txt"], "a valid name is reported");
 });
+
+test("R4: the snapshot comparison sees chmod +x on a dirty file, also past the byte budget", { skip: process.platform === "win32" }, () => {
+  const dir = repoWithFile();
+  fs.writeFileSync(path.join(dir, "dirty.sh"), "x".repeat(2000));
+  const before = snapshot(workspace(dir), env);
+  const overBudget = snapshot(workspace(dir), env, { maxBytes: 1000 });
+  fs.chmodSync(path.join(dir, "dirty.sh"), 0o755);
+  const stamp = fs.statSync(path.join(dir, "dirty.sh"));
+  assert.ok(stamp.mode & 0o111);
+  const after = snapshot(workspace(dir), env);
+  assert.deepEqual(changes(before, after).files, ["dirty.sh"], "same content and state, new mode");
+  assert.deepEqual(changes(overBudget, snapshot(workspace(dir), env, { maxBytes: 1000 })).files, ["dirty.sh"], "past the byte budget too");
+  assert.deepEqual(changes(after, snapshot(workspace(dir), env)).files, [], "no change, no difference");
+});
+
+test("R4: through a task, chmod +x on an already dirty file is an edit", { skip: process.platform === "win32" }, () => {
+  const w = makeWorld();
+  const script = path.join(w.workspace, "tool.sh");
+  commitFile(w.workspace, "tool.sh", "#!/bin/sh\n");
+  fs.writeFileSync(script, "#!/bin/sh\necho dirty\n");
+  // The fake runs git commands only; `git -c alias.x=!chmod` is the plain shell step a provider would run.
+  const r = task(w, { git: [["-c", "alias.modex=!chmod +x tool.sh", "modex"]] });
+  assert.ok(fs.statSync(script).mode & 0o100, "the fake ran chmod");
+  assert.deepEqual(edited(r), [1, ["tool.sh"]]);
+});

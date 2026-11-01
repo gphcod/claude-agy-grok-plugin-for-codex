@@ -75,7 +75,7 @@ export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxByt
     try {
       const stat = fs.lstatSync(file);
       if (!stat.isFile() && !stat.isSymbolicLink()) { partial = true; files[name] = { state, kind: "non-file" }; continue; }
-      const measured = { state, size: stat.size, mtimeMs: stat.mtimeMs };
+      const measured = { state, size: stat.size, mtimeMs: stat.mtimeMs, executable: Boolean(stat.mode & 0o111) };
       if (stat.size + bytes > maxBytes) { partial = true; files[name] = { ...measured, hash: null }; continue; }
       let data;
       if (stat.isSymbolicLink()) data = Buffer.from(fs.readlinkSync(file));
@@ -93,11 +93,11 @@ export function snapshot(scope, env = {}, { maxFiles = SNAPSHOT.maxFiles, maxByt
   return { coverage: partial ? "partial" : "tracked-and-unignored", listed, root: scope.root, head: head.code === 0 ? head.output.toString("utf8").trim() : null,
     diff: sha(diff.output), staged: sha(staged.output), files, bytes, ms: Date.now() - start };
 }
-/** Same content and state. An entry past the byte budget on either side (which side depends on the other dirty files) compares by size and mtime; two hashes ignore a mere touch. */
+/** Same content and state. An entry past the byte budget on either side (which side depends on the other dirty files) compares by size, mtime and mode; two hashes ignore a mere touch, not a chmod. */
 function sameEntry(a, b) {
   if (!a || !b) return a === b;
   const plain = ({ size, mtimeMs, ...rest }) => JSON.stringify(rest);
-  if (a.hash === null || b.hash === null) return a.state === b.state && a.size === b.size && a.mtimeMs === b.mtimeMs;
+  if (a.hash === null || b.hash === null) return a.state === b.state && a.size === b.size && a.mtimeMs === b.mtimeMs && a.executable === b.executable;
   return plain(a) === plain(b);
 }
 /** What changed between two snapshots (AGYX `changes`); `coverage` is complete only when both snapshots were. */
