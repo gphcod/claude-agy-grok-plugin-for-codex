@@ -1,7 +1,8 @@
 // Frozen contracts (S2.7): the adapter object of A5, the request the entry hands to `buildTurn`, the turn it returns, the
 // events `parseEvent` yields and the normalized review result of A5.2, as JSDoc typedefs; and `assertAdapter`, which the
 // entry runs on every provider module it loads. Changing any of these needs a docs/decisions.md entry and a review
-// (S2.8 added `checkRequest`, the request's `launcher`, `env` on probe, ParsedEvent `model`, ProbeResult `warnings`).
+// (S2.8 added `checkRequest`, the request's `launcher`, `env` on probe, ParsedEvent `model`, ProbeResult `warnings`; S5 added the
+// request's `deadlineMs`).
 
 /** @typedef {"native" | "node-script" | "shim-native" | "shim-node"} LauncherKind */
 /** @typedef {{ command: string, args: string[], path: string, kind: LauncherKind }} Launcher */
@@ -32,6 +33,7 @@
  * @property {{ version: string, readRoots: string[], web: boolean, allowMcp: boolean }} policy
  * @property {string | null} agent      the agent the thread last ran (Grok)
  * @property {string} jobDir
+ * @property {number} deadlineMs        the turn's execution deadline (`--deadline`, default 14400 s) in ms; agy's --print-timeout derives from it
  */
 /**
  * @typedef {object} BuiltTurn

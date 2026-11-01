@@ -8,7 +8,7 @@ import { makeWorld, jobIdOf } from "./helpers.mjs";
 import { DEPTH_VARIABLES } from "../plugins/council/scripts/lib/core/host.mjs";
 
 const KEYS = ["verb", "nextInput", "text", "prompt", "instructions", "contractPath", "model", "effort", "resume", "threadId", "cwd", "schemaPath", "structured", "readOnly", "web",
-  "allowCommands", "maxTurns", "maxBudgetUsd", "agent", "jobDir", "envKeys", "policy", "launcherKind"].sort();
+  "allowCommands", "maxTurns", "maxBudgetUsd", "agent", "jobDir", "envKeys", "policy", "launcherKind", "deadlineMs"].sort();
 function world() {
   const w = makeWorld();
   const log = path.join(w.dir, "requests.jsonl");
@@ -28,6 +28,7 @@ test("ask: a new read-only thread with the advice instructions, the text as prom
   assert.match(r.instructions, /^Instructions for this turn \(advice, read-only\)/);
   assert.equal(r.contractPath, path.join(process.cwd(), "plugins", "council", "contract.md"));
   assert.deepEqual([r.allowCommands, r.maxTurns, r.maxBudgetUsd, r.agent], [[], null, null, null]);
+  assert.equal(r.deadlineMs, 14400 * 1000, "the default execution deadline reaches the adapter (agy --print-timeout, A3.3)");
   assert.equal(r.cwd, fs.realpathSync(w.workspace));
   assert.equal(path.dirname(r.jobDir), path.join(fs.realpathSync(w.home), "jobs"));
   assert.deepEqual([r.policy.web, r.policy.allowMcp, r.policy.readRoots], [false, false, []]);
@@ -82,4 +83,12 @@ test("a stored policy reaches the adapter; provider-scoped values are passed thr
   assert.deepEqual([r.policy.web, r.policy.allowMcp], [true, true]);
   assert.match(r.policy.version, /^[0-9a-f]{16}$/);
   assert.equal(w.call(["ask", "--to", "null", "--max-budget-usd", "1", "--", "q"]).status, 2, "a Claude-only value never reaches another adapter");
+});
+
+test("--deadline reaches the adapter as deadlineMs, and stays out of the request fingerprint", () => {
+  const w = world();
+  assert.equal(w.call(["ask", "--to", "null", "--deadline", "90", "--request-id", "d1", "--", "q"]).status, 0);
+  assert.equal(w.requests().at(-1).deadlineMs, 90000);
+  assert.equal(w.call(["ask", "--to", "null", "--deadline", "120", "--request-id", "d1", "--", "q"]).status, 0, "a replay with another deadline is the same request");
+  assert.equal(w.requests().length, 1, "the replay built no second turn");
 });

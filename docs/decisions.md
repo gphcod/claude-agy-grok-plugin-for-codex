@@ -169,3 +169,8 @@ Found while implementing S4 (Grok); a frozen-contract change (S2.7), so it needs
 - **`BuiltTurn.promptText`** (optional): the lifecycle writes `promptText ?? stdin ?? request.prompt` to `promptFile`. Before, an adapter could change the prompt file's content only through `stdin`, which also pipes that text to the child; Grok reads its prompt from `--prompt-file` only (the fake rejects stdin), yet its per-turn instructions (advice, task) must travel in the input (contract.md, A5.1 claude rule applied to every provider).
 - **`state.adapter` seeded with `{ readOnly, agent }`** from the BuiltTurn before the first event. parseEvent receives `(line, state)` only, so it could not know whether the turn is read-only; Grok's FORBIDDEN catalogue check (A5.1, S4.3) must fail closed on read-only turns and stay off on tasks.
 - lifecycle.mjs (host-adapted, not pinned) and types.mjs only; reader.mjs (pinned) is unchanged. Test: tests/core-turn-seams.test.mjs, failing against d5d1d71. The twin needs the same seams only if its Grok adapter hits the same gap; recorded here as a candidate shared change.
+
+
+## 2026-10-31 S5 core: the TurnRequest carries the deadline
+
+- **`deadlineMs` added to the frozen TurnRequest** (council.mjs `planTurn`, types.mjs). A3.3 and A5.1 set agy's `--print-timeout` from the execution deadline, but S2.8's request carried no timing, so `buildTurn` could not honour `--deadline`. The field is the `--deadline` value (default 14400 s) in milliseconds; it stays out of the request fingerprint (S2.8 F19). Additive: adapters that ignore it are unaffected. Test: tests/core-turn-request.test.mjs. Touches S5.2; the twin needs the same field if its agy adapter derives `--print-timeout` likewise.

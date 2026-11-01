@@ -210,6 +210,7 @@ function planTurn(ctx, adapter, verb, o, text, memo) {
       threadId: thread?.threadId ?? null, cwd, env: ctx.env, schemaPath: structuredReview ? SCHEMA_PATH : null, structured: structuredReview, readOnly: verb !== "task",
       web: Boolean(o.web ?? base?.web), allowCommands: o["allow-command"] ?? [], maxTurns: o["max-turns"] !== undefined ? Number(o["max-turns"]) : null,
       maxBudgetUsd: o["max-budget-usd"] !== undefined ? Number(o["max-budget-usd"]) : null, policy, agent: prev?.agent ?? thread?.record?.agent ?? null, launcher,
+      deadlineMs: seconds(o.deadline, DEADLINE_S, "deadline") * 1000, // agy's --print-timeout is set from it (A3.3)
     };
     // The adapter's own refusals (A5 checkRequest): exit 2 before any job record and before the request id is tombstoned.
     const refusal = adapter.checkRequest ? adapter.checkRequest(request, ctx.env) : null;
