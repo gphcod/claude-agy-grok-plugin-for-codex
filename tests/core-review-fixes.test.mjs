@@ -391,3 +391,29 @@ test("S2.10: a running reservation whose holder is proven gone is taken over and
   assert.deepEqual(w.hooks().map((h) => h.hook), ["beforeTurn", "afterTurn"]);
   assert.equal(inspectClaim(w.home, "null", turn.thread).state, "absent");
 });
+
+test("S2.11: the hook holder is checked by a fresh query after the read, not by the cancel's earlier table", async () => {
+  const w = makeWorld();
+  const turn = turnFor(w);
+  const result = await runManagedTurn(ctxFor(w), adapter, turn, null, timers, { control: blind });
+  saveJob({ ...loadJob(w.home, result.job.id), companionPid: 999999, companionIdentity: { pid: 999999, stamp: "1" } });
+  const me = { pid: process.pid, stamp: "me", raw: "node", argv: ["node"] };
+  let open, entered, runs = 0;
+  const barrier = new Promise((resolve) => { open = resolve; });
+  const inside = new Promise((resolve) => { entered = resolve; });
+  const gated = { ...adapter, afterTurn: async () => { runs += 1; entered(); await barrier; } };
+  // Cancel A reserves the hook and blocks in it.
+  const a = cancelManaged(ctxFor(w), loadJob(w.home, result.job.id), { control: { ...empty, self: () => ({ pid: me.pid, stamp: me.stamp }), snapshot: () => ({ state: "ok", rows: [me] }) }, adapter: gated, timeoutMs: 5000 });
+  await inside;
+  // Cancel B's table was taken before A started (A absent from it); only a fresh scoped query shows A live.
+  const stale = { ...empty, self: () => ({ pid: 4242, stamp: "b" }), snapshot: () => ({ state: "ok", rows: [] }), scoped: (pid) => ({ state: "ok", rows: pid === me.pid ? [me] : [] }) };
+  const b = await cancelManaged(ctxFor(w), loadJob(w.home, result.job.id), { control: stale, adapter: gated, timeoutMs: 5000 });
+  assert.deepEqual([b.code, b.status], [20, "running"], JSON.stringify(b));
+  assert.equal(inspectClaim(w.home, "null", turn.thread).state, "owned");
+  const failing = { ...stale, scoped: () => { throw new Error("ps failed"); } };
+  assert.equal((await cancelManaged(ctxFor(w), loadJob(w.home, result.job.id), { control: failing, adapter: gated, timeoutMs: 5000 })).code, 1, "a failed fresh query is unknown, never gone");
+  open();
+  assert.equal((await a).code, 0);
+  assert.equal(runs, 1, "one hook run");
+  assert.equal(inspectClaim(w.home, "null", turn.thread).state, "absent");
+});

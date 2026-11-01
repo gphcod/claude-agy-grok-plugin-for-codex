@@ -1,6 +1,6 @@
 # Shared core manifest
 
-Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pinned at S2.8 (review fixes F1, F2, F3, F7, F10, F15, F19; the same changes are made in the twin); `execution.mjs` again at S2.9. Two tables: the host-neutral modules intended to stay byte-identical with the twin (Council for Claude Code, github.com/gphcod/codex-agy-grok-plugin-for-claude) with their hashes and the regression tests that pin their behaviour, and the host-adapted modules with the reason each differs. `npm run core:check` (scripts/core-check.mjs) verifies the local pins on every run and compares with `COUNCIL_CC_ROOT` only when that checkout contains an implemented core with a pinned manifest of its own; otherwise it prints `comparison deferred`. A change to a pinned module needs a docs/decisions.md entry, a new pin here, and the same change (or a recorded host difference) in the twin.
+Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pinned at S2.8 (review fixes F1, F2, F3, F7, F10, F15, F19; the same changes are made in the twin); `execution.mjs` again at S2.9 and S2.11. Two tables: the host-neutral modules intended to stay byte-identical with the twin (Council for Claude Code, github.com/gphcod/codex-agy-grok-plugin-for-claude) with their hashes and the regression tests that pin their behaviour, and the host-adapted modules with the reason each differs. `npm run core:check` (scripts/core-check.mjs) verifies the local pins on every run and compares with `COUNCIL_CC_ROOT` only when that checkout contains an implemented core with a pinned manifest of its own; otherwise it prints `comparison deferred`. A change to a pinned module needs a docs/decisions.md entry, a new pin here, and the same change (or a recorded host difference) in the twin.
 
 ## Host-neutral modules
 
@@ -14,7 +14,7 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 | `review-input.mjs` | 2a6be74ac43f554bcb9b9a3345f137db41e1262cc6c39449a12595b2403a3128 | tests/core-review-input.test.mjs, tests/core-review.test.mjs | byte-identical to grok_plugin_for_codex 1.1.0 and claude_plugin_for_codex 0.5.0 |
 | `findings.mjs` | 029222020fe88754e65343850cb0f0e7cda45f1858e8af854ed29dd03b5c8fab | tests/core-findings.test.mjs, tests/core-review.test.mjs | identified ledger, critical/high blockers |
 | `jobs.mjs` | 43a9e79b47e4c772b510cf31e2cc13ade48087fd4f95387baaec4700a4c252f7 | tests/core-jobs.test.mjs, tests/core-requests.test.mjs, tests/core-review-fixes.test.mjs | reads its state-root variable from host.mjs |
-| `execution.mjs` | 44a6b390f595f083cd88945afc4142e2a4577958553985938a894f556c65f18d | tests/core-execution.test.mjs, tests/core-windows.test.mjs, tests/core-cancel.test.mjs, tests/core-review-fixes.test.mjs | reads its guard variables and binary names from host.mjs |
+| `execution.mjs` | 34d0e33b8af8332fe87ec364fee21318694ee9d9a5e44b866915d263fcee641a | tests/core-execution.test.mjs, tests/core-windows.test.mjs, tests/core-cancel.test.mjs, tests/core-review-fixes.test.mjs | reads its guard variables and binary names from host.mjs |
 
 `jobs.mjs` and `execution.mjs` are host-neutral because every host constant they use comes from `host.mjs`; they stay in this table only while the twin's copies do the same.
 

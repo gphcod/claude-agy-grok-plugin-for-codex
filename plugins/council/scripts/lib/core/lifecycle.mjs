@@ -391,12 +391,13 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
  * cancel marks the job stopped and releases its claims. Its reservation, the `after-turn` record, carries a state:
  * `running` with the holder's pid and identity (created whole and exclusively: a private file linked into place), then
  * `settled` with the outcome (an atomic rename). Only `settled` lets a cancel mark stopped and release. A cancel that
- * finds `running` under a live holder touches nothing (`{busy}`, exit 20); under a holder that cannot be checked or an
+ * finds `running` under a live holder (checked by a fresh scoped query taken after the read) touches nothing (`{busy}`,
+ * exit 20); under a holder that cannot be checked or an
  * unreadable record it touches nothing either (`{blocked}`, exit 1); under a holder proven gone it takes the reservation
  * over and runs the hook again, so afterTurn must tolerate a re-run. A failure before the hook begins is `{blocked}`:
  * the job stays cleanup-pending with its claim and a retry runs it. `request` is null and the result changes no record.
  */
-async function deferredAfterTurn(ctx, job, adapter, io, control, snapshot) {
+async function deferredAfterTurn(ctx, job, adapter, io, control) {
   if (!job.afterTurnPending || !adapter?.afterTurn) return {};
   const file = path.join(job.dir, "after-turn");
   const me = { state: "running", pid: process.pid, identity: control.self?.() ?? null, startedAt: new Date().toISOString() };
@@ -412,7 +413,11 @@ async function deferredAfterTurn(ctx, job, adapter, io, control, snapshot) {
     const record = read();
     if (record?.state === "settled") return record.outcome === "ok" ? {} : { error: record.outcome };
     if (record?.state !== "running") return { blocked: `job ${job.id}'s deferred afterTurn record is unreadable; the claim is kept` };
-    const holder = companionState({ companionPid: record.pid, companionIdentity: record.identity }, snapshot);
+    // The holder is checked by a query taken after the record was read (S2.11): a table from before the read may predate
+    // the holder. Not found in that fresh query is gone; a failed query is unknown.
+    let fresh;
+    try { fresh = control.scoped ? control.scoped(record.pid) : control.snapshot(); } catch { fresh = { state: "unknown", rows: [] }; }
+    const holder = companionState({ companionPid: record.pid, companionIdentity: record.identity }, fresh);
     if (holder === "live") return { busy: `another cancel (pid ${record.pid}) is running job ${job.id}'s deferred afterTurn; nothing was released: ${retry} after it settles` };
     if (holder !== "gone") return { blocked: `the holder of job ${job.id}'s deferred afterTurn (pid ${record.pid}) cannot be checked; the claim is kept: ${retry}` };
     try { writeFileAtomic(file, JSON.stringify(me)); } catch (error) { return { blocked: `afterTurn could not be taken over (${error.message}); the claim is kept: ${retry}` }; }
@@ -453,7 +458,7 @@ export async function cancelManaged(ctx, job, { timeoutMs = 30000, control = exe
       if (found.state === "unknown") unsure = "execution ownership/cleanup cannot be confirmed; claim and cancellation request retained";
       else if (found.state === "gone") {
         if (job.unattributedPipes && !confirmEnded) return { status: "unknown", code: 1, job: view(), error: `an unidentified process held job ${job.id}'s output; the thread stays locked until cancel ${job.id} --confirm-ended after checking the process table` };
-        const hook = await deferredAfterTurn(ctx, job, adapter, io, control, snapshot);
+        const hook = await deferredAfterTurn(ctx, job, adapter, io, control);
         if (hook.busy) return { status: "running", code: 20, job: view(), error: hook.busy };
         if (hook.blocked) return { status: "unknown", code: 1, job: view(), error: hook.blocked };
         markStopped(job);

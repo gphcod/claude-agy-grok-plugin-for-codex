@@ -156,3 +156,8 @@ Findings F1–F19 as the coordinator merged them, with the coordinator's correct
 - A cancel that finds `running` under a live holder exits 20 (`running`) and touches nothing; under a holder that cannot be checked, or an unreadable record, exits 1 and touches nothing; under a holder proven gone it takes the reservation over (atomic rewrite, then a read-back that it holds it) and runs the hook again. `types.mjs` documents that afterTurn must tolerate a re-run. A settlement that cannot be stored keeps the claim (exit 1).
 - Tests (tests/core-review-fixes.test.mjs, failing against S2.9): a barrier inside afterTurn with a second cancel during the hook; a takeover from a gone holder.
 
+## 2026-10-31 S2.11: fresh holder check before takeover (Codex confirmation of S2.10)
+
+- A cancel that reads a `running` after-turn reservation checks its holder with a fresh query taken after the read: the controller's new `scoped(pid)` (one `ps -p`/scoped query), or a fresh full snapshot for a controller without it. Not found in that query is gone (takeover); live or a failed query is running/unknown (exit 20 or 1, nothing touched). S2.10 used the table the cancel took before reading, which could predate the holder, so a second hook ran.
+- `execution.mjs` re-pinned (`executionController().scoped`); test in tests/core-review-fixes.test.mjs reproduces Codex's scheduling and fails against S2.10.
+

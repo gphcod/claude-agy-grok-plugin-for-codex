@@ -364,6 +364,8 @@ export function executionController(options = {}) {
     platform,
     snapshot: (timeout = QUERY_MS) => snapshot({ platform, timeout, powershell: options.powershell, run: options.run }),
     self: () => selfIdentity(platform),
+    /** A fresh scoped query of one pid: `{state, rows}`, unknown when the query fails (a hook holder's liveness, S2.11). */
+    scoped: (pid, timeout = QUERY_MS) => snapshot({ pid, platform, timeout, powershell: options.powershell, run: options.run }),
     /** One scoped query for a single pid's identity (the leader right after spawn), or null. */
     identify: (pid, timeout = QUERY_MS) => {
       const found = snapshot({ pid, platform, timeout, powershell: options.powershell, run: options.run });
