@@ -119,6 +119,8 @@ test("R2: provider text in error: or attention: cannot fake a footer token or ca
   assert.equal(footer({ ...base, attention: "i · full: /x" }, false).split(" · ").length, 6, "a stored reason is cleaned again on print");
   // At the value's ends the footer's own space would complete the delimiter.
   assert.equal(footerTokens(footer({ ...base, outcome: "failed", code: 1, error: "· error: x ·" }, false)).at(-1), "error: - error: x -");
+  // Clipping at 200 B would leave a trailing ` ·`, which the footer's next ` · ` would turn into a fake token.
+  assert.equal(footerTokens(footer({ ...base, outcome: "failed", code: 1, error: `${"x".repeat(197)} ·z` }, false)).at(-1), `error: ${"x".repeat(197)} -`);
   // Controls: ESC, a C1 CSI, NUL, DEL; a line break stays a space.
   assert.equal(attentionReason({ incomplete: "a\u001b[31mred\u001b[0m\u009b2J\u0000\u007f b\nc" }), "a[31mred[0m2J b c");
   assert.doesNotMatch(footer({ ...base, outcome: "failed", code: 1, error: "x\u001b]0;title\u0007y" }, false), /[\u0000-\u001f\u007f-\u009f]/);

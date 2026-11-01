@@ -23,7 +23,9 @@ const collapsed = (text, max) => utf8Prefix(String(text).replace(/\s+/g, " ").tr
  * One footer value: provider text cannot fake a token or drive the terminal. Control characters (C0, ESC, DEL, C1) go, and
  * a free-standing `·` becomes `-`, also at the ends, where a footer's own space would complete the delimiter.
  */
-const oneLine = (text, max = 200) => collapsed(String(text).replace(/\s+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "").replace(/(?<=^|\s)·(?=\s|$)/g, "-"), max);
+const freeDot = (text) => text.replace(/(?<=^|\s)·(?=\s|$)/g, "-");
+// Clipping can leave a new trailing ` ·`, so the check runs again on the clipped value.
+const oneLine = (text, max = 200) => freeDot(collapsed(freeDot(String(text).replace(/\s+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "")), max));
 export const pendingCleanup = (job) => Boolean((job.cleanupPending && !job.stopped) || job.claimHeld);
 const bytes = (text) => Buffer.byteLength(text, "utf8");
 /** The input fields that say what a denied call was trying to do, across the providers' tool shapes. */
