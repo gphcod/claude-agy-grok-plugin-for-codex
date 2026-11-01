@@ -72,7 +72,7 @@ S5.7. Donor: gemini-plugin-for-codex 0.1.2 (AGYX), `skills/agy/scripts/agy.mjs` 
 |---|---|---|
 | frame 4 MiB, partial answer 4 MiB | `maxLineBytes` 4 MiB, partial 4 MiB | same |
 | total native stdout 8 MiB, stderr 4 MiB | no total stdout cap (events are spooled to disk); stderr tail 4 KiB | intentionally different |
-| snapshots: 500 changed files, 4 MiB captured, 2.5 s per git call | 5,000 changed files, otherwise the same bounds; moved to `core/snapshot.mjs`; a file past the byte budget compares by size and mtime | intentionally different | S7.1: every task now uses them, whatever the provider |
+| snapshots: 500 changed files, 4 MiB captured, 2.5 s per git call | 5,000 changed files, otherwise the same bounds; moved to `core/snapshot.mjs`; a file past the byte budget compares by size, mtime and mode; the executable bit is compared; `--no-renames`; a listing with a non-UTF-8 name or past the cap gives no edited paths | intentionally different | S7.1: every task now uses them, whatever the provider |
 | input 2 MiB | the core's input limits (A3.1) | intentionally different |
 
 ## Caveats carried over

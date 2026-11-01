@@ -105,3 +105,5 @@ Branch `s7-fixes-cx`, 2026-11-01. Re-runs used this branch's `plugins/council/sc
 | Stale `fake-child` processes (21132, 41454) | helpers stop a world's fakes at process exit; a hanging fake ends after 5 minutes | be8c626 | Both pids killed. tests/test-leak.test.mjs; after the full suite `ps -axo pid,command` shows no fake-child from this repository |
 
 Skill: 2,997 B before, 2,998 B after (budget 3,000 B). S7.0's record is `docs/qualification/baseline.md`.
+
+Round 2 of the review changed the same branch (`docs/decisions.md`, "Round 2"), with no new live run: default suite 528 tests, 525 pass, 0 fail, 3 skipped. The third skip is the raw-byte filename test, which APFS refuses (EILSEQ); a `git` shim covers that logic on macOS.
