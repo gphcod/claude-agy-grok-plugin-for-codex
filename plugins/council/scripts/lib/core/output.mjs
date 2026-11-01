@@ -18,7 +18,12 @@ export function utf8Prefix(text, cap) {
   while (end > 0 && (bytes[end] & 0xc0) === 0x80) end -= 1;
   return bytes.subarray(0, end).toString("utf8");
 }
-const oneLine = (text, max = 200) => utf8Prefix(String(text).replace(/\s+/g, " ").trim(), max);
+const collapsed = (text, max) => utf8Prefix(String(text).replace(/\s+/g, " ").trim(), max);
+/**
+ * One footer value: provider text cannot fake a token or drive the terminal. Control characters (C0, ESC, DEL, C1) go, and
+ * a free-standing `·` becomes `-`, also at the ends, where a footer's own space would complete the delimiter.
+ */
+const oneLine = (text, max = 200) => collapsed(String(text).replace(/\s+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "").replace(/(?<=^|\s)·(?=\s|$)/g, "-"), max);
 export const pendingCleanup = (job) => Boolean((job.cleanupPending && !job.stopped) || job.claimHeld);
 const bytes = (text) => Buffer.byteLength(text, "utf8");
 /** The input fields that say what a denied call was trying to do, across the providers' tool shapes. */
@@ -108,15 +113,15 @@ export function resultJson(job, answer) {
   const { text, clipped } = capAnswer(answer);
   const coverage = job.reviewState ? { reviewRef: job.reviewState.reviewRef, snapshotId: job.reviewState.snapshotId, status: job.reviewState.status,
     total: job.reviewState.total, pending: job.reviewState.pending, reviewed: job.reviewState.completed?.length ?? 0,
-    unreviewed: (job.unreviewed ?? []).slice(0, 20).map((u) => oneLine(u)), unsupportedCount: job.reviewState.unsupportedCount,
+    unreviewed: (job.unreviewed ?? []).slice(0, 20).map((u) => collapsed(u, 200)), unsupportedCount: job.reviewState.unsupportedCount,
     synthesisPending: job.reviewState.synthesisPending, blocking: job.reviewState.blocking } : null;
   return {
     provider: job.provider, job: job.id, thread: job.threadId ?? null, requestedThread: job.requestedThreadId ?? null, session: job.session ?? null,
     status: job.outcome, exit: job.code, verb: job.verb, tier: job.tier ?? null, model: oneLine(job.model ?? "default"), modelVerified: job.modelVerified !== false,
     effort: job.effort ?? null, requestedEffort: job.requestedEffort ?? job.effort ?? null, round: job.round ?? null, rounds: job.rounds ?? null,
     verdict: job.verdict ?? null, findings: job.findings ?? null, coverage, batch: job.batch ?? null,
-    edited: (job.edited ?? []).slice(0, 10).map((p) => oneLine(p)), editedCount: (job.edited ?? []).length,
-    failedCommands: (job.failedCommands ?? []).slice(0, 10).map((c) => oneLine(c)), failedCommandCount: (job.failedCommands ?? []).length,
+    edited: (job.edited ?? []).slice(0, 10).map((p) => collapsed(p, 200)), editedCount: (job.edited ?? []).length,
+    failedCommands: (job.failedCommands ?? []).slice(0, 10).map((c) => collapsed(c, 200)), failedCommandCount: (job.failedCommands ?? []).length,
     costUsd: job.cost ?? null, elapsedMs: elapsedOf(job), error: job.error ? oneLine(job.error, 2000) : null, attention: attentionOf(job),
     cleanupPending: pendingCleanup(job), threadLocked: Boolean(job.threadLocked), answer: text, clipped: clipped || Boolean(job.answerClipped),
     answerFile: path.join(job.dir, "answer.md"),

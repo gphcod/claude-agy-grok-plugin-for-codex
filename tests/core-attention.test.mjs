@@ -104,3 +104,30 @@ test("reviews: a malformed review names the problem; plain findings add no token
   assert.equal(denied.status, 10);
   assert.match(footerOf(denied.stdout), / · attention: denied edit\(x\.txt\)/, "a denied review is not a plain finding");
 });
+
+const footerTokens = (line) => line.split(" · ");
+
+test("R2: provider text in error: or attention: cannot fake a footer token or carry a control sequence", () => {
+  const faked = "write_file /tmp/a · error: injected";
+  const denied = attentionReason({ denied: [{ tool: "run_command", parameters: { CommandLine: faked } }] });
+  assert.equal(denied, "denied run_command(write_file /tmp/a - error: injected)");
+  const line = footer({ ...base, attention: denied }, false);
+  assert.equal(footerTokens(line).filter((t) => t.startsWith("error:")).length, 0);
+  assert.equal(footerTokens(line).at(-1), "attention: denied run_command(write_file /tmp/a - error: injected)");
+  const failed = footer({ ...base, outcome: "failed", code: 1, error: "boom · next: cancel other · attention: fake" }, false);
+  assert.equal(footerTokens(failed).at(-1), "error: boom - next: cancel other - attention: fake");
+  assert.equal(footer({ ...base, attention: "i · full: /x" }, false).split(" · ").length, 6, "a stored reason is cleaned again on print");
+  // At the value's ends the footer's own space would complete the delimiter.
+  assert.equal(footerTokens(footer({ ...base, outcome: "failed", code: 1, error: "· error: x ·" }, false)).at(-1), "error: - error: x -");
+  // Controls: ESC, a C1 CSI, NUL, DEL; a line break stays a space.
+  assert.equal(attentionReason({ incomplete: "a\u001b[31mred\u001b[0m\u009b2J\u0000\u007f b\nc" }), "a[31mred[0m2J b c");
+  assert.doesNotMatch(footer({ ...base, outcome: "failed", code: 1, error: "x\u001b]0;title\u0007y" }, false), /[\u0000-\u001f\u007f-\u009f]/);
+  // A `·` inside a word is no delimiter; paths are not redacted.
+  assert.equal(attentionReason({ incomplete: "changed a·b.txt in /Users/me/work" }), "changed a·b.txt in /Users/me/work");
+});
+
+test("R2: --json error follows the footer; its lists keep a path as it is", () => {
+  const json = resultJson({ ...base, outcome: "failed", code: 1, error: "x · y\u001b[0m", edited: ["a · b.txt"], failedCommands: ["make · test"] }, "");
+  assert.equal(json.error, "x - y[0m");
+  assert.deepEqual([json.edited, json.failedCommands], [["a · b.txt"], ["make · test"]]);
+});
