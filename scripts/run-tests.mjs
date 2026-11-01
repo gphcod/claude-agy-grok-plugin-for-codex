@@ -45,6 +45,13 @@ export function coreRatio(root = ROOT) {
 }
 
 function main(argv) {
+  // An unknown argument (for example `--help`) must never fall through to running a test set,
+  // least of all the paid live set.
+  const unknown = argv.filter((a) => a !== "--live" && a !== "--ratio");
+  if (unknown.length) {
+    console.error(`run-tests: unknown argument ${unknown.join(" ")}; usage: run-tests.mjs [--live | --ratio]`);
+    return 2;
+  }
   if (argv.includes("--ratio")) {
     const { testLines, coreLines, ratio } = coreRatio();
     console.log(`core test ratio: ${testLines} test lines / ${coreLines} core lines = ${ratio === Infinity ? "n/a" : ratio.toFixed(2)}`);

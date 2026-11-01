@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -38,4 +39,10 @@ test("the core ratio counts non-blank lines of core-*.test.mjs over core/*.mjs",
   fs.writeFileSync(path.join(root, "plugins", "council", "scripts", "lib", "core", "x.mjs"), "1\n2\n\n");
   assert.deepEqual(coreRatio(root), { testLines: 3, coreLines: 2, ratio: 1.5 });
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("an unknown argument exits 2 and runs no test set", () => {
+  const r = spawnSync(process.execPath, ["scripts/run-tests.mjs", "--live", "--help"], { encoding: "utf8" });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /unknown argument --help/);
 });
