@@ -2,7 +2,7 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It replaces three single-provider Codex plugins (claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0, gemini-plugin-for-codex 0.1.2) and is the Codex-hosted twin of [Council for Claude Code](https://github.com/gphcod/codex-agy-grok-plugin-for-claude).
 
-Status: release candidate, not yet tagged. macOS is checked against fakes and the installed CLIs' non-billable probes; the qualification matrix and the Windows session (`PLAN.md` S7) are still to run, and Gemini is unsupported on Windows until then.
+Status: release candidate `1.0.0-rc.1`, not yet tagged. macOS is checked against fakes and the installed CLIs' non-billable probes; the qualification matrix and the Windows session (`PLAN.md` S7) are still to run, and Gemini is unsupported on Windows until then.
 
 ## Install
 
@@ -221,6 +221,7 @@ npm run test:e2e     # the skill's call forms through sh (and PowerShell on Wind
 npm run measure      # per-call framing bytes and the skill size
 npm run core:check   # shared-core pins
 npm run test:live    # live CLI tests (paid; only where the plan names them)
+node scripts/validate-plugin.mjs --installed <dir>   # SHA-256 of every plugin file against an installed copy
 ```
 
 `PLAN.md` is the procedure; `docs/decisions.md` records every deviation from it.

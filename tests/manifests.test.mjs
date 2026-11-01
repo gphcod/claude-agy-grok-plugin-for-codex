@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { ROOT, PLUGIN, validate } from "../scripts/validate-plugin.mjs";
+import { ROOT, PLUGIN, validate, compareInstalled } from "../scripts/validate-plugin.mjs";
 
 const json = (p) => JSON.parse(fs.readFileSync(path.join(ROOT, p), "utf8"));
 /** Whether this build ships a provider's module (S3–S5 each add one). */
@@ -59,4 +59,23 @@ test("the entry resolves binaries on setup without stdin, without spawning, and 
   const unknown = spawnSync(process.execPath, [entry, "frobnicate"], { encoding: "utf8", env, input: "", timeout: 10000 });
   assert.equal(unknown.status, 2);
   assert.match(unknown.stderr, /usage: council\.mjs/);
+});
+
+test("validate-plugin --installed: an identical copy passes; a changed, missing or extra file is listed and exits 1 (S6.7)", () => {
+  const copy = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "council-installed-")), "council");
+  fs.cpSync(PLUGIN, copy, { recursive: true });
+  const script = path.join(ROOT, "scripts", "validate-plugin.mjs");
+  const same = spawnSync(process.execPath, [script, "--installed", copy], { encoding: "utf8" });
+  assert.equal(same.status, 0, same.stdout + same.stderr);
+  assert.match(same.stdout, /^installed copy matches plugins\/council\/: \d+ files, SHA-256$/m);
+  fs.appendFileSync(path.join(copy, "skills", "council", "SKILL.md"), " ");
+  fs.rmSync(path.join(copy, "schemas", "review-output.schema.json"));
+  fs.writeFileSync(path.join(copy, "scripts", "stray.mjs"), "");
+  assert.deepEqual(compareInstalled(copy).differences, [{ file: "schemas/review-output.schema.json", kind: "missing" }, { file: "skills/council/SKILL.md", kind: "changed" },
+    { file: "scripts/stray.mjs", kind: "extra" }]);
+  const differs = spawnSync(process.execPath, [script, "--installed", copy], { encoding: "utf8" });
+  assert.equal(differs.status, 1);
+  assert.match(differs.stdout, /^missing: schemas\/review-output\.schema\.json\nchanged: skills\/council\/SKILL\.md\nextra: scripts\/stray\.mjs\ninstalled copy differs from plugins\/council\/: 3 of \d+ files$/m);
+  const absent = spawnSync(process.execPath, [script, "--installed", path.join(copy, "nope")], { encoding: "utf8" });
+  assert.equal(absent.status, 2);
 });

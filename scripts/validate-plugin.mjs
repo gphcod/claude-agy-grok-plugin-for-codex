@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // Plugin metadata, skill and README checks (S0.6), adapted from claude_plugin_for_codex tests/validate-plugin.mjs.
 // Run after the suite: `npm run validate`. Exports the engines parser so tests/engines.test.mjs can prove it.
+// `--installed <dir>` (S6.7) instead compares the SHA-256 of every file under plugins/council/ with an installed copy
+// (for example ~/.codex/plugins/cache/council-for-codex/council/<version>), lists every difference and exits 1 on any.
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -101,7 +104,44 @@ export function validate() {
   return { version: pkg.version, skillBytes, descriptionBytes };
 }
 
+/** Relative path → SHA-256 of every regular file under `dir`, with `/` separators; symlinks and other types are listed as such. */
+export function digests(dir) {
+  const out = {};
+  const walk = (rel) => {
+    for (const entry of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {
+      const name = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(name);
+      else out[name] = entry.isFile() ? createHash("sha256").update(fs.readFileSync(path.join(dir, name))).digest("hex") : `not a regular file (${entry.isSymbolicLink() ? "symlink" : "other"})`;
+    }
+  };
+  walk("");
+  return out;
+}
+
+/** Compares plugins/council/ (or `source`) with an installed copy: `{ files, differences: [{file, kind}] }`, kind ∈ missing | extra | changed. */
+export function compareInstalled(installed, source = PLUGIN) {
+  if (!fs.existsSync(installed) || !fs.statSync(installed).isDirectory()) throw new Error(`installed copy ${installed} is not a directory`);
+  const ours = digests(source), theirs = digests(installed);
+  const differences = [];
+  for (const file of Object.keys(ours).sort()) {
+    if (!(file in theirs)) differences.push({ file, kind: "missing" });
+    else if (theirs[file] !== ours[file]) differences.push({ file, kind: "changed" });
+  }
+  for (const file of Object.keys(theirs).sort()) if (!(file in ours)) differences.push({ file, kind: "extra" });
+  return { files: Object.keys(ours).length, differences };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const at = process.argv.indexOf("--installed");
+  if (at >= 0) {
+    const dir = process.argv[at + 1];
+    if (!dir) { console.error("usage: validate-plugin.mjs --installed <dir>"); process.exit(2); }
+    let result;
+    try { result = compareInstalled(path.resolve(dir)); } catch (error) { console.error(`validate-plugin: ${error.message}`); process.exit(2); }
+    for (const d of result.differences) console.log(`${d.kind}: ${d.file}`);
+    console.log(result.differences.length ? `installed copy differs from plugins/council/: ${result.differences.length} of ${result.files} files` : `installed copy matches plugins/council/: ${result.files} files, SHA-256`);
+    process.exit(result.differences.length ? 1 : 0);
+  }
   const result = validate();
   console.log(`plugin metadata, skill (${result.skillBytes} B, description ${result.descriptionBytes} B) and README ok: council ${result.version}`);
 }
