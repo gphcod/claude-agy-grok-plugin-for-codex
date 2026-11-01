@@ -138,3 +138,81 @@ test("S5.1 checkRequest: Windows (A8), --web, --allow-command outside a task or 
   assert.match(allowCommandProblem("a\nb"), /one line/);
   assert.match(allowCommandProblem("  "), /non-empty/);
 });
+
+// ---------------------------------------------------------------------------------------------------------------- S5.2
+
+test("S5.2 settings: read-only turns filter allow, add the six denies and keep global denies; strict is kept, anything else becomes request-review", () => {
+  const global = { permissions: { allow: ["run_command(*)", "command(which)", "read_file(src/*)", "read_url(https://x/*)"], ask: ["mcp(foo)"], deny: ["read_file(secret/*)", "command(*)"] }, toolPermission: "always-proceed" };
+  const ro = sessionSettings({ readOnly: true }, global);
+  assert.deepEqual(ro, { permissions: { allow: ["read_file(src/*)", "read_url(https://x/*)"], ask: ["mcp(foo)"], deny: ["read_file(secret/*)", "command(*)", ...READ_ONLY_DENY.filter((r) => r !== "command(*)")] },
+    agentMode: "", toolPermission: "request-review" });
+  assert.equal(sessionSettings({ readOnly: true }, { ...global, toolPermission: "strict" }).toolPermission, "strict");
+  assert.deepEqual(sessionSettings({ readOnly: true }, {}).permissions, { allow: [], ask: [], deny: READ_ONLY_DENY });
+});
+
+test("S5.2 settings: tasks keep the global lists; --allow-command adds the pair and forces request-review unless strict; without it the global value stays", () => {
+  const global = { permissions: { allow: ["command(which)"], ask: [], deny: ["write_file(*.lock)"] }, toolPermission: "always-proceed" };
+  assert.deepEqual(sessionSettings({ readOnly: false }, global), { permissions: { allow: ["command(which)"], ask: [], deny: ["write_file(*.lock)"] }, toolPermission: "always-proceed" });
+  assert.deepEqual(sessionSettings({ readOnly: false, allowCommands: ["node check.mjs"] }, global),
+    { permissions: { allow: ["command(which)", "command(node check.mjs)", "unsandboxed(node check.mjs)"], ask: [], deny: ["write_file(*.lock)"] }, toolPermission: "request-review" });
+  assert.equal(sessionSettings({ readOnly: false, allowCommands: ["x"] }, { ...global, toolPermission: "strict" }).toolPermission, "strict");
+  assert.equal(sessionSettings({ readOnly: false }, { permissions: {} }).toolPermission, undefined, "no global value: agy's own default");
+  assert.equal(sessionSettings({ readOnly: false }, {}).agentMode, undefined, "agentMode is set only on read-only turns");
+});
+
+test("S5.2 configuredPolicy reads only permissions and toolPermission; a broken global file stops the turn", () => {
+  const h = home({ permissions: { allow: ["command(ls)"] }, toolPermission: "strict", apiKey: "secret", model: "x" });
+  assert.deepEqual(configuredPolicy(path.join(h, ".gemini", "antigravity-cli", "settings.json")), { permissions: { allow: ["command(ls)"], ask: [], deny: [] }, toolPermission: "strict" });
+  assert.deepEqual(configuredPolicy(path.join(tmp(), "missing.json")), {});
+  assert.throws(() => configuredPolicy(path.join(home("[1]"), ".gemini", "antigravity-cli", "settings.json")), /must contain a JSON object/);
+  assert.throws(() => configuredPolicy(path.join(home({ permissions: { deny: "x" } }), ".gemini", "antigravity-cli", "settings.json")), /permissions\.deny must be a string array/);
+  assert.throws(() => gemini.buildTurn(request({ home: home("{") })), /invalid JSON; no turn submitted/);
+});
+
+test("S5.2 buildTurn: a read-only ask carries the exact A5.1 flag set, the job's settings file and one NDJSON message", () => {
+  const h = home({ permissions: { allow: ["run_command(*)"], deny: ["read_file(.env)"] }, toolPermission: "always-proceed" });
+  const req = request({ home: h, deadlineMs: 90000 });
+  const built = gemini.buildTurn(req);
+  const settingsPath = path.join(req.jobDir, "settings.json");
+  assert.deepEqual(built.args, ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", "87s", "--sandbox", "--settings", settingsPath,
+    "--model", "gemini-4-argon", "--effort", "high"]);
+  assert.deepEqual(settingsOf(built), { permissions: { allow: [], ask: [], deny: ["read_file(.env)", ...READ_ONLY_DENY] }, agentMode: "", toolPermission: "request-review" });
+  assert.equal(fs.statSync(settingsPath).mode & 0o777, 0o600);
+  assert.deepEqual([built.readOnly, built.requestedThreadId, built.answerFile, built.contractCarrier, built.agent], [true, null, null, "stdin", null]);
+  const lines = built.stdin.split("\n");
+  assert.deepEqual([lines.length, lines[1]], [2, ""]);
+  const message = JSON.parse(lines[0]);
+  assert.equal(message.event, "user");
+  const contract = fs.readFileSync(CONTRACT, "utf8").trimEnd();
+  assert.equal(message.message.content, `${contract}\n\nInstructions for this turn (advice, read-only)\n\nq`, "contract, then the turn's instructions, then the text");
+  for (const name of DEPTH_VARIABLES) assert.equal(built.env[name], "1");
+  assert.equal(built.env.HOME, h);
+  assert.equal(built.env.TERM_PROGRAM_SECRET, undefined, "the child environment is the request's, never process.env");
+});
+
+test("S5.2 buildTurn: model and effort rules, --conversation on resumes, --json-schema on structured turns, --mode only on tasks", () => {
+  const args = (extra) => gemini.buildTurn(request(extra)).args;
+  const suffixed = args({ model: "gemini-4-argon-low", effort: "low" });
+  assert.deepEqual([flag(suffixed, "--model"), suffixed.includes("--effort")], ["gemini-4-argon-low", false], "a suffixed id travels alone");
+  assert.deepEqual([flag(args({ model: "gemini-3.8-flash", effort: "medium" }), "--effort")], ["medium"]);
+  const unknown = args({ model: "gemini-4-argon-xhigh", effort: "xhigh" });
+  assert.deepEqual([flag(unknown, "--model"), flag(unknown, "--effort")], ["gemini-4-argon-xhigh", "xhigh"], "an id the family does not offer is passed through, agy decides");
+  const reply = args({ verb: "reply", resume: true, threadId: "conv-9" });
+  assert.equal(flag(reply, "--conversation"), "conv-9");
+  assert.ok(!args({}).includes("--conversation"));
+  const review = args({ verb: "review", structured: true, schemaPath: SCHEMA, instructions: null });
+  assert.deepEqual([flag(review, "--json-schema"), review.includes("--mode")], [SCHEMA, false]);
+  for (const verb of ["ask", "reply", "review"]) assert.ok(!args({ verb }).includes("--mode"), `${verb} never gets --mode`);
+  const task = gemini.buildTurn(request({ verb: "task", readOnly: false, allowCommands: ["node check.mjs"] }));
+  assert.deepEqual([flag(task.args, "--mode"), task.readOnly], ["accept-edits", false]);
+  assert.deepEqual(settingsOf(task).permissions.allow, ["command(node check.mjs)", "unsandboxed(node check.mjs)"]);
+  assert.ok(!task.args.includes("--allow-command"), "--allow-command is never forwarded to agy");
+  assert.ok(gemini.buildTurn(request({ verb: "task", readOnly: false })).args.includes("--sandbox"), "--sandbox on every turn");
+});
+
+test("S5.2 the print timeout follows the deadline less a margin; the review prompt carries no separate instructions", () => {
+  assert.deepEqual([printTimeout(90000), printTimeout(6000), printTimeout(14400000), printTimeout(100)], ["87s", "4s", "14397s", "0.1s"]);
+  assert.equal(printTimeout(), "14397s");
+  const content = JSON.parse(stdinMessage({ contractPath: CONTRACT, instructions: null, prompt: "Instructions for this turn (structured code review" })).message.content;
+  assert.ok(content.endsWith("\n\nInstructions for this turn (structured code review"));
+});

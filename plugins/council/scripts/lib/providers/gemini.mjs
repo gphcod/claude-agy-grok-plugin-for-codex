@@ -64,6 +64,27 @@ export function configuredPolicy(file) {
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error(`${file} must contain a JSON object; no turn submitted`);
   return { permissions: lists(data), toolPermission: data.toolPermission };
 }
+/**
+ * The session settings of one turn (A5.1). Read-only: allow filtered to read_file/read_url, the six deny rules added,
+ * agentMode "" and toolPermission strict (kept) or request-review. Task: the global lists kept, `command(X)` and
+ * `unsandboxed(X)` added per --allow-command, which forces request-review unless the global value is strict; without
+ * --allow-command the global toolPermission is preserved.
+ */
+export function sessionSettings({ readOnly, allowCommands = [] }, configured = {}) {
+  const original = lists(configured);
+  const permissions = { allow: uniq(original.allow), ask: uniq(original.ask), deny: uniq(original.deny) };
+  const settings = { permissions };
+  const strict = configured.toolPermission === "strict";
+  if (readOnly) {
+    permissions.allow = permissions.allow.filter((rule) => READ_ONLY_ALLOW.test(rule));
+    permissions.deny = uniq([...permissions.deny, ...READ_ONLY_DENY]);
+    Object.assign(settings, { agentMode: "", toolPermission: strict ? "strict" : "request-review" });
+  } else if (allowCommands.length) {
+    permissions.allow = uniq([...permissions.allow, ...allowCommands.flatMap((value) => [`command(${value})`, `unsandboxed(${value})`])]);
+    settings.toolPermission = strict ? "strict" : "request-review";
+  } else if (configured.toolPermission !== undefined) settings.toolPermission = configured.toolPermission;
+  return settings;
+}
 /** An --allow-command value that keeps the `command(X)` rule well formed: one line, no parentheses. */
 export function allowCommandProblem(value) {
   if (typeof value !== "string" || !value.trim()) return "--allow-command needs a non-empty command";
@@ -77,6 +98,18 @@ export function allowCommandProblem(value) {
 
 /** Gemini's static catalog entry (models.json); the entry merges the refreshed listing itself. */
 export const catalog = loadStatic().gemini;
+
+/** The `--print-timeout` value: the deadline less a margin for the graceful partial result (AGYX native.mjs). */
+export function printTimeout(deadlineMs = 14400 * 1000) {
+  const seconds = Math.max(0.1, (deadlineMs - Math.min(3000, deadlineMs / 3)) / 1000);
+  return `${Number(seconds.toFixed(3))}s`;
+}
+/** The user message on stdin: the standing contract, the turn's instructions, then the text (A5.1). */
+export function stdinMessage(request) {
+  const contract = request.contractPath ? fs.readFileSync(request.contractPath, "utf8").trimEnd() : "";
+  const content = [contract, request.instructions?.trimEnd(), request.prompt].filter((part) => typeof part === "string" && part.trim()).join("\n\n");
+  return `${JSON.stringify({ event: "user", message: { content } })}\n`;
+}
 
 const adapter = {
   id: "gemini",
@@ -136,7 +169,24 @@ const adapter = {
     for (const value of commands) { const problem = allowCommandProblem(value); if (problem) return problem; }
     return null;
   },
-  buildTurn() { throw new Error("gemini turns arrive in S5.2"); },
+  buildTurn(request) {
+    if (process.platform === "win32") throw new Error(WINDOWS_UNSUPPORTED);
+    const env = request.env ?? {};
+    const readOnly = request.verb !== "task";
+    const settings = sessionSettings({ readOnly, allowCommands: readOnly ? [] : request.allowCommands ?? [] }, configuredPolicy(globalSettingsFile(env)));
+    const settingsPath = path.join(request.jobDir, "settings.json");
+    fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+    const args = ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", printTimeout(request.deadlineMs), "--sandbox",
+      "--settings", settingsPath];
+    // A suffixed id carries its effort and travels alone; a family id takes --effort (A5.1).
+    const suffix = request.model ? SUFFIX.exec(request.model)?.[1] : null;
+    if (request.model) args.push("--model", request.model);
+    if (request.effort && !(suffix && request.effort === suffix)) args.push("--effort", request.effort);
+    if (request.resume && request.threadId) args.push("--conversation", request.threadId);
+    if (request.structured && request.schemaPath) args.push("--json-schema", request.schemaPath);
+    if (!readOnly) args.push("--mode", "accept-edits");
+    return { args, env: { ...env, ...depthEnv() }, stdin: stdinMessage(request), answerFile: null, readOnly, requestedThreadId: null, agent: null, contractCarrier: "stdin" };
+  },
   parseEvent() { return { fatal: "gemini events arrive in S5.3" }; },
   reviewPlan() { throw new Error("gemini reviews arrive in S5.4"); },
   finalizeReview() { throw new Error("gemini reviews arrive in S5.3"); },
