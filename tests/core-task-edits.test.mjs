@@ -275,3 +275,52 @@ test("R4: through a task, chmod +x on an already dirty file is an edit", { skip:
   assert.ok(fs.statSync(script).mode & 0o100, "the fake ran chmod");
   assert.deepEqual(edited(r), [1, ["tool.sh"]]);
 });
+
+function dirtyRepo() {
+  const dir = repoWithFile();
+  for (const name of ["keep1.txt", "keep2.txt", "keep3.txt"]) fs.writeFileSync(path.join(dir, name), "dirty before the turn\n");
+  return dir;
+}
+const failingStatus = () => ({ PATH: gitShim(`case " $* " in *" status "*) echo 'fatal: index unreadable' >&2; exit 128;; esac`) });
+
+test("X-A1: a Gemini task whose git status fails after the turn reports no untouched dirty file as edited", async () => {
+  const dir = dirtyRepo();
+  const job = jobIn(dir);
+  await gemini.beforeTurn({ job, request: {}, cwd: dir, env });
+  const after = await gemini.afterTurn({ job, request: {}, cwd: dir, env: failingStatus() }, { cleanupConfirmed: true });
+  assert.equal(after.edited, undefined);
+  assert.equal(after.coverage, "partial");
+  assert.equal(workspaceEdits(job, dir, env), null, "the core agrees: event-only");
+});
+
+test("X-A1: a Gemini task over maxFiles reports no untouched dirty file as edited, whichever snapshot hit the cap", async () => {
+  for (const capped of ["before", "after"]) {
+    const dir = dirtyRepo();
+    const job = jobIn(dir);
+    const ctx = { job, request: {}, cwd: dir, env };
+    const small = snapshot(workspace(dir), env, { maxFiles: 2 });
+    assert.equal(small.listed, false);
+    if (capped === "before") fs.writeFileSync(path.join(job.dir, "snapshot-before.json"), JSON.stringify(small));
+    else { await gemini.beforeTurn(ctx); fs.writeFileSync(path.join(job.dir, "snapshot-after.json"), JSON.stringify(small)); }
+    const after = await gemini.afterTurn(ctx, { cleanupConfirmed: true });
+    assert.equal(after.edited, undefined, capped);
+  }
+});
+
+test("X-A1: a listed Gemini task still reports its edits, and a read-only turn keeps its behaviour on the same snapshots", async () => {
+  const dir = dirtyRepo();
+  const job = jobIn(dir);
+  const ctx = { job, request: {}, cwd: dir, env };
+  await gemini.beforeTurn(ctx);
+  fs.writeFileSync(path.join(dir, "made.txt"), "m\n");
+  assert.deepEqual(await gemini.afterTurn(ctx, { cleanupConfirmed: true }), { coverage: "complete", edited: ["made.txt"] });
+  const failing = jobIn(dir, { verb: "ask", readOnly: true });
+  await gemini.beforeTurn({ job: failing, request: {}, cwd: dir, env });
+  const shown = await gemini.afterTurn({ job: failing, request: {}, cwd: dir, env: failingStatus() }, {});
+  assert.match(shown.incomplete, /^the workspace changed during a read-only turn: /, "a read-only turn still fails closed on a listing it cannot read");
+  const capped = jobIn(dir, { verb: "ask", readOnly: true });
+  const cctx = { job: capped, request: {}, cwd: dir, env };
+  await gemini.beforeTurn(cctx);
+  fs.writeFileSync(path.join(capped.dir, "snapshot-after.json"), JSON.stringify(snapshot(workspace(dir), env, { maxFiles: 2 })));
+  assert.match((await gemini.afterTurn(cctx, {})).incomplete, /^the workspace changed during a read-only turn: /);
+});

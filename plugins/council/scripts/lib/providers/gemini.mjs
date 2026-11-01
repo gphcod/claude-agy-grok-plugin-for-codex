@@ -315,7 +315,8 @@ const adapter = {
     job.mutationCoverage = coverage;
     if (paths.length) job.mutationPaths = paths.slice(0, 50);
     const result = { coverage };
-    if (job.readOnly === false || job.verb === "task") { if (paths.length) result.edited = paths; }
+    // A snapshot not listed whole misses paths, so a dirty file the turn never touched would read as edited: no claim from it.
+    if (job.readOnly === false || job.verb === "task") { if (paths.length && before?.listed && after?.listed) result.edited = paths; }
     else if (diff?.changed) result.incomplete = `the workspace changed during a read-only turn${paths.length ? `: ${paths.slice(0, 5).join(", ")}` : ""}`;
     // agy can finish "successfully" while its backend could not persist (a sandbox denying writes): AGYX's stderr checks.
     const notice = !outcome.deferred && !outcome.denials?.length ? hostNotice(job.stderrTail) : null;
