@@ -91,7 +91,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     built = turn.build ? turn.build(job.dir) : turn.built;
     if (!initial.thread && built.requestedThreadId) { claim(built.requestedThreadId); job.requestedThreadId = built.requestedThreadId; }
     Object.assign(job, {
-      tier: turn.tier ?? job.tier, model: turn.model ?? job.model, effort: turn.effort ?? job.effort, requestedEffort: turn.requestedEffort ?? job.requestedEffort,
+      tier: turn.tier ?? job.tier, model: turn.model ?? job.model, modelInput: turn.modelInput ?? null, effort: turn.effort ?? job.effort, requestedEffort: turn.requestedEffort ?? job.requestedEffort,
       modelVerified: turn.modelVerified !== false, web: Boolean(turn.web), cwd: turn.cwd ?? job.cwd, agent: built.agent ?? null, readOnly: built.readOnly !== false,
       target: turn.target ?? null, unreviewed: turn.unreviewed ?? [], admitted: true, admittedAt: new Date().toISOString(),
       reviewState: turn.reviewState ?? null, reviewStateBase: turn.reviewState ?? null, nextInput: Boolean(turn.nextInput), batch: turn.batch ?? null,
@@ -330,7 +330,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     save(job); finishMarker(job);
     if (cleanupConfirmed) releaseClaims(ctx.home, job);
     if (job.threadId && job.admitted) {
-      saveThread(ctx.home, { provider, threadId: job.threadId, cwd: job.cwd, session: job.session, model: job.model, effort: job.effort, tier: job.tier,
+      saveThread(ctx.home, { provider, threadId: job.threadId, cwd: job.cwd, session: job.session, model: job.model, modelInput: job.modelInput ?? null, effort: job.effort, tier: job.tier,
         round: job.round, rounds: job.rounds, roundsSet: job.roundsSet, agent: job.agent ?? null, web: job.web, readOnly: job.readOnly, policyVersion: turn.policyVersion ?? null, lastJob: job.id });
     }
   } catch (failure) {

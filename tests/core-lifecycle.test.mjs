@@ -270,6 +270,8 @@ test("a lost owner: the hard-killed companion's job is recovered by cancel, whic
   const [, id] = await until(() => /job=([a-z0-9]{16})/.exec(out), 20000) ?? [];
   assert.ok(id, err);
   await until(() => w.job(id).pid);
+  const events = path.join(w.home, "jobs", id, "events.jsonl");
+  await until(() => fs.existsSync(events) && fs.readFileSync(events, "utf8").split("\n").filter((l) => l.includes('"type":"text"')).length === 2);
   const grand = w.job(id).pid;
   child.kill("SIGKILL");
   await new Promise((resolve) => child.on("exit", resolve));

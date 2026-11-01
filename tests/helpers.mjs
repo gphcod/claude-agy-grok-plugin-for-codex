@@ -27,6 +27,7 @@ export function commitFile(cwd, name, content, message = `add ${name}`) {
   run("git", ["commit", "-qm", message], { cwd });
 }
 export const jobIdOf = (text) => /job=([a-z0-9]{16})/.exec(text)?.[1] ?? /job ([a-z0-9]{16})/.exec(text)?.[1];
+export const footerOf = (text) => text.trimEnd().split("\n").at(-1);
 
 /** An isolated world: its own state root and Git workspace; `call`/`start` run the entry with the null adapter. */
 export function makeWorld({ git = true } = {}) {
@@ -60,6 +61,8 @@ export function makeWorld({ git = true } = {}) {
     },
     /** What the fake child logged for each launch (argv, cwd, prompt, depth variables); probes are left out. */
     fakeCalls() { return fs.existsSync(env.COUNCIL_FAKE_LOG) ? fs.readFileSync(env.COUNCIL_FAKE_LOG, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((c) => "argv" in c) : []; },
+    /** The non-billable probes the fake child answered (A1 cold probes). */
+    probes() { return fs.existsSync(env.COUNCIL_FAKE_LOG) ? fs.readFileSync(env.COUNCIL_FAKE_LOG, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((c) => "probe" in c) : []; },
     hooks() { return fs.existsSync(env.COUNCIL_FAKE_HOOKS) ? fs.readFileSync(env.COUNCIL_FAKE_HOOKS, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []; },
     job(id) { return JSON.parse(fs.readFileSync(path.join(world.home, "jobs", id, "meta.json"), "utf8")); },
     ageBeat(id, ms = 60000) { const then = new Date(Date.now() - ms); fs.utimesSync(path.join(world.home, "jobs", id, "beat"), then, then); },

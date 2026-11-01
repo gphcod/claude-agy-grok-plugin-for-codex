@@ -129,6 +129,8 @@ export function normalizeReview(structured, { state = null, unreviewed = [] } = 
   return { verdict, findings, coverage, incomplete: null, exit: attention ? 10 : 0, summary: structured.summary, nextSteps: structured.next_steps };
 }
 const stripState = (state) => { const { unreviewed, omissions, ...rest } = state; return rest; };
+/** Unreviewed means left out of the review (unsupported input); pending saved batches are counted as pending, not here (A5.2). */
+const unreviewedOf = (state) => (state.unreviewed ?? []).filter((u) => !u.endsWith("(pending saved input batch)"));
 
 /**
  * Settles one review turn: validation before mapping, then the findings ledger and the coverage published together.
@@ -142,9 +144,9 @@ export function finalizeReviewTurn({ state, structured, success = true, resultPa
   const discussion = !state.active?.length;
   if (problem) {
     const base = reviewCoverage(state, false);
-    const normalized = normalizeReview(null, { state: base, unreviewed: base.unreviewed });
+    const normalized = normalizeReview(null, { state: base, unreviewed: unreviewedOf(base) });
     normalized.incomplete = problem;
-    return { verdict: "incomplete", findings: [], reviewState: stripState(base), unreviewed: base.unreviewed, normalized, attention: true, incomplete: problem,
+    return { verdict: "incomplete", findings: [], reviewState: stripState(base), unreviewed: unreviewedOf(base), normalized, attention: true, incomplete: problem,
       text: renderReview(normalized) };
   }
   const reconciled = reconcileFindings(state, structured, jobId);
@@ -154,10 +156,10 @@ export function finalizeReviewTurn({ state, structured, success = true, resultPa
   } catch (error) {
     let base = state;
     try { base = reviewCoverage(state, false); } catch { /* keep the admission state */ }
-    return { error: `review integrity: ${error.message}`, reviewState: stripState(base), unreviewed: base.unreviewed ?? [] };
+    return { error: `review integrity: ${error.message}`, reviewState: stripState(base), unreviewed: unreviewedOf(base) };
   }
-  const normalized = normalizeReview(reconciled.output, { state: next, unreviewed: next.unreviewed });
-  return { verdict: normalized.verdict === "changes" ? "needs-attention" : "approve", findings: normalized.findings, reviewState: stripState(next), unreviewed: next.unreviewed,
+  const normalized = normalizeReview(reconciled.output, { state: next, unreviewed: unreviewedOf(next) });
+  return { verdict: normalized.verdict === "changes" ? "needs-attention" : "approve", findings: normalized.findings, reviewState: stripState(next), unreviewed: unreviewedOf(next),
     normalized, attention: normalized.exit === 10, text: renderReview(normalized, next) };
 }
 

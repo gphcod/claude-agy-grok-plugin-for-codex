@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -33,19 +34,21 @@ test("the validator passes on the checked-out tree and runs as a script", () => 
   assert.match(run.stdout, /ok: council /);
 });
 
-test("the entry stub resolves binaries on setup without stdin and exits 2 for unimplemented verbs", () => {
+test("the entry resolves binaries on setup without stdin, without spawning, and refuses providers this build lacks with exit 2", () => {
   const entry = path.join(PLUGIN, "scripts", "council.mjs");
-  const env = { ...process.env, PATH: "" };
-  for (const name of Object.keys(env)) if (/^COUNCIL_/.test(name)) delete env[name];
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), "council-manifests-"));
+  const env = { ...process.env, PATH: "", COUNCIL_CODEX_HOME: state };
+  for (const name of Object.keys(env)) if (/^(COUNCIL_(?!CODEX_HOME)|CLAUDE_PLUGIN_CODEX_DEPTH|GROK_CODEX_DEPTH|GROK_BUILD_DEPTH|AGY_BRIDGE_DEPTH)/.test(name)) delete env[name];
   const setup = spawnSync(process.execPath, [entry, "setup"], { encoding: "utf8", env, stdio: ["pipe", "pipe", "pipe"], timeout: 10000 });
   assert.equal(setup.status, 0, setup.stderr);
-  assert.match(setup.stdout, /^claude: claude not found\ngemini: agy not found\ngrok: grok not found\n/);
+  assert.match(setup.stdout, /^claude: claude not found · provider not available in this build\ngemini: agy not found · provider not available in this build\ngrok: grok not found · provider not available in this build\n/);
   const fake = path.join(ROOT, "tests", "fixtures", "fake-grok.mjs");
-  const configured = spawnSync(process.execPath, [entry, "setup"], { encoding: "utf8", env: { ...env, COUNCIL_GROK_BIN: fake }, timeout: 10000 });
-  assert.match(configured.stdout, fs.existsSync(fake) ? /grok: grok .*fake-grok\.mjs \(COUNCIL_GROK_BIN\)/ : /grok: grok not found/);
+  const configured = spawnSync(process.execPath, [entry, "setup", "--to", "grok"], { encoding: "utf8", env: { ...env, COUNCIL_GROK_BIN: fake }, timeout: 10000 });
+  assert.match(configured.stdout, /^grok: grok .*fake-grok\.mjs · provider not available in this build\n$/);
   const ask = spawnSync(process.execPath, [entry, "ask", "--to", "claude", "--", "hello"], { encoding: "utf8", env, input: "", timeout: 10000 });
   assert.equal(ask.status, 2);
-  assert.match(ask.stderr, /usage:/);
+  assert.match(ask.stderr, /provider claude not available in this build/);
   const unknown = spawnSync(process.execPath, [entry, "frobnicate"], { encoding: "utf8", env, input: "", timeout: 10000 });
   assert.equal(unknown.status, 2);
+  assert.match(unknown.stderr, /usage: council\.mjs/);
 });

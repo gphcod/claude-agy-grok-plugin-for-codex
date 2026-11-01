@@ -131,7 +131,9 @@ export async function runPreflight({ home, provider, launcher, descriptors, env 
   const cached = refresh ? null : readJson(file);
   const results = [];
   let probes = 0;
-  for (const descriptor of descriptors) {
+  // Sandbox checks first (files, directories, listener, process table), then the probes: a blocked resource fails before any probe runs.
+  const ordered = [...descriptors.filter((d) => !["exec", "network"].includes(d.kind)), ...descriptors.filter((d) => ["exec", "network"].includes(d.kind))];
+  for (const descriptor of ordered) {
     const expensive = descriptor.kind === "exec" || descriptor.kind === "network";
     const prior = cached?.results?.find((r) => r.kind === descriptor.kind && JSON.stringify(r.target) === JSON.stringify(descriptor.target) && r.ok);
     if (prior && (expensive || !recheckCheap)) { results.push({ ...prior, cached: true }); continue; }

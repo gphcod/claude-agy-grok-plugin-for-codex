@@ -27,6 +27,24 @@ const answerFile = flag("--answer-file");
 const depth = Object.fromEntries(Object.entries(process.env).filter(([k]) => /DEPTH$/.test(k)));
 log({ argv, cwd: process.cwd(), prompt, thread, depth, scenario, pid: process.pid });
 
+// Process-shape options, all off by default:
+//   COUNCIL_FAKE_IGNORE_TERM=1          ignore SIGTERM, so only SIGKILL stops it
+//   COUNCIL_FAKE_BACKEND=<pidFile>      start a detached copy with the same argv that hangs (stdio ignored), as a launcher's backend would
+//   COUNCIL_FAKE_GRANDCHILD=<pidFile>   start a detached grandchild that inherits stdout and sleeps COUNCIL_FAKE_HOLD_MS (another process group)
+//   COUNCIL_FAKE_SPIN_MS=<ms>           print a tool event every 100 ms for that long before answering
+//   COUNCIL_FAKE_TOOLS=<n>              print n distinct edit events (the reader's path cap)
+if (process.env.COUNCIL_FAKE_IGNORE_TERM) process.on("SIGTERM", () => {});
+if (process.env.COUNCIL_FAKE_BACKEND && !process.env.COUNCIL_FAKE_IS_BACKEND) {
+  const backend = spawn(process.execPath, [process.argv[1], ...argv], { env: { ...process.env, COUNCIL_FAKE_IS_BACKEND: "1", COUNCIL_FAKE_HANG: "1", COUNCIL_FAKE_LOG: "", COUNCIL_FAKE_GRANDCHILD: "" },
+    stdio: ["ignore", "ignore", "ignore"], detached: true, windowsHide: true });
+  backend.unref();
+  fs.writeFileSync(process.env.COUNCIL_FAKE_BACKEND, String(backend.pid));
+}
+if (process.env.COUNCIL_FAKE_GRANDCHILD) {
+  const grandchild = spawn(process.execPath, ["-e", `setTimeout(() => {}, ${Number(process.env.COUNCIL_FAKE_HOLD_MS ?? 20000)})`], { stdio: ["ignore", "inherit", "inherit"], detached: true, windowsHide: true });
+  grandchild.unref();
+  fs.writeFileSync(process.env.COUNCIL_FAKE_GRANDCHILD, String(grandchild.pid));
+}
 // fail-then-success: the first call under a log file fails (exit 3, no end), the next succeeds.
 const attempts = process.env.COUNCIL_FAKE_LOG ? fs.readFileSync(process.env.COUNCIL_FAKE_LOG, "utf8").split("\n").filter((l) => l.includes('"argv"')).length : 1;
 const answer = process.env.COUNCIL_FAKE_ANSWER ?? `fake answer to: ${prompt.trim().slice(0, 60)}`;
@@ -42,6 +60,8 @@ else await turn();
 async function turn() {
 out({ type: "start", thread });
 if (scenario === "slow") await sleep(Number(process.env.COUNCIL_FAKE_SLOW_MS ?? 1500));
+for (const end = Date.now() + Number(process.env.COUNCIL_FAKE_SPIN_MS ?? 0); Date.now() < end; await sleep(100)) out({ type: "tool", name: "read", ok: true });
+for (let i = 0; i < Number(process.env.COUNCIL_FAKE_TOOLS ?? 0); i++) out({ type: "tool", name: "edit", path: `f${i}.js`, ok: true });
 if (scenario === "huge-line") { process.stdout.write(`{"type":"text","data":"${"x".repeat(Number(process.env.COUNCIL_FAKE_HUGE_BYTES ?? 2 * 1024 * 1024))}"}\n`); }
 for (const file of edits) out({ type: "tool", name: "edit", path: file, ok: true });
 if (process.env.COUNCIL_FAKE_FAILED_COMMAND) out({ type: "tool", name: "shell", command: process.env.COUNCIL_FAKE_FAILED_COMMAND, ok: false, exit: 1 });

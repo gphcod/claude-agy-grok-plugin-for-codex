@@ -130,3 +130,14 @@ export async function refreshCatalog(home, provider, probe, statics = loadStatic
   fs.renameSync(`${file}.tmp`, file);
   return record;
 }
+
+/** Writes <home>/catalog/<provider>.json from a probe's model list ([{id, efforts}]), as `models --refresh` does. */
+export function saveRefreshedCatalog(home, provider, models) {
+  if (!Array.isArray(models) || !models.length) throw new Error(`${provider} listing produced no models`);
+  fs.mkdirSync(catalogDir(home), { recursive: true });
+  const file = path.join(catalogDir(home), `${provider}.json`);
+  const record = { updatedAt: new Date().toISOString(), models: Object.fromEntries(models.map((m) => [m.id, [...(m.efforts ?? [])]])) };
+  fs.writeFileSync(`${file}.tmp`, JSON.stringify(record, null, 2));
+  fs.renameSync(`${file}.tmp`, file);
+  return record;
+}

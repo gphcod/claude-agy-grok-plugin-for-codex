@@ -176,9 +176,28 @@ export function hasFlagOperand(row, flag, operand, platform = process.platform) 
   }
   return false;
 }
-/** Ownership of one row: the adapter's job-specific argv evidence over `hasFlagOperand`. */
+/**
+ * macOS gives only the space-joined command line, which cannot tell one argument from several: a row is owned only when
+ * it ends with the job's complete recorded child arguments and its program is the recorded launcher, or the same native
+ * binary under another path (grok_plugin_for_codex 1.1.0 `ownsExecution`, generalized from `grok` to the launcher's name).
+ */
+export function ownsRecordedInvocation(row, job) {
+  const childArgs = job.childArgs ?? [];
+  if (!job.argv?.length || !childArgs.length || typeof row.raw !== "string") return false;
+  const suffix = childArgs.join(" ");
+  if (!row.raw.endsWith(` ${suffix}`)) return false;
+  const program = row.raw.slice(0, -suffix.length - 1);
+  const launcher = job.argv.slice(0, job.argv.length - childArgs.length);
+  if (program === launcher.join(" ")) return true;
+  return launcher.length === 1 && !program.includes(" ") && path.basename(program) === path.basename(launcher[0]);
+}
+/**
+ * Ownership of one row: the adapter's job-specific argv evidence over `hasFlagOperand` where the platform gives an argument
+ * vector (Linux, Windows), and the complete recorded invocation where it gives only text (macOS).
+ */
 export function ownsExecution(row, job, platform = process.platform, adapter = null) {
-  if (!adapter?.ownsProcess) return false;
+  if (!row.argv && platform === "darwin") return ownsRecordedInvocation(row, job);
+  if (!adapter?.ownsProcess || !row.argv) return false;
   return Boolean(adapter.ownsProcess(row, job, platform, hasFlagOperand));
 }
 
@@ -238,14 +257,17 @@ export function ownedExecution(job, snapshot, platform = process.platform, evide
     if (!row.raw && !row.inaccessible && [...CHILD_BINARIES, launched].includes(row.name?.toLowerCase())) unknown = true;
   }
   const bornAfter = (child, parent) => !/^\d+$/.test(child.stamp ?? "") || !/^\d+$/.test(parent.stamp ?? "") || BigInt(child.stamp) >= BigInt(parent.stamp);
-  const groups = new Set(platform === "darwin" ? [...owned.values()].map((r) => r.pgid).filter((g) => g && g !== process.pid) : []);
+  // Only a group an owned row leads (the lifecycle spawns the child detached, so its pid is its group id) is ours: a child
+  // that shares its parent's group, as a test's or a shell's does, must never pull that group in.
+  const leads = (r) => Number.isInteger(r.pgid) && r.pgid === r.pid && r.pid !== process.pid;
+  const groups = new Set(platform === "darwin" ? [...owned.values()].filter(leads).map((r) => r.pgid) : []);
   for (let changed = true; changed;) {
     changed = false;
     for (const row of rows) {
       if (owned.has(row.pid) || row.pid === process.pid) continue;
       const child = owned.has(row.ppid) && bornAfter(row, owned.get(row.ppid));
       const member = platform === "darwin" && row.pgid && groups.has(row.pgid);
-      if (child || member) { owned.set(row.pid, row); if (platform === "darwin" && row.pgid) groups.add(row.pgid); changed = true; }
+      if (child || member) { owned.set(row.pid, row); if (platform === "darwin" && leads(row)) groups.add(row.pgid); changed = true; }
     }
   }
   if (rows.some((r) => r.inaccessible && (r.pid === job.pid || owned.has(r.pid) || known.some((p) => sameIdentity(p, r))))) unknown = true;
@@ -289,7 +311,7 @@ export function executionController(options = {}) {
   const adapter = options.adapter ?? null;
   return {
     platform,
-    snapshot: (timeout = QUERY_MS) => snapshot({ platform, timeout }),
+    snapshot: (timeout = QUERY_MS) => snapshot({ platform, timeout, powershell: options.powershell, run: options.run }),
     self: () => selfIdentity(platform),
     inspect: (job, snap) => ownedExecution(job, snap, platform, recoveryEvidence(job), adapter),
     stop: (row, timeout = QUERY_MS, signal = "SIGKILL") => stopIdentity(row, { ...options, platform, snapshot, timeout, signal }),

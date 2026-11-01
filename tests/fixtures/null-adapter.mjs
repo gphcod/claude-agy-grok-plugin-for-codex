@@ -9,6 +9,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { depthEnv } from "../../plugins/council/scripts/lib/core/host.mjs";
+import { runSync } from "../../plugins/council/scripts/lib/core/launcher.mjs";
 
 export const FAKE_CHILD = fileURLToPath(new URL("./fake-child.mjs", import.meta.url));
 const profile = (env = process.env) => ({ id: env.COUNCIL_NULL_ID || "preassigned", input: env.COUNCIL_NULL_INPUT || "stdin", output: env.COUNCIL_NULL_OUTPUT || "stream" });
@@ -33,11 +34,21 @@ export default {
     const operands = [["--prompt-file", job.promptFile], ["--answer-file", job.answerFile], ["--thread", job.requestedThreadId]].filter(([, v]) => v);
     return operands.some(([flag, value]) => hasFlagOperand(row, flag, value, platform));
   },
-  async probe() { return { version: "null 0.0.1", loggedIn: true, models: [{ id: "null-model", efforts: ["low", "medium", "high", "xhigh"] }, { id: "null-fast", efforts: ["low", "medium", "high"] }] }; },
+  /** Non-billable probes (A5): `--version` and the `models` listing of the child, as the real adapters run them. */
+  async probe(launcher = this.resolveLauncher()) {
+    const env = { ...process.env, ...(launcher.env ?? {}) };
+    const version = runSync(launcher, ["--version"], { env });
+    const listing = runSync(launcher, ["models"], { env });
+    const ids = listing.status === 0 ? listing.stdout.split("\n").map((l) => /^\s*-\s+(\S+)/.exec(l)?.[1]).filter(Boolean) : [];
+    return { version: version.status === 0 ? version.stdout.trim() : null, loggedIn: listing.status === 0, models: ids.map((id) => ({ id, efforts: catalog.models[id] ?? ["low", "medium", "high"] })) };
+  },
   preflight(ctx) {
+    ctx = { env: process.env, ...ctx };
     const blocked = process.env.COUNCIL_NULL_PREFLIGHT_BLOCK;
     return [
       { kind: "dir", target: ctx.stateRoot, access: "write", timeoutMs: 1000, why: "job records", action: "Set COUNCIL_CODEX_HOME to a writable directory outside the workspace." },
+      // The cold, non-billable capability probe (A1): cached by executable, so a warm call spawns none.
+      { kind: "exec", target: { command: process.execPath, args: [this.resolveLauncher(ctx.env).path, "--version"], expectText: "^null " }, timeoutMs: 15000, why: "null version probe", action: "Install the null child." },
       ...(blocked ? [{ kind: "file", target: blocked, access: "read", timeoutMs: 1000, why: "null login file", action: `Grant read access to ${blocked}; the host sandbox blocks it.` }] : []),
     ];
   },
@@ -47,7 +58,7 @@ export default {
     const thread = request.threadId ?? (p.id === "preassigned" ? randomUUID() : null);
     if (thread) args.push("--thread", thread);
     args.push("--model", request.model ?? "null-model", "--effort", request.effort ?? "high");
-    if (request.verb === "review") args.push("--schema", request.schemaPath ?? "inline");
+    if (request.verb === "review" || request.structured) args.push("--schema", request.schemaPath ?? "inline");
     if (request.verb === "task") args.push("--edit");
     const promptFile = p.input === "prompt-file" ? path.join(request.jobDir, "prompt.md") : null;
     const answerFile = p.output === "answer-file" ? path.join(request.jobDir, "answer.md") : null;

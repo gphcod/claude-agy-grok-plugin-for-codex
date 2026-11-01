@@ -51,6 +51,19 @@ test("ownsExecution delegates to the adapter; without an adapter nothing is owne
   assert.equal(ownsExecution(row(101, { argv: ["grok", "--prompt-file", path.join("/alias/jobs/aaaaaaaaaaaaaaaa", "prompt.md")] }), aliased, "linux", grokLike), false);
 });
 
+test("macOS ownership needs the complete recorded invocation: same launcher or the same native binary, never a mention", () => {
+  const raw = (text) => ({ pid: 101, argv: null, raw: text });
+  assert.ok(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), job, "darwin", null));
+  assert.ok(ownsExecution(raw(`/Users/me/.grok/bin/grok ${grokArgs.join(" ")}`), job, "darwin", null), "the same native binary under another path");
+  const node = { ...job, argv: ["/Applications/Tools Folder/node", "/project/fake.mjs", ...grokArgs] };
+  assert.ok(ownsExecution(raw(node.argv.join(" ")), node, "darwin", null), "a launcher path with spaces, recorded whole");
+  assert.equal(ownsExecution(raw(`/usr/bin/node /other.mjs ${grokArgs.join(" ")}`), node, "darwin", null), false, "another script under the same node");
+  for (const text of [`cat ${grokArgs.join(" ")}`, `/usr/bin/notgrok ${grokArgs.join(" ")}`, `grok ${grokArgs.join(" ")} backup`, `node -e "x" -- --prompt-file ${prompt} tail`, `grok --prompt-file ${prompt}`]) {
+    assert.equal(ownsExecution(raw(text), job, "darwin", grokLike), false, text);
+  }
+  assert.equal(ownsExecution(raw(`grok ${grokArgs.join(" ")}`), { ...job, childArgs: [] }, "darwin", null), false, "a record from before launch owns nothing by text");
+});
+
 test("macOS: owned descendants are found through pgid, including a member reparented to pid 1", () => {
   const root = row(201, { argv: null, raw: `grok ${grokArgs.join(" ")}`, pgid: 201, stamp: "Sat Oct 31 12:00:00 2026" });
   const child = row(202, { ppid: 201, pgid: 201, argv: null, raw: "sh -c sleep 60", stamp: "Sat Oct 31 12:00:01 2026" });
@@ -58,7 +71,11 @@ test("macOS: owned descendants are found through pgid, including a member repare
   const stranger = row(300, { ppid: 1, pgid: 300, argv: null, raw: "node other.js", stamp: "Sat Oct 31 12:00:02 2026" });
   assert.deepEqual(owned(job, table(root, child, orphan, stranger), "darwin"), ["owned", [201, 202, 203]]);
   assert.deepEqual(owned(job, table(orphan, stranger), "darwin"), ["gone", []], "a group with no owned row is nobody's");
-  assert.deepEqual(owned(job, table(root, child, stranger, row(304, { ppid: 1, pgid: 300, argv: null, raw: "x" })), "linux"), ["owned", [201, 202]], "pgid is a darwin rule only");
+  const shared = row(201, { argv: null, raw: `grok ${grokArgs.join(" ")}`, pgid: 77, stamp: "Sat Oct 31 12:00:00 2026" });
+  const shell = row(78, { ppid: 1, pgid: 77, argv: null, raw: "-zsh", stamp: "Sat Oct 31 11:00:00 2026" });
+  assert.deepEqual(owned(job, table(shared, shell), "darwin"), ["owned", [201]], "a row that does not lead its group never pulls that group (a shell's, a test runner's) in");
+  const linuxRoot = { ...root, argv: job.argv }, linuxChild = { ...child, argv: ["sh", "-c", "sleep 60"] }, linuxOrphan = { ...orphan, argv: ["node", "helper.js"] };
+  assert.deepEqual(owned(job, table(linuxRoot, linuxChild, linuxOrphan), "linux"), ["owned", [201, 202]], "pgid is a darwin rule only: elsewhere a reparented member is not found by group");
 });
 
 test("a Windows row with an inaccessible command line is unknown only when it could be ours; unreadable names are unknown", () => {

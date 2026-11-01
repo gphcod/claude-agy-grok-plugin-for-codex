@@ -54,7 +54,7 @@ export function footer(job, clipped) {
   if (job.verb === "task") parts.push(`edited ${(job.edited ?? []).length}`);
   const reviewLike = job.verb === "review" || job.nextInput;
   if (reviewLike && job.unreviewed?.length) parts.push(`unreviewed ${job.unreviewed.length}`);
-  if (reviewLike && job.batch?.total) parts.push(`batch ${job.batch.index}/${job.batch.total}`);
+  if (reviewLike && job.batch?.total > 1) parts.push(`batch ${job.batch.index}/${job.batch.total}`);
   if (job.modelVerified === false) parts.push("model unverified");
   if (clipped || job.answerClipped) parts.push(`full: ${path.join(job.dir, "answer.md")}`);
   if (job.error) parts.push(`error: ${oneLine(job.error)}`);

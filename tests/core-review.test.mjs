@@ -231,7 +231,7 @@ test("unsupported binary input keeps the review partial after every text batch a
   let result = settle(s, s.first.state, clean), rounds = 0;
   while ((result.reviewState.pending || result.reviewState.synthesisPending) && rounds++ < 10) result = settle(s, continueReviewTurn(result.reviewState, true).state, clean);
   assert.deepEqual([result.reviewState.pending, result.reviewState.synthesisPending, result.reviewState.status], [0, false, "partial"]);
-  assert.deepEqual(result.unreviewed, ["binary (untracked, binary)"]);
+  assert.deepEqual(result.unreviewed, ["binary (untracked, binary)"], "pending saved batches are pending, not unreviewed");
   assert.equal(result.attention, true);
   assert.equal(result.normalized.coverage.unreviewed, 1);
 });
