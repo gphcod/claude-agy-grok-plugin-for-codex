@@ -417,3 +417,32 @@ test("a concurrent turn on a busy thread is refused without spawning, and the hi
   assert.equal(done.job.outcome, "cancelled");
   assert.equal(w.fakeCalls().length, 1, "the refused turn never spawned");
 });
+
+// A real child that exits clean, with a group member no identity covers for the first scans.
+const unverifiedControl = (scans) => {
+  const real = executionController({ adapter });
+  const row = { pid: 999999, ppid: 1, stamp: "1", raw: "helper", name: "helper" };
+  const calls = { n: 0 };
+  return { calls, control: { ...real, inspect: (job, snap) => {
+    const found = real.inspect(job, snap);
+    calls.n += 1;
+    return calls.n <= scans ? { state: "unknown", rows: [], unverified: [row], error: "unverified: 1 process(es) in the job's process group (999999) match no identity recorded while it ran; not signalled" } : found;
+  } } };
+};
+
+test("a clean exit waits out group members that are still exiting, and signals none of them", async () => {
+  const w = makeWorld();
+  const { calls, control } = unverifiedControl(2);
+  const job = (await runTurn(w, turnFor(w), { json: false }, { control, unverifiedWaitMs: 3000 })).job;
+  assert.equal(calls.n, 3);
+  assert.deepEqual([job.code, job.outcome, job.cleanupPending], [0, "ok", false]);
+});
+
+test("group members that outlast the wait still leave cleanup pending", async () => {
+  const w = makeWorld();
+  const { calls, control } = unverifiedControl(Infinity);
+  const job = (await runTurn(w, turnFor(w), { json: false }, { control, unverifiedWaitMs: 250 })).job;
+  assert.ok(calls.n > 1);
+  assert.deepEqual([job.code, job.outcome, job.cleanupPending], [1, "failed", true]);
+  assert.match(job.error, /unverified: 1 process.*cleanup pending/);
+});

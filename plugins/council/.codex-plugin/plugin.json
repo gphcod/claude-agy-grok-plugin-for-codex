@@ -1,6 +1,6 @@
 {
   "name": "council",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Ask Claude Code, Gemini (agy) or Grok from Codex: questions, discussions, structured reviews and user-authorized tasks, with provider, model and effort chosen per call.",
   "author": {
     "name": "gphcod"

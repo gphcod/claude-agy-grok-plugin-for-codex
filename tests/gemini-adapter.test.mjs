@@ -14,7 +14,7 @@ import { hasFlagOperand } from "../plugins/council/scripts/lib/core/execution.mj
 import { createReader } from "../plugins/council/scripts/lib/core/reader.mjs";
 import { DEPTH_VARIABLES } from "../plugins/council/scripts/lib/core/host.mjs";
 
-const { configuredPolicy, sessionSettings, printTimeout, stdinMessage, snapshot, workspace, changes, allowCommandProblem, READ_ONLY_DENY, WINDOWS_QUALIFIED, LIMIT } = G;
+const { configuredPolicy, sessionSettings, reviewInputRule, printTimeout, stdinMessage, snapshot, workspace, changes, allowCommandProblem, READ_ONLY_DENY, WINDOWS_QUALIFIED, LIMIT } = G;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FAKE = path.join(ROOT, "tests", "fixtures", "fake-agy.mjs");
 const CONTRACT = path.join(ROOT, "plugins", "council", "contract.md");
@@ -428,4 +428,20 @@ test("S5.4 review plan: agy enforces --json-schema (S1.2), so the schema travels
 
 test("A8: on a qualified Windows buildTurn builds the turn", { skip: process.platform !== "win32" && "Windows only" }, () => {
   assert.ok(gemini.buildTurn(request()).args.includes("--sandbox"));
+});
+
+test("buildTurn: PWD is the realpath cwd on POSIX, so agy's workspace root matches the paths it resolves", { skip: process.platform === "win32" && "agy reads no PWD there" }, () => {
+  const built = gemini.buildTurn(request({ home: home({}), cwd: "/private/tmp/real" }));
+  assert.equal(built.env.PWD, "/private/tmp/real");
+});
+
+test("a review turn may read its saved input and nothing else outside the workspace; other turns get no such rule", buildsHere, () => {
+  const h = home({});
+  const req = request({ home: h });
+  const root = fs.realpathSync.native(req.jobDir);
+  const input = path.join(root, "review-input");
+  assert.deepEqual(settingsOf(gemini.buildTurn({ ...req, reviewInputRoot: input })).permissions.allow, [`read_file(${input})`]);
+  assert.deepEqual(settingsOf(gemini.buildTurn(req)).permissions.allow, []);
+  assert.equal(reviewInputRule(null), null);
+  assert.equal(reviewInputRule(path.join(root, "odd (name)")), null, "a parenthesis would break the rule");
 });

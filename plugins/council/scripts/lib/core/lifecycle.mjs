@@ -25,6 +25,7 @@ export const GRACE_MS = 3000;
 export const DRAIN_MS = 1500;
 /** How long after a clean exit the child's pipes may stay open, held by nothing the turn owns, before the thread locks (A7.8). */
 export const PIPE_WAIT_MS = 12000;
+const UNVERIFIED_WAIT_MS = 5000;
 const UNSURE_MS = 1000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -138,6 +139,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
       const graceMs = hooks.graceMs ?? Math.min(GRACE_MS, retryMs);
       const drainMs = hooks.drainMs ?? DRAIN_MS;
       const pipeWaitMs = hooks.pipeWaitMs ?? PIPE_WAIT_MS;
+      const unverifiedWaitMs = hooks.unverifiedWaitMs ?? UNVERIFIED_WAIT_MS;
       const beatMs = hooks.beatMs ?? BEAT_MS;
       // Every heartbeat persists the identities (pid + creation time) of the owned descendants, so recovery can adopt a
       // group member reparented after the leader exits only by a recorded identity (A7.5). Not on Windows (no groups;
@@ -280,6 +282,12 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
       };
       if (!cleanupConfirmed) {
         let { found, stopped } = await scanOwned();
+        // After a clean exit, group members no identity covers are usually helpers still exiting
+        // (a provider's MCP servers on a short turn). Wait a bounded time; nothing here signals them.
+        for (const end = Date.now() + unverifiedWaitMs; found.unverified?.length && !stopped && !reason && !running(child) && child.exitCode === 0 && Date.now() < end;) {
+          await sleep(100);
+          ({ found, stopped } = await scanOwned());
+        }
         cleanupConfirmed = found.state === "gone" && !running(child);
         if (drainExpired) {
           for (const end = Date.now() + (stopped ? drainMs : 0); !pipesClosed && Date.now() < end;) await sleep(20);

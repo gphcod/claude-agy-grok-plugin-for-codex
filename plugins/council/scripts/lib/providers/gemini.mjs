@@ -85,6 +85,18 @@ export function sessionSettings({ readOnly, allowCommands = [] }, configured = {
   } else if (configured.toolPermission !== undefined) settings.toolPermission = configured.toolPermission;
   return settings;
 }
+/**
+ * A review prompt names its saved input under the state root, outside the workspace, where headless agy denies read_file
+ * unless a rule allows it. A rule on a directory covers what is under it (measured on agy 1.4.12; `/**` and `/*` do not
+ * match). A path with a parenthesis cannot be written as a rule; the review then works from the prompt's diff alone.
+ */
+export function reviewInputRule(root) {
+  if (!root) return null;
+  let real = root;
+  try { real = fs.realpathSync.native(root); }
+  catch { try { real = path.join(fs.realpathSync.native(path.dirname(root)), path.basename(root)); } catch { /* as spelled */ } }
+  return /[()\r\n\0]/.test(real) ? null : `read_file(${real})`;
+}
 /** An --allow-command value that keeps the `command(X)` rule well formed: one line, no parentheses. */
 export function allowCommandProblem(value) {
   if (typeof value !== "string" || !value.trim()) return "--allow-command needs a non-empty command";
@@ -284,6 +296,8 @@ const adapter = {
     const env = request.env ?? {};
     const readOnly = request.verb !== "task";
     const settings = sessionSettings({ readOnly, allowCommands: readOnly ? [] : request.allowCommands ?? [] }, configuredPolicy(globalSettingsFile(env)));
+    const inputRule = reviewInputRule(request.reviewInputRoot);
+    if (inputRule) settings.permissions.allow = uniq([...settings.permissions.allow, inputRule]);
     const settingsPath = path.join(request.jobDir, "settings.json");
     fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     const args = ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", printTimeout(request.deadlineMs), "--sandbox",
@@ -295,7 +309,10 @@ const adapter = {
     if (request.resume && request.threadId) args.push("--conversation", request.threadId);
     if (request.structured && request.schemaPath) args.push("--json-schema", request.schemaPath);
     if (!readOnly) args.push("--mode", "accept-edits");
-    return { args, env: { ...env, ...depthEnv() }, stdin: stdinMessage(request), answerFile: null, readOnly, requestedThreadId: null, agent: null, contractCarrier: "stdin" };
+    // agy takes its workspace root from PWD as spelled; reached through a symlink (/tmp on macOS), every
+    // resolved path falls outside it and headless agy denies the tool. request.cwd is the realpath.
+    const workspace = process.platform === "win32" || !request.cwd ? {} : { PWD: request.cwd };
+    return { args, env: { ...env, ...depthEnv(), ...workspace }, stdin: stdinMessage(request), answerFile: null, readOnly, requestedThreadId: null, agent: null, contractCarrier: "stdin" };
   },
   /** The before snapshot, stored in the job directory so a deferred afterTurn in another process can compare (A7.5); a task's is already there (the core takes it). */
   beforeTurn(ctx) { snapshotBefore(ctx.job, ctx.cwd ?? ctx.job.cwd, ctx.env ?? {}); },
