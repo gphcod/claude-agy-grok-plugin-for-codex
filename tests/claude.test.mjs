@@ -190,17 +190,19 @@ test("reply resumes read-only with the delta in the input; task and task --threa
   }
 });
 
-test("review: read-only set, the repository schema inline as one line, max-turns 2, the batch prompt as the whole input", () => {
+test("review: read-only set, the repository schema inline as one line, enough turns for context reads, the batch prompt as the whole input", () => {
   const built = adapter.buildTurn(request({ verb: "review", instructions: null, prompt: "REVIEW PROMPT batch", schemaPath: SCHEMA, structured: true }));
   const a = built.args;
   assert.deepEqual(JSON.parse(value(a, "--json-schema")), JSON.parse(fs.readFileSync(SCHEMA, "utf8")));
   assert.ok(!value(a, "--json-schema").includes("\n"), "one argv line, so the macOS process row stays matchable");
-  assert.deepEqual([value(a, "--max-turns"), value(a, "--permission-mode"), value(a, "--tools")], ["2", "dontAsk", "Read,Glob,Grep"]);
+  assert.deepEqual([value(a, "--max-turns"), value(a, "--permission-mode"), value(a, "--tools")], ["20", "dontAsk", "Read,Glob,Grep"]);
   assert.equal(input(built).message.content, "REVIEW PROMPT batch");
   const discussion = adapter.buildTurn(request({ verb: "reply", resume: true, threadId: UUID, instructions: null, prompt: "F1 REJECT", schemaPath: SCHEMA, structured: true }));
   assert.ok(discussion.args.includes("--json-schema"), "a discussion reply on a review thread is structured");
   assert.equal(value(discussion.args, "--max-turns"), "20");
-  assert.equal(MAX_TURNS.review, 2);
+  assert.equal(MAX_TURNS.review, 20);
+  const roots = adapter.buildTurn(request({ verb: "review", reviewRoot: "/repo", reviewInputRoot: "/state/input", policy: { readRoots: ["/repo"] } })).args;
+  assert.deepEqual(roots.flatMap((token, i) => token === "--add-dir" ? [roots[i + 1]] : []), ["/repo", "/state/input"]);
 });
 
 test("--web adds WebFetch,WebSearch to --tools and --allowedTools on read-only and task turns; the policy sets MCP, read roots and web", () => {

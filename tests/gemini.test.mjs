@@ -54,7 +54,7 @@ test("ask → task --thread → reply → task --thread: settings, --sandbox, --
   const thread = w.job(id).threadId;
   const task = w.gemini(["task", "--to", "gemini", "--thread", id, "--allow-command", "node check.mjs", "--", "do it"], "task");
   assert.equal(task.status, 0, task.stderr);
-  assert.match(footerOf(task.stdout), / · gemini-4-argon\/high · \d+s · round 2\/9 · edited 0$/, "task --thread inherits the thread's model and effort");
+  assert.match(footerOf(task.stdout), / · gemini-4-argon\/medium · \d+s · round 2\/9 · edited 0$/, "task --thread inherits the thread's model and effort");
   const reply = w.gemini(["reply", id, "--", "and?"], "resume");
   assert.equal(reply.status, 0, reply.stderr);
   assert.match(footerOf(reply.stdout), /round 3\/9$/);
@@ -148,7 +148,7 @@ test("review: structured through --json-schema, findings exit 10; adversarial te
   const review = w.gemini(["review", "--to", "gemini"], "review-findings");
   assert.equal(review.status, 10, review.stderr);
   assert.match(review.stdout, /^Verdict: needs attention\.[\s\S]*F1 BLOCKER sum\.mjs:2 CHANGE: Off-by-one/);
-  assert.match(footerOf(review.stdout), /^council gemini needs attention · job [a-z0-9]{16} · gemini-4-argon\/high · \d+s$/);
+  assert.match(footerOf(review.stdout), /^council gemini needs attention · job [a-z0-9]{16} · gemini-4-argon\/medium · \d+s$/);
   const call = w.fakeCalls().at(-1);
   assert.equal(flag(call.argv, "--json-schema"), path.resolve("plugins", "council", "schemas", "review-output.schema.json"));
   assert.match(call.prompt, /Instructions for this turn \(structured code review, read-only\)/);
@@ -255,7 +255,7 @@ test("setup, models --refresh, wait and cancel: warnings, the listing, a replay 
   const w = world({ global: { toolPermission: "always-proceed" } });
   const setup = w.call(["setup", "--to", "gemini"]);
   assert.equal(setup.status, 0, setup.stderr);
-  assert.match(setup.stdout, /^gemini: .*fake-agy\.mjs \(node-script\) · 1\.4\.12 · logged in · tiers consult=gemini-4-argon\/high exec=gemini-3\.8-flash\/high deep=gemini-4-argon\/high · preflight ok\n/);
+  assert.match(setup.stdout, /^gemini: .*fake-agy\.mjs \(node-script\) · 1\.4\.12 · logged in · tiers consult=gemini-4-argon\/medium exec=gemini-3\.8-flash\/high deep=gemini-4-argon\/high · preflight ok\n/);
   assert.match(setup.stdout, /\n  warning: Gemini tasks without --allow-command run any command: the global agy toolPermission is always-proceed\n/);
   assert.match(setup.stdout, /\n  warning: Gemini read-only turns can search the web; --web is not offered for Gemini\n/);
   assert.equal(w.fakeCalls().length, 0, "setup submits nothing");

@@ -296,8 +296,8 @@ const adapter = {
     const env = request.env ?? {};
     const readOnly = request.verb !== "task";
     const settings = sessionSettings({ readOnly, allowCommands: readOnly ? [] : request.allowCommands ?? [] }, configuredPolicy(globalSettingsFile(env)));
-    const inputRule = reviewInputRule(request.reviewInputRoot);
-    if (inputRule) settings.permissions.allow = uniq([...settings.permissions.allow, inputRule]);
+    const inputRules = [request.reviewRoot, request.reviewInputRoot].map(reviewInputRule).filter(Boolean);
+    settings.permissions.allow = uniq([...settings.permissions.allow, ...inputRules]);
     const settingsPath = path.join(request.jobDir, "settings.json");
     fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     const args = ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", printTimeout(request.deadlineMs), "--sandbox",

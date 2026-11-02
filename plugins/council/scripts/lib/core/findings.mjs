@@ -15,13 +15,16 @@ export function reconcileFindings(state, output, jobId) {
   const scope = state.active?.[0];
   const findings = output.findings.map((finding) => {
     let id = finding.id;
+    if (!ledger.has(id) && finding.decision) {
+      const matches = [...ledger.values()].filter((item) => item.id.endsWith(`-${id}`) && item.location === location(finding));
+      if (matches.length === 1) id = matches[0].id;
+    }
     if (state.synthesisRequired) {
       const explicitUpdate = ledger.has(id) && finding.decision;
       if (scope && scope !== "synthesis" && !explicitUpdate) {
         if (!id.startsWith(`${scope}-`)) id = `${scope}-${id}`;
       } else if (!ledger.has(id)) {
-        const matches = finding.decision ? [...ledger.values()].filter((item) => item.id.endsWith(`-${id}`) && item.location === location(finding)) : [];
-        id = matches.length === 1 ? matches[0].id : `${scope || `discussion-${jobId}`}-${id}`;
+        id = `${scope || `discussion-${jobId}`}-${id}`;
       }
     }
     ledger.set(id, { id, location: location(finding), severity: finding.severity, decision: finding.decision || "AGREE", title: finding.title });

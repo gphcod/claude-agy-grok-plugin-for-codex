@@ -31,4 +31,4 @@ The global `toolPermission` here is `always-proceed`, so the turn's own settings
 
 ## Not checked
 
-Claude and Gemini turns inside Codex, and the npm grok shim.
+The npm grok shim. Claude, Gemini 4 Argon and Grok have now completed live reviews from this Codex chat through the Git marketplace installation; see `review-2026-11-02.md`.

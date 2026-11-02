@@ -1,6 +1,6 @@
 {
   "claude": {
-    "consult": { "model": "default", "effort": "high" },
+    "consult": { "model": "claude-opus-5-5", "effort": "high" },
     "exec": { "model": "sonnet", "effort": "high" },
     "deep": { "model": "default", "effort": "xhigh" }
   },
@@ -10,7 +10,7 @@
     "deep": { "model": "grok-4.7", "effort": "xhigh" }
   },
   "gemini": {
-    "consult": { "model": "gemini-4-argon", "effort": "high" },
+    "consult": { "model": "gemini-4-argon", "effort": "medium" },
     "exec": { "model": "gemini-3.8-flash", "effort": "high" },
     "deep": { "model": "gemini-4-argon", "effort": "high" }
   }

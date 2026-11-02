@@ -7,6 +7,18 @@ import { SEVERITY_RANK, location, priorFindingsNote, reconcileFindings, summariz
 const finding = (extra = {}) => ({ id: "F1", severity: "high", title: "Off by one", body: "B", file: "a.js", line_start: 3, line_end: 4, confidence: 0.9, recommendation: "fix", ...extra });
 const output = (findings) => ({ verdict: findings.length ? "needs-attention" : "approve", summary: "s", findings, next_steps: [] });
 
+test("a short decision id resolves a uniquely matching prefixed finding in a single-batch review", () => {
+  const state = { active: [], synthesisRequired: false, findingsLedger: [
+    { id: "u1-F1", location: "a.js:3", severity: "high", decision: "AGREE", title: "Off by one" },
+  ] };
+  const result = reconcileFindings(state, output([finding({ decision: "REJECT" })]), "reply");
+  assert.deepEqual(result.output.findings.map((item) => item.id), ["u1-F1"]);
+  assert.equal(result.state.findingsLedger.length, 1);
+  assert.equal(result.state.blocking, false);
+  const unrelated = reconcileFindings(state, output([finding({ decision: "REJECT", line_start: 9 })]), "reply");
+  assert.equal(unrelated.state.blocking, true, "another location cannot resolve the original blocker");
+});
+
 test("severity map and location: critical and high are blockers, matched by file:line_start", () => {
   assert.deepEqual(SEVERITY_RANK, { critical: "BLOCKER", high: "BLOCKER", medium: "MAJOR", low: "MINOR" });
   assert.equal(location(finding()), "a.js:3");

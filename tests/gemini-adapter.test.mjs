@@ -233,6 +233,13 @@ test("S5.3 ok and resume: the conversation id from init and result, the response
   assert.deepEqual([resume.completed, resume.text, resume.usage.input_tokens, resume.usage.conversation.input_tokens], [true, "pong2\n", 2274, 9960], "this turn's usage, and the conversation's");
   const wrong = read(fill(STREAMS.resume, "conv-3"), { expectedThreadId: "conv-2" });
   assert.match(wrong.failed, /answered on thread "conv-3", expected conv-2/);
+  const switched = read(fill(STREAMS.ok).map((line) => {
+    const event = JSON.parse(line);
+    if (event.event === "result") event.result.conversation_id = "conv-other";
+    return JSON.stringify(event);
+  }));
+  assert.match(switched.failed, /answered on thread "conv-other", expected conv-1/);
+  assert.equal(switched.completed, false, "a new conversation cannot complete under another thread's claim");
 });
 
 test("S5.3 denials: a deny-rule tool error is denied with the answer kept; denied_actions with an empty response is denied, not an empty-response failure", () => {
@@ -441,6 +448,7 @@ test("a review turn may read its saved input and nothing else outside the worksp
   const root = fs.realpathSync.native(req.jobDir);
   const input = path.join(root, "review-input");
   assert.deepEqual(settingsOf(gemini.buildTurn({ ...req, reviewInputRoot: input })).permissions.allow, [`read_file(${input})`]);
+  assert.deepEqual(settingsOf(gemini.buildTurn({ ...req, reviewRoot: root, reviewInputRoot: input })).permissions.allow, [`read_file(${root})`, `read_file(${input})`]);
   assert.deepEqual(settingsOf(gemini.buildTurn(req)).permissions.allow, []);
   assert.equal(reviewInputRule(null), null);
   assert.equal(reviewInputRule(path.join(root, "odd (name)")), null, "a parenthesis would break the rule");

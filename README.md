@@ -2,7 +2,7 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It replaces three single-provider Codex plugins (claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0, gemini-plugin-for-codex 0.1.2) and is the Codex-hosted twin of [Council for Claude Code](https://github.com/gphcod/codex-agy-grok-plugin-for-claude).
 
-Status: release candidate `1.0.0-rc.4`. macOS passes the test suites, the installed scripts against the real CLIs and the route inside a Codex chat (`docs/qualification/macos-check.md`); Windows 11 passes the test suites and the installed scripts against the real CLIs, and one Grok turn inside `codex exec` (`docs/qualification/windows.md`); Claude and Gemini turns inside Codex are still to run there.
+Status: `1.0.0`. macOS qualification is recorded in `docs/qualification/macos-check.md`; Windows 11 qualification, marketplace installation, and the Gemini 4 Argon, Claude and Grok review inside Codex are recorded in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`.
 
 ## Install
 
@@ -83,17 +83,17 @@ Bare `review` and `--uncommitted` review the working tree against `HEAD` plus un
 - `--web`: web search, off by default. Grok omits `--disable-web-search`; Claude adds `WebFetch,WebSearch`; Gemini refuses it (exit 2, see trade-offs).
 - `--json`: one JSON object (`provider`, `job`, `thread`, `session`, `model`, `modelVerified`, `effort`, `requestedEffort`, `tier`, `round`, `rounds`, `verdict`, `findings`, `coverage`, `batch`, `edited`, `failedCommands`, `costUsd`, `attention`, `exit`, `answerFile`, …).
 - `--prompt-file <path>`, `--cwd <dir>`, `--thread <id>`, `--last`.
-- Provider-scoped, refused with exit 2 elsewhere and before any job record: `--max-turns <n>` (Claude; review 2, ask/reply 20, task 30 by default; 1 to 100), `--max-budget-usd <n>` (Claude), `--allow-command <exact>` (`task --to gemini` only), `--set` and `--live` (`setup`), `--confirm-ended` (`cancel`).
+- Provider-scoped, refused with exit 2 elsewhere and before any job record: `--max-turns <n>` (Claude; review/ask/reply 20, task 30 by default; 1 to 100), `--max-budget-usd <n>` (Claude), `--allow-command <exact>` (`task --to gemini` only), `--set` and `--live` (`setup`), `--confirm-ended` (`cancel`).
 
 ## Tiers
 
 | Provider | consult | exec | deep |
 |---|---|---|---|
-| claude | default / high | sonnet / high | default / xhigh |
+| claude | claude-opus-5-5 / high | sonnet / high | default / xhigh |
 | grok | grok-4.7 / high | grok-4.7-build-fast / xhigh | grok-4.7 / xhigh |
-| gemini | gemini-4-argon / high | gemini-3.8-flash / high | gemini-4-argon / high |
+| gemini | gemini-4-argon / medium | gemini-3.8-flash / high | gemini-4-argon / high |
 
-Gemini has no effort above `high`, so its consult and deep tiers coincide. New threads default to `consult`, `task` to `exec`. The footer always prints the model and effort actually used.
+New threads default to `consult`: Claude Opus 5.5/high, Grok 4.7/high and Gemini 4 Argon/medium. `task` defaults to `exec`. Gemini's `deep` tier uses Argon/high. The footer always prints the model and effort actually used.
 
 ## Skill policy
 
@@ -134,6 +134,7 @@ State lives under `~/.codex/council/` (override `COUNCIL_CODEX_HOME`), never in 
 - Held output: a child that exits cleanly while something keeps its output open for 12 s marks the job `thread locked`. Only `cancel <job> --confirm-ended` releases that lock, and only after the process table shows neither the owner companion nor any identified child; it refuses with exit 10 otherwise, or when the query fails. It is a user decision: the skill never runs it on its own.
 - An unconfirmed session (Grok ended without naming its session) keeps the answer and exit code, but the thread is not resumable: `reply`, `reply --last` and `task --thread` exit 2 with the hint.
 - Never delete state by hand.
+- If a state record is corrupt or remains unreadable, the error names its absolute path. Leave it intact and restore it from backup after stopping work on that state root. New independent turns remain available; pruning skips the unreadable inventory. Set `COUNCIL_CODEX_HOME` to another directory outside the workspace and plugin to start separate work while recovering the old root. Implicit selectors fail closed until the record is readable.
 
 ## Sandbox and preflight
 
@@ -158,7 +159,7 @@ Each provider checks council's state root first, so the action line names the re
 
 **Under `workspace-write`, council cannot run any provider:** its own state root and the network are blocked (and so are Claude's session storage, agy's directory, the loopback listener and the process table). Every turn stops at once with `preflight_blocked` naming the state root, and nothing is submitted. Run Codex with `--sandbox danger-full-access`, or keep `workspace-write` and add `~/.codex/council` plus each provider's directories (`~/.claude`, `~/.gemini/antigravity-cli`, `~/.grok`) as writable roots and enable network; the loopback listener (agy) and the process table (all providers' cleanup) must also be allowed, and they were blocked in the measured `workspace-write` session. Windows session A had shown the same for Grok (login and process query blocked under `workspace-write`).
 
-Every provider child, probe and preflight probe carries the five guard variables `COUNCIL_DEPTH`, `CLAUDE_PLUGIN_CODEX_DEPTH`, `GROK_CODEX_DEPTH`, `GROK_BUILD_DEPTH` and `AGY_BRIDGE_DEPTH`, and council refuses to start when any is set, so neither council nor the three replaced plugins can nest from a child.
+Every provider child, probe and preflight probe carries the six guard variables `COUNCIL_DEPTH`, `CODEX_COMPANION_DEPTH`, `CLAUDE_PLUGIN_CODEX_DEPTH`, `GROK_CODEX_DEPTH`, `GROK_BUILD_DEPTH` and `AGY_BRIDGE_DEPTH`, and council refuses to start when any is set, so neither council nor the replaced plugins can nest from a child.
 
 ## Providers and read-only enforcement
 

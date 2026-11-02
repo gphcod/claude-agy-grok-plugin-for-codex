@@ -2,11 +2,19 @@
 // and `claimLeft` marker. Paths are `claims/<provider>/<threadId>`: every thread lookup is namespaced by provider (A7.3).
 import fs from "node:fs";
 import path from "node:path";
+import { sleepSync } from "./fs.mjs";
 
 const THREAD = /^[a-zA-Z0-9_.:-]{1,128}$/;
 const PROVIDER = /^[a-z][a-z0-9-]{0,31}$/;
 const TOKEN = /^[a-f0-9]{32}$/;
 export class BusyError extends Error {}
+const BUSY = new Set(["EBUSY", "EPERM", "EACCES"]);
+function retryBusy(operation) {
+  for (const deadline = Date.now() + 5000; ;) {
+    try { return operation(); }
+    catch (error) { if (!BUSY.has(error.code) || Date.now() >= deadline) throw error; sleepSync(20); }
+  }
+}
 
 export function claimPath(home, provider, thread) {
   if (!PROVIDER.test(provider ?? "")) throw new Error("invalid provider id");
@@ -49,15 +57,23 @@ export function claimThread(home, provider, thread, job, io = fs) {
 }
 
 /**
- * Only the successful unlinker may try rmdir, exactly once. A delayed second releaser must not remove a replacement
+ * Only the successful unlinker may try rmdir. A delayed second releaser must not remove a replacement
  * owner's directory. No recursive deletion and no retry after ENOENT.
  */
 export function releaseThread(home, provider, thread, job, io = fs) {
   const dir = claimPath(home, provider, thread);
-  try { io.unlinkSync(path.join(dir, ownerName(job))); }
+  const owner = path.join(dir, ownerName(job));
+  try { retryBusy(() => io.unlinkSync(owner)); }
   catch (error) { if (error.code === "ENOENT") return false; throw error; }
-  try { io.rmdirSync(dir); }
-  catch (error) { if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code)) throw error; }
+  try { retryBusy(() => io.rmdirSync(dir)); }
+  catch (error) {
+    if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code)) {
+      // A failed rmdir left this unlinker's directory in place: no new claimant can create it. Restore ownership so
+      // recovery can retry release; never remove an unidentified empty directory or retry rmdir after ENOENT.
+      retryBusy(() => io.writeFileSync(owner, `${job.id}\n`, { flag: "wx" }));
+      throw error;
+    }
+  }
   return true;
 }
 

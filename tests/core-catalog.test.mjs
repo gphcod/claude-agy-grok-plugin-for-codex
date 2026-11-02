@@ -41,10 +41,10 @@ test("Gemini: clamp, suffix conflict, suffixed id alone, family verified, alias"
 test("Gemini suffix versus tier or inherited effort: only an explicit --effort conflicts; a foreign suffix is unknown", () => {
   const catalog = cat("gemini");
   const tier = resolveTier("gemini", "consult", { model: "gemini-4-argon-low" });
-  assert.deepEqual([tier.model, tier.effort, tier.explicit.effort], ["gemini-4-argon-low", "high", false]);
+  assert.deepEqual([tier.model, tier.effort, tier.explicit.effort], ["gemini-4-argon-low", "medium", false]);
   const m = resolveModel("gemini", tier.model, catalog);
   assert.deepEqual(resolveEffort("gemini", m.id, tier.effort, catalog, { explicit: tier.explicit.effort }),
-    { effort: "low", requested: "low", clamped: false, suffixed: true }, "the tier's high yields to the suffix");
+    { effort: "low", requested: "low", clamped: false, suffixed: true }, "the tier's medium yields to the suffix");
   assert.deepEqual(resolveEffort("gemini", "gemini-4-argon-low", "high", catalog, { explicit: false }).effort, "low", "an inherited thread effort yields too");
   assert.throws(() => resolveEffort("gemini", "gemini-4-argon-low", "high", catalog, { explicit: true }), UsageError, "argv --effort conflicts");
   assert.throws(() => resolveEffort("gemini", "gemini-4-argon-low", "high", catalog), UsageError, "explicit is the default");
@@ -108,11 +108,12 @@ test("refresh honours the state root, skips Claude, and the refreshed list wins 
 
 test("tiers come from tiers.json exactly as A2 states, and explicit model or effort wins", () => {
   const tiers = loadTiers();
-  assert.deepEqual(tiers.claude, { consult: { model: "default", effort: "high" }, exec: { model: "sonnet", effort: "high" }, deep: { model: "default", effort: "xhigh" } });
+  assert.deepEqual(tiers.claude, { consult: { model: "claude-opus-5-5", effort: "high" }, exec: { model: "sonnet", effort: "high" }, deep: { model: "default", effort: "xhigh" } });
   assert.deepEqual(tiers.grok, { consult: { model: "grok-4.7", effort: "high" }, exec: { model: "grok-4.7-build-fast", effort: "xhigh" }, deep: { model: "grok-4.7", effort: "xhigh" } });
-  assert.deepEqual(tiers.gemini.consult, tiers.gemini.deep, "Gemini has no effort above high, so consult and deep coincide");
+  assert.deepEqual(tiers.gemini.consult, { model: "gemini-4-argon", effort: "medium" });
+  assert.deepEqual(tiers.gemini.deep, { model: "gemini-4-argon", effort: "high" });
   assert.deepEqual(resolveTier("grok", "exec"), { tier: "exec", model: "grok-4.7-build-fast", effort: "xhigh", explicit: { model: false, effort: false } });
-  assert.deepEqual(resolveTier("claude", "consult", { effort: "low" }), { tier: "consult", model: "default", effort: "low", explicit: { model: false, effort: true } });
+  assert.deepEqual(resolveTier("claude", "consult", { effort: "low" }), { tier: "consult", model: "claude-opus-5-5", effort: "low", explicit: { model: false, effort: true } });
   assert.deepEqual(resolveTier("gemini", undefined, { model: "flash" }), { tier: null, model: "flash", effort: undefined, explicit: { model: true, effort: false } });
   assert.throws(() => resolveTier("grok", "ultra"), UsageError);
   assert.throws(() => resolveTier("codex", "consult"), UsageError);

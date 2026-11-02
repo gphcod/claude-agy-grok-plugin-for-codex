@@ -33,9 +33,12 @@ export function parseOptions(argv, spec = SPEC) {
   const positionals = [];
   let hasDashDash = false, leading = 0;
   for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
+    const token = argv[i] === "-h" && spec.bool.includes("help") ? "--help" : argv[i];
     if (token === "--") { hasDashDash = true; leading = positionals.length; positionals.push(...argv.slice(i + 1)); break; }
-    if (!token.startsWith("--")) { positionals.push(token); continue; }
+    if (!token.startsWith("--")) {
+      if (token.startsWith("-") && token !== "-") throw new UsageError(`Unknown option ${token}. Put -- before the text if it starts with a dash.`);
+      positionals.push(token); continue;
+    }
     const found = option(token, spec, () => argv[i + 1]);
     if (found.repeat) options[found.key] = [...(options[found.key] ?? []), found.value];
     else options[found.key] = found.value;
