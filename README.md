@@ -2,7 +2,7 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It replaces three single-provider Codex plugins (claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0, gemini-plugin-for-codex 0.1.2) and is the Codex-hosted twin of [Council for Claude Code](https://github.com/gphcod/codex-agy-grok-plugin-for-claude).
 
-Status: release candidate `1.0.0-rc.2`, not yet tagged. macOS is checked against fakes and the installed CLIs' non-billable probes; Windows 11 passes the test suites and the installed scripts against the real CLIs (`docs/qualification/windows.md`); the installed route inside a Codex chat and the qualification matrix are still to run.
+Status: release candidate `1.0.0-rc.3`. macOS passes the test suites, the installed scripts against the real CLIs and the route inside a Codex chat (`docs/qualification/macos-check.md`); Windows 11 passes the test suites and the installed scripts against the real CLIs (`docs/qualification/windows.md`), but the route inside a Codex chat is not checked there.
 
 ## Install
 
