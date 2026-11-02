@@ -17,7 +17,7 @@ test("a small review completes in one batch: no round token, the review template
   fs.writeFileSync(path.join(w.workspace, "README.md"), "# changed\n");
   const r = w.call(["review", "--to", "null"]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.match(r.stderr, /^\[council\] provider=null job=[a-z0-9]{16} thread=[0-9a-f-]{36} target=working tree \(staged, unstaged and untracked\)\n$/);
+  assert.match(r.stderr, /^\[council\] provider=null job=[a-z0-9]{16} target=working tree \(staged, unstaged and untracked\)\n$/);
   assert.match(footerOf(r.stdout), /^council null ok · job [a-z0-9]{16} · null-model\/high · \d+s$/, "no round on a review, no batch token for a single batch");
   assert.match(r.stdout, /^Verdict: approve\./);
   const sent = w.fakeCalls().at(-1);

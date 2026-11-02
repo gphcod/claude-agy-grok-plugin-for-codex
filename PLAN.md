@@ -126,7 +126,7 @@ PowerShell:
 
 ### A3.4 Output grammar, exit codes
 
-Start line, stderr, suppressed under `--json`: `[council] provider=<p> job=<id> thread=<native id|?>[ target=<review target>]`.
+Start line, stderr, suppressed under `--json`: `[council] provider=<p> job=<id>[ target=<review target>]` (1.1.0 host difference). The durable job is announced at spawn; native thread ids remain in state, `--json` and `wait`.
 
 Footer, stdout, one line: `council <provider> <ok|needs attention|failed|cancelled> · job <16 chars> · <model>/<effort>[<=requested] · <duration>[ · round N/M][ · edited N][ · unreviewed N][ · batch i/n][ · model unverified][ · full: <file>][ · error: <msg> | · attention: <reason>][ · <recovery hint>]` (`attention:` added 2026-11-01, S7.1: why a turn exits 10, in the slot of `error:`, one line of at most 200 B, cause first; never on plain review findings). `round N/M` appears on threaded verbs (`ask` and a fresh `task` print `1/M`; `reply` and `task --thread` print the incremented round), never on `review`; `edited N` only on `task` (since S7.1, 2026-11-01: event-reported edits unioned with a before/after Git snapshot, core/snapshot.mjs); `unreviewed N` and `batch i/n` only on reviews and `--next-input` replies. Cost, failed-command count and provider counters go to `--json` (`provider`, `job`, `thread`, `session`, `model`, `modelVerified`, `effort`, `requestedEffort`, `tier`, `round`, `rounds`, `verdict`, `findings`, `coverage`, `batch`, `edited`, `failedCommands`, `costUsd`, `exit`, `answerFile`, and `attention`, a string or null, since S7.1).
 
@@ -134,7 +134,7 @@ Exit 0 done, 10 needs attention (review findings, pending or unreviewed coverage
 
 ### A3.5 Skill policy
 
-When the user did not name a model: `ask`/`reply`/`review` only, `--tier consult` passed explicitly, ask once before higher effort (not for Gemini), never `task` and never `cancel --confirm-ended`. When the user named a model or family: tier by complexity. Discussion protocol: F1/F2 findings tagged BLOCKER/MAJOR/MINOR with file:line; replies carry only `AGREE`, `CHANGE: …`, `REJECT: …` and new facts; 9-reply budget per thread in the footer (`COUNCIL_CODEX_ROUNDS` or `--rounds` change it); unresolved REJECT is reported as disagreement. Codex adjudicates every finding as accepted, rejected or needs-user-waiver. Blocking rule: keep collecting a yielded shell with the longest wait allowed; `wait <job>` only after losing it; never resubmit. Fan-out recipe per A6.
+When the user did not name a model: `ask`/`reply`/`review` only, `--tier consult` passed explicitly, ask once before higher effort, never `task` and never `cancel --confirm-ended`. When the user named a model or family: tier by complexity. Discussion protocol: F1/F2 findings tagged BLOCKER/MAJOR/MINOR with file:line; replies carry only `AGREE`, `CHANGE: …`, `REJECT: …` and new facts; 9-reply budget per thread in the footer (`COUNCIL_CODEX_ROUNDS` or `--rounds` change it); unresolved REJECT is reported as disagreement. Codex adjudicates every finding as accepted, rejected or needs-user-waiver. Blocking rule: keep collecting a yielded shell with the longest wait allowed; `wait <job>` only after losing it; never resubmit. Fan-out recipe per A6.
 
 ## A4. Repository layout
 

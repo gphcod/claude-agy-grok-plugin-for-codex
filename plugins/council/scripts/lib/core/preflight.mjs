@@ -159,7 +159,8 @@ export async function runPreflight({ home, provider, launcher, descriptors, env 
     results.push(record);
   }
   const value = { key, provider, executable: launcher.path, checkedAt: new Date().toISOString(), results };
-  if (!cached || refresh || results.some((r) => !r.cached)) {
+  // Cheap sandbox checks still run every call; successful rechecks do not require rewriting an unchanged probe cache.
+  if (!cached || refresh || results.some((r) => !r.cached && ["exec", "network"].includes(r.kind))) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     writeFileAtomic(file, `${JSON.stringify(value, null, 2)}\n`);
   }

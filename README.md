@@ -2,12 +2,12 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It replaces three single-provider Codex plugins (claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0, gemini-plugin-for-codex 0.1.2) and is the Codex-hosted twin of [Council for Claude Code](https://github.com/gphcod/codex-agy-grok-plugin-for-claude).
 
-Status: `1.0.0`. macOS qualification is recorded in `docs/qualification/macos-check.md`; Windows 11 qualification, marketplace installation, and the Gemini 4 Argon, Claude and Grok review inside Codex are recorded in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`.
+Status: `1.1.0`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The final 1.1.0 payload is not yet qualified on macOS.
 
 ## Install
 
 ```bash
-codex plugin marketplace add gphcod/claude-agy-grok-plugin-for-codex --ref v1.0.0
+codex plugin marketplace add gphcod/claude-agy-grok-plugin-for-codex --ref v1.1.0
 codex plugin add council@council-for-codex
 ```
 
@@ -17,7 +17,7 @@ A Git marketplace follows its `ref` in `~/.codex/config.toml` and refreshes in t
 [marketplaces.council-for-codex]
 source_type = "git"
 source = "https://github.com/gphcod/claude-agy-grok-plugin-for-codex.git"
-ref = "v1.0.0"
+ref = "v1.1.0"
 
 [plugins."council@council-for-codex"]
 enabled = true
@@ -99,14 +99,14 @@ New threads default to `consult`: Claude Opus 5.5/high, Grok 4.7/high and Gemini
 
 The skill (`plugins/council/skills/council/SKILL.md`, the only model-visible file, under 3,000 B) tells Codex:
 
-- When the user named no model: `ask`, `reply` and `review` only, with `--tier consult`; ask once before a higher effort (not for Gemini); never `task`, never `cancel --confirm-ended`. When the user named a model or family: choose the tier by complexity.
+- When the user named no model: `ask`, `reply` and `review` only, with `--tier consult`; ask once before a higher effort; never `task`, never `cancel --confirm-ended`. When the user named a model or family: choose the tier by complexity.
 - A `task` only when the user authorizes edits, at its default tier `exec`; bare `wait` lists this session's jobs; on exit 10 read the footer's `attention:`.
 - Discussion: findings numbered F1, F2, tagged BLOCKER, MAJOR or MINOR with `file:line`; replies carry only `AGREE`, `CHANGE: …`, `REJECT: …` and new facts; stop when nothing changes or at the round budget; an unresolved REJECT is reported as disagreement. Codex rules on each finding: accepted, rejected or needs-user-waiver.
 - Fan-out: one `ask` per provider, issued as parallel shell calls in one turn, each with its own `--request-id` and the same brief; follow-ups use `reply <job>`, never `--last`. Codex CLI 0.163 runs the shell calls of one turn in parallel (S1.4 probe, `docs/spike/codex-host.md`).
 
 ## Output, exit codes, blocking
 
-Start line on stderr: `[council] provider=<p> job=<id> thread=<native id|?>[ target=<review target>]`. The answer (a 24 KiB preview; `full: <file>` names the whole answer) is followed by one footer line:
+Start line on stderr: `[council] provider=<p> job=<id>[ target=<review target>]`. Since 1.1.0 the durable recovery job is announced immediately after spawn, including before Gemini discovers its native conversation id. Native ids remain in saved state, `--json` and the `wait` list. The answer (a 24 KiB preview; `full: <file>` names the whole answer) is followed by one footer line:
 
 ```
 council <provider> <ok|needs attention|failed|cancelled> · job <16 chars> · <model>/<effort>[<=requested] · <duration>[ · round N/M][ · edited N][ · unreviewed N][ · batch i/n][ · model unverified][ · full: <file>][ · error: <msg> | · attention: <reason>][ · <recovery hint>]
@@ -183,6 +183,8 @@ Windows launches never go through `cmd.exe`; process identity and cleanup use th
 
 ## Trade-offs
 
+- **Measured efficiency.** `npm run benchmark -- --baseline <v1.0.0-checkout> --candidate <checkout> --samples 10 --history 100 --output <json>` runs matched offline ask/reply/review/discussion workflows for all three providers. It reports framing, provider-input text bytes, first recovery-handle timing, median/p95 wall time, child/process-query counts and fsyncs. Both arms use the baseline's exact fake CLIs and unchanged default model/effort. Byte counts are not tokenizer counts; native live `usage` and `costUsd` are available in `--json`. See the Windows 1.1.0 qualification and measurement records.
+- **Fresh process preflight.** Every provider now checks process-table access before starting billable work, including Claude. This can add preflight time; the post-exit ownership scan still runs. Successful warm sandbox rechecks do not rewrite an unchanged probe cache.
 - **Gemini read-only turns can search the web.** agy's `search_web(*)` deny rule did not block the search (two probes, S1.2), so council cannot switch it off; `--web` is not offered for Gemini and `setup` prints this line.
 - **Gemini tasks without `--allow-command` run any command** when the global agy `toolPermission` is `always-proceed`; `setup` warns in that case.
 - **A hard-killed companion on Windows** takes its provider child with it, unlike POSIX; `cancel` still recovers the job.

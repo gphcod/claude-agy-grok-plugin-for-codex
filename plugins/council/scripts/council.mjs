@@ -7,247 +7,23 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { pathToFileURL, fileURLToPath } from "node:url";
-import { UsageError, USAGE, TURN_VERBS, parseArgv, positiveInt, seconds } from "./lib/core/args.mjs";
+import { fileURLToPath } from "node:url";
+import { UsageError, USAGE, parseArgv, seconds } from "./lib/core/args.mjs";
 import { readText } from "./lib/core/stdin.mjs";
-import { canonical, readJson } from "./lib/core/fs.mjs";
-import { BINARIES, PROVIDERS, ROUNDS_ENV, hostSession, guardedEnv } from "./lib/core/host.mjs";
-import { StateError, assertStateOutsideWorkspace, candidates, claimHeld, cleanupNeeded, findJob, homeDir, jobView, lastEvent, latestOnThread, listJobs, loadJob,
-  loadThread, lookupRequest, onThread, providersOf, releaseRequest, requestFingerprint, requestJobId, requestKey, resultRecord, stateOf, threadProviders,
-  claimRequest, bindRequest } from "./lib/core/jobs.mjs";
-import { priorFindingsNote } from "./lib/core/findings.mjs";
+import { canonical } from "./lib/core/fs.mjs";
+import { PROVIDERS, hostSession } from "./lib/core/host.mjs";
+import { StateError, assertStateOutsideWorkspace, candidates, claimHeld, cleanupNeeded, findJob, homeDir, jobView, lastEvent, loadJob, lookupRequest, releaseRequest, requestFingerprint, requestJobId, requestKey, resultRecord, stateOf, claimRequest, bindRequest } from "./lib/core/jobs.mjs";
 import { depthGuard, executionController, companionState, processSnapshot } from "./lib/core/execution.mjs";
 import { runManagedTurn, cancelManaged } from "./lib/core/lifecycle.mjs";
 import { elapsed, elapsedOf, readAnswer, renderResult, resultJson, startLine } from "./lib/core/output.mjs";
-import { PreflightBlocked, runPreflight, runDescriptor, stateRootDescriptor, getPolicy, setPolicy } from "./lib/core/preflight.mjs";
-import { LauncherError, resolveLauncher } from "./lib/core/launcher.mjs";
-import { assertAdapter } from "./lib/core/types.mjs";
-import { loadCatalog, loadStatic, resolveEffort, resolveModel, saveRefreshedCatalog } from "./lib/core/catalog.mjs";
-import { loadTiers, resolveTier } from "./lib/core/tiers.mjs";
-import { buildBatchReviewPrompt, collectReview, continueReviewTurn, finalizeReviewTurn, loadTemplate, startReviewTurn } from "./lib/core/review.mjs";
+import { PreflightBlocked, runPreflight, runDescriptor, stateRootDescriptor } from "./lib/core/preflight.mjs";
 
-export const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SCHEMA_PATH = path.join(PLUGIN_ROOT, "schemas", "review-output.schema.json");
-/** The reply budget a thread uses until `--rounds` sets one; COUNCIL_CODEX_ROUNDS changes it (A3.5). */
-export const DEFAULT_ROUNDS = 9;
-/** Seconds without an event, and in total, before a turn is stopped (A3.3 timing defaults, from GROKX). */
-export const INACTIVITY_S = 1200;
-export const DEADLINE_S = 14400;
-export const WAIT_S = 90;
-export const CANCEL_S = 30;
-/** Provider-scoped and verb-scoped flags (A3.3): anything else with them exits 2. */
-const VERB_FLAGS = { "next-input": ["reply"], base: ["review"], commit: ["review"], uncommitted: ["review"], adversarial: ["review"], refresh: ["models"], live: ["setup"],
-  set: ["setup"], "confirm-ended": ["cancel"], last: ["reply"], thread: ["reply", "task"], timeout: ["wait", "cancel"], "allow-command": ["task"] };
-const PROVIDER_FLAGS = { "max-turns": ["claude"], "max-budget-usd": ["claude"], "allow-command": ["gemini"] };
-const TEST_ADAPTER = "null";
-/** Test providers, loaded only under COUNCIL_TEST_NULL_ADAPTER=1: the null adapter and a second copy under another id. */
-const TEST_ADAPTERS = { null: "null-adapter.mjs", null2: "null2-adapter.mjs" };
-
+import { PLUGIN_ROOT, DEFAULT_ROUNDS, INACTIVITY_S, DEADLINE_S, WAIT_S, CANCEL_S } from "./lib/cli/config.mjs";
+import { loadAdapter, requireAdapter, checkFlags, latestOf, resolveThread, planTurn } from "./lib/cli/plan.mjs";
+import { createCatalogCommands } from "./lib/cli/catalog.mjs";
+export { PLUGIN_ROOT, DEFAULT_ROUNDS, INACTIVITY_S, DEADLINE_S, WAIT_S, CANCEL_S, loadAdapter };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const writer = (stream) => (text) => stream.write(text);
-
-/** The provider module, or null when this build has none (S2.6: `provider <p> not available in this build`). */
-export async function loadAdapter(provider, env = process.env) {
-  if (Object.hasOwn(TEST_ADAPTERS, provider)) {
-    if (env.COUNCIL_TEST_NULL_ADAPTER !== "1") return null;
-    const file = path.join(PLUGIN_ROOT, "..", "..", "tests", "fixtures", TEST_ADAPTERS[provider]);
-    return fs.existsSync(file) ? assertAdapter((await import(pathToFileURL(file).href)).default, provider) : null;
-  }
-  if (!PROVIDERS.includes(provider)) return null;
-  // Test seam: under COUNCIL_TEST_NULL_ADAPTER=1, COUNCIL_TEST_ABSENT_PROVIDERS (comma-separated) hides shipped provider
-  // modules, so a test that needs an absent provider never resolves and starts the real CLI on PATH.
-  if (env.COUNCIL_TEST_NULL_ADAPTER === "1" && String(env.COUNCIL_TEST_ABSENT_PROVIDERS ?? "").split(",").includes(provider)) return null;
-  const file = path.join(PLUGIN_ROOT, "scripts", "lib", "providers", `${provider}.mjs`);
-  return fs.existsSync(file) ? assertAdapter((await import(pathToFileURL(file).href)).default, provider) : null;
-}
-const knownProvider = (p, env) => PROVIDERS.includes(p) || (Object.hasOwn(TEST_ADAPTERS, p) && env.COUNCIL_TEST_NULL_ADAPTER === "1");
-/** The newest of an implicit selection (`reply --last`, bare `cancel`); an exact timestamp tie is ambiguous (exit 2). */
-function latestOf(list, what) {
-  const at = (j) => String(j.admittedAt ?? j.spawnedAt);
-  if (list.length > 1 && at(list[0]) === at(list[1])) throw new UsageError(`${what}: jobs ${list[0].id} and ${list[1].id} started at the same moment; name one`);
-  return list[0] ?? null;
-}
-async function requireAdapter(provider, env) {
-  if (!knownProvider(provider, env)) throw new UsageError(`unknown provider ${JSON.stringify(provider)}; use ${PROVIDERS.join(", ")}`);
-  const adapter = await loadAdapter(provider, env);
-  if (!adapter) throw new UsageError(`provider ${provider} not available in this build`);
-  return adapter;
-}
-/** The catalog and tiers of an adapter: the static files for the three providers, the adapter's own for a test adapter. */
-function catalogFor(adapter, home) {
-  return PROVIDERS.includes(adapter.id) ? loadCatalog(home, adapter.id) : loadCatalog(home, adapter.id, { [adapter.id]: adapter.catalog });
-}
-const tiersFor = (adapter) => (PROVIDERS.includes(adapter.id) ? loadTiers() : { [adapter.id]: adapter.tiers });
-
-/** Verb and provider scoping of flags (A3.3), checked before anything is claimed or spawned. */
-function checkFlags(verb, o, provider = null) {
-  for (const [flag, verbs] of Object.entries(VERB_FLAGS)) if (o[flag] !== undefined && !verbs.includes(verb)) throw new UsageError(`--${flag} is not accepted by ${verb}`);
-  if (provider) for (const [flag, providers] of Object.entries(PROVIDER_FLAGS)) {
-    if (o[flag] !== undefined && !providers.includes(provider)) throw new UsageError(`--${flag} applies only to ${providers.join(", ")}`);
-  }
-  if (o["max-turns"] !== undefined) { const n = positiveInt(o["max-turns"], "--max-turns"); if (n > 100) throw new UsageError("--max-turns accepts 1 to 100"); }
-  if (o["max-budget-usd"] !== undefined && !(Number(o["max-budget-usd"]) > 0)) throw new UsageError("--max-budget-usd needs a positive amount");
-  if (o.rounds !== undefined) positiveInt(o.rounds, "--rounds");
-  if (o.web && provider === "gemini") throw new UsageError("--web is not offered for gemini: its read-only turns cannot switch web search off (S1.2)");
-  if (o.last && o.thread) throw new UsageError("give --last or a thread, not both");
-}
-
-/**
- * The thread a reply or `task --thread` continues, with its provider (A7.3): a job id (any session), a native thread id
- * known to council (namespaced by provider; one matching several providers needs --to), or --last (this cwd and session).
- */
-function resolveThread(ctx, verb, o) {
-  let job = null, provider = o.to ?? null;
-  if (o.last) {
-    job = latestOf(candidates(ctx.home, ctx).filter((j) => j.admitted !== false && (j.threadId || j.unconfirmed)), "--last is ambiguous");
-    if (!job) throw new UsageError(`no earlier confirmed thread in this ${ctx.session ? "Codex thread" : "workspace"}; name a job or thread`);
-  } else {
-    const ref = o.thread;
-    if (!ref) throw new UsageError(`${verb} needs a job or thread id${verb === "reply" ? ", or --last" : ""}`);
-    job = loadJob(ctx.home, ref);
-    if (!job) {
-      const providers = [...new Set([...providersOf(ctx.home, ref), ...threadProviders(ctx.home, ref)])];
-      if (providers.length > 1 && !provider) throw new UsageError(`thread ${ref} exists for ${providers.join(" and ")}; add --to <provider>`);
-      provider ??= providers[0] ?? null;
-      if (!provider || !providers.includes(provider)) throw new UsageError(`no job or thread ${ref}${provider ? ` for ${provider}` : ""} known to council`);
-      job = latestOnThread(ctx.home, provider, ref);
-      if (!job) {
-        const record = loadThread(ctx.home, provider, ref);
-        return resumable({ provider, threadId: ref, prev: null, record });
-      }
-      if (!onThread(job, provider, ref)) throw new UsageError(`no job or thread ${ref} known to council`);
-      return resumable({ provider, threadId: job.threadId && job.threadId.toLowerCase() === ref.toLowerCase() ? job.threadId : ref, prev: job, record: loadThread(ctx.home, provider, ref) });
-    }
-  }
-  if (provider && provider !== job.provider) throw new UsageError(`job ${job.id} belongs to ${job.provider}; --to ${provider} conflicts with it`);
-  if (job.admitted === false) throw new UsageError(`job ${job.id} was not admitted; use the original thread`);
-  if (job.unconfirmed) throw new UsageError(`job ${job.id}: ${job.unconfirmed}`);
-  let threadId = job.threadId;
-  if (!threadId) {
-    if (!job.done && !job.stopped && job.requestedThreadId) threadId = job.requestedThreadId; // still in flight: the claim reports it busy
-    else throw new UsageError(job.requestedThreadId ? `job ${job.id} never confirmed thread ${job.requestedThreadId}; to try it anyway, pass it instead of the job id` : `job ${job.id} has no thread`);
-  }
-  const prev = latestOnThread(ctx.home, job.provider, threadId) ?? job;
-  return resumable({ provider: job.provider, threadId, prev, record: loadThread(ctx.home, job.provider, threadId) });
-}
-/** A thread whose last turn finished unconfirmed is not resumable (its record says so, or its latest job does): exit 2 with the hint. */
-function resumable(found) {
-  const why = found.prev?.unconfirmed ?? (found.record?.resumable === false ? found.record.unconfirmed ?? "not resumable" : null);
-  if (why) throw new UsageError(`${found.provider} thread ${found.threadId}: ${why}`);
-  return found;
-}
-
-/** Tier, model and effort (A3.3): explicit flags win; a reply or task --thread inherits unless --tier, --model or --effort says otherwise. */
-function resolveSettings(adapter, home, verb, o, prev) {
-  const catalog = catalogFor(adapter, home);
-  const inherit = prev && !o.tier;
-  const tierName = o.tier ?? (inherit && prev.tier ? prev.tier : verb === "task" ? "exec" : "consult");
-  const tier = resolveTier(adapter.id, tierName, { model: o.model, effort: o.effort }, tiersFor(adapter));
-  const modelInput = o.model ?? (inherit ? prev.modelInput ?? prev.model : tier.model);
-  const effortInput = o.effort ?? (inherit ? prev.requestedEffort ?? prev.effort : tier.effort);
-  const model = resolveModel(adapter.id, modelInput, catalog);
-  const effort = resolveEffort(adapter.id, model.id, effortInput, catalog, { explicit: o.effort !== undefined });
-  return { tier: tierName, modelInput, model: model.id ?? "default", modelId: model.id, modelVerified: model.verified, effort: effort.effort, requestedEffort: effort.requested };
-}
-
-/** The review state a --next-input or discussion reply inherits from the thread's latest job (GROKX `makeTurn`). */
-function inheritedReviewState(prev) {
-  if (!prev) return null;
-  const state = prev.done && [0, 10].includes(prev.code) ? prev.reviewState : prev.reviewStateBase ?? prev.reviewState;
-  return state ? { ...state, active: [] } : null;
-}
-
-/** Builds the initial turn and the `prepare(jobId)` that re-reads history after admission (A7.4: prepare after claim). */
-function planTurn(ctx, adapter, verb, o, text, memo) {
-  const resumed = verb === "reply" || (verb === "task" && (o.thread || o.last));
-  const thread = resumed ? resolveThread(ctx, verb, o) : null;
-  if (thread && thread.provider !== adapter.id) throw new UsageError(`thread belongs to ${thread.provider}`);
-  const launcher = adapter.resolveLauncher(ctx.env);
-  if (!launcher) throw new LauncherError(`${adapter.id} not found: install its CLI or set ${adapter.binEnv}`);
-  const prepare = (jobId) => {
-    const prev = thread ? latestOnThread(ctx.home, adapter.id, thread.threadId, jobId) ?? thread.prev : null;
-    // Rechecked under the claim: another turn may have made the thread non-resumable since it was resolved.
-    if (thread && jobId) resumable({ provider: adapter.id, threadId: thread.threadId, prev, record: loadThread(ctx.home, adapter.id, thread.threadId) });
-    // The thread record stands in for pruned job history (A7.6): round, budget, effort request and web persist there.
-    const base = prev ?? thread?.record ?? null;
-    const cwd = base?.cwd ?? ctx.cwd;
-    if (!fs.existsSync(cwd)) throw new UsageError(`the thread's recorded workspace ${cwd} no longer exists; it cannot move to another directory`);
-    const settings = resolveSettings(adapter, ctx.home, verb, o, base);
-    const roundsSet = o.rounds !== undefined || base?.roundsSet === true;
-    const rounds = o.rounds !== undefined ? positiveInt(o.rounds, "--rounds") : roundsSet ? base.rounds
-      : ctx.env[ROUNDS_ENV] ? positiveInt(ctx.env[ROUNDS_ENV], ROUNDS_ENV) : DEFAULT_ROUNDS;
-    const nextInput = Boolean(o["next-input"]);
-    const round = verb === "reply" ? (base?.round ?? 0) + (nextInput ? 0 : 1) : verb === "task" && thread ? (base?.round ?? 0) + 1 : 1;
-    const inherited = inheritedReviewState(prev);
-    // A plain reply on a review thread is a discussion turn: structured, reconciled into the ledger, no delivery coverage (A5.2).
-    const discussion = verb === "reply" && !nextInput && Boolean(inherited);
-    const structuredReview = verb === "review" || nextInput || discussion;
-    const policy = getPolicy(ctx.home);
-    let prompt = text, instructions = null, reviewState = inherited, reviewFiles = null, target = prev?.target ?? null;
-    let unreviewed = prev?.unreviewed ?? [], batch = null, schemaCarrier = null;
-    if (verb === "review") {
-      const review = memo.review ??= collectReview(cwd, { base: o.base, commit: o.commit, uncommitted: o.uncommitted });
-      const plan = adapter.reviewPlan ? adapter.reviewPlan(review, { adversarial: Boolean(o.adversarial) }) : { schemaCarrier: "path" };
-      schemaCarrier = plan.schemaCarrier;
-      const inputRoot = jobId ? path.join(ctx.home, "jobs", jobId, "review-input") : "";
-      const first = startReviewTurn(review, jobId ?? "pending", inputRoot);
-      reviewState = { ...first.state, adversarial: Boolean(o.adversarial), focus: text, workspaceRoot: review.root };
-      batch = first.batch;
-      target = review.label;
-      unreviewed = review.unsupported;
-      reviewFiles = { snapshot: review.snapshot, diff: review.fullDiff };
-      prompt = buildBatchReviewPrompt({ adversarial: Boolean(o.adversarial), focus: text, ledger: [], batchText: first.text, label: review.label, unsupported: review.unsupported,
-        state: reviewState, embedSchema: schemaCarrier === "embed" ? fs.readFileSync(SCHEMA_PATH, "utf8") : null });
-    } else if (nextInput) {
-      if (!reviewState) throw new UsageError("--next-input requires a thread started by review");
-      const next = continueReviewTurn(reviewState, Boolean(jobId));
-      reviewState = { ...next.state, adversarial: reviewState.adversarial, focus: reviewState.focus };
-      batch = next.batch;
-      const plan = adapter.reviewPlan ? adapter.reviewPlan({ snapshot: null }, { adversarial: Boolean(reviewState.adversarial) }) : { schemaCarrier: "path" };
-      schemaCarrier = plan.schemaCarrier;
-      prompt = buildBatchReviewPrompt({ adversarial: Boolean(reviewState.adversarial), focus: reviewState.focus ?? "", ledger: reviewState.findingsLedger ?? [], batchText: next.text,
-        label: target ?? "", unsupported: unreviewed.filter((u) => !u.endsWith("(pending saved input batch)")), state: next.state,
-        embedSchema: schemaCarrier === "embed" ? fs.readFileSync(SCHEMA_PATH, "utf8") : null });
-    } else if (discussion) {
-      const plan = adapter.reviewPlan ? adapter.reviewPlan({ snapshot: null }, { adversarial: Boolean(reviewState.adversarial) }) : { schemaCarrier: "path" };
-      schemaCarrier = plan.schemaCarrier;
-      prompt = [text.trim(), "", "This follow-up on the review above delivers no new review input. Answer in the review schema: to update an earlier finding, repeat its id with decision AGREE, CHANGE or REJECT; add a finding only if this discussion reveals one.",
-        priorFindingsNote(reviewState.findingsLedger ?? []), schemaCarrier === "embed" ? `Answer with one JSON object and nothing else, matching this draft-07 schema exactly:\n${fs.readFileSync(SCHEMA_PATH, "utf8")}` : ""].filter(Boolean).join("\n");
-    } else {
-      instructions = loadTemplate(verb === "task" ? "task" : "advice");
-    }
-    const resume = Boolean(thread);
-    const request = {
-      verb, nextInput, text, prompt, instructions, contractPath: path.join(PLUGIN_ROOT, "contract.md"), model: settings.modelId, effort: settings.effort, resume,
-      threadId: thread?.threadId ?? null, cwd, env: ctx.env, reviewInputRoot: structuredReview ? reviewState?.inputRoot || null : null,
-      reviewRoot: structuredReview ? reviewState?.workspaceRoot || null : null, schemaPath: structuredReview ? SCHEMA_PATH : null, structured: structuredReview, readOnly: verb !== "task",
-      web: Boolean(o.web ?? base?.web), allowCommands: o["allow-command"] ?? [], maxTurns: o["max-turns"] !== undefined ? Number(o["max-turns"]) : null,
-      maxBudgetUsd: o["max-budget-usd"] !== undefined ? Number(o["max-budget-usd"]) : null, policy, agent: prev?.agent ?? thread?.record?.agent ?? null, launcher,
-      deadlineMs: seconds(o.deadline, DEADLINE_S, "deadline") * 1000, // agy's --print-timeout is set from it (A3.3)
-    };
-    // The adapter's own refusals (A5 checkRequest): exit 2 before any job record and before the request id is tombstoned.
-    const refusal = adapter.checkRequest ? adapter.checkRequest(request, ctx.env, ctx.platform ?? process.platform) : null;
-    if (refusal) throw new UsageError(refusal);
-    return {
-      verb, cwd, ...settings, thread: thread?.threadId ?? null, confirmed: resume, round, rounds, roundsSet, prompt, launcher, web: request.web,
-      target, unreviewed, reviewState, reviewFiles, batch, structuredReview, nextInput, policyVersion: policy.version,
-      build: (jobDir) => {
-        const built = adapter.buildTurn({ ...request, jobDir });
-        return { ...built, env: guardedEnv(built.env ?? ctx.env) };
-      },
-      finalizeReview: ({ seen, job, answerText = null }) => {
-        let structured = seen?.structured ?? null;
-        if (adapter.finalizeReview) {
-          const mapped = adapter.finalizeReview({ answerText, structured, unreviewed: job.unreviewed ?? [], batch: job.batch, ledger: job.reviewState?.findingsLedger ?? [] });
-          if (mapped && Object.hasOwn(mapped, "structured")) structured = mapped.structured;
-          else if (mapped !== undefined) structured = mapped;
-        }
-        return finalizeReviewTurn({ state: job.reviewState, structured, success: true, resultPath: path.join(job.dir, "meta.json"), jobId: job.id });
-      },
-    };
-  };
-  return { thread, launcher, cwd: thread?.prev?.cwd ?? thread?.record?.cwd ?? ctx.cwd, prepare };
-}
 
 /** Prints a finished job (a replay, `wait`); the start line is not repeated. */
 function printFinished(ctx, o, job, out) {
@@ -292,7 +68,7 @@ async function replay(ctx, o, record, fingerprint, out, deps) {
     if (Date.now() - checkedAt >= 1000) {
       checkedAt = Date.now();
       let snapshot;
-      try { snapshot = (deps.snapshot ?? processSnapshot)({ platform: deps.platform ?? process.platform }); } catch { snapshot = { state: "unknown", rows: [] }; }
+      try { snapshot = (deps.snapshot ?? processSnapshot)({ platform: deps.platform ?? process.platform, pid: current.companionPid }); } catch { snapshot = { state: "unknown", rows: [] }; }
       if (companionState(current, snapshot) === "gone" && !(current.job && loadJob(ctx.home, current.job))) {
         await requireWritableRoot(ctx); // the release removes the record: a read-only root is the state-root line, not EACCES
         releaseRequest(ctx.home, current.key, current.job);
@@ -309,10 +85,11 @@ async function replay(ctx, o, record, fingerprint, out, deps) {
 }
 
 /** The provider of a turn (--to, or the job or thread record on reply and task --thread), with its flag scoping (A3.3). */
-function resolveProvider(ctx, verb, o) {
+function resolveProvider(ctx, verb, o, memo = {}) {
   let provider = o.to;
   if (verb === "reply" || (verb === "task" && (o.thread || o.last))) {
     const thread = resolveThread(ctx, verb, o);
+    memo.resolvedThread = thread;
     if (o.to && o.to !== thread.provider) throw new UsageError(`the thread belongs to ${thread.provider}; --to ${o.to} conflicts with it`);
     provider = thread.provider;
   } else if (!provider) throw new UsageError(`${verb} needs --to ${PROVIDERS.join("|")}`);
@@ -369,11 +146,11 @@ async function runTurnVerb(ctx, parsed, text, io, deps) {
   let result;
   try {
     // (4) Provider: --to, or the job or thread record on reply and task --thread.
-    const provider = resolveProvider(ctx, verb, o);
+    const memo = {};
+    const provider = resolveProvider(ctx, verb, o, memo);
     const adapter = await requireAdapter(provider, ctx.env);
     if (key) { jobId = requestJobId(provider, ctx.session, ctx.cwd, o["request-id"]); bindRequest(ctx.home, key, { provider, jobId }); }
     // (5) Preflight through the cached runner: a blocked resource exits 1 with zero submissions.
-    const memo = {};
     const plan = planTurn(ctx, adapter, verb, o, text, memo);
     const descriptors = adapter.preflight ? adapter.preflight({ stateRoot: ctx.home, env: ctx.env, platform: deps.platform ?? process.platform, verb, cwd: plan.cwd }) : [];
     await runPreflight({ home: ctx.home, provider, launcher: plan.launcher, descriptors, env: ctx.env, platform: deps.platform ?? process.platform });
@@ -434,126 +211,7 @@ async function cancelVerb(ctx, { options: o }, io, deps) {
   return result.code;
 }
 
-const providerList = (o, env) => (o.to ? [o.to] : [...PROVIDERS, ...(env.COUNCIL_TEST_NULL_ADAPTER === "1" ? [TEST_ADAPTER] : [])]);
-
-/** models [--to p] [--refresh]: the catalog; --refresh re-runs the provider's listing (Claude has none). */
-async function modelsVerb(ctx, { options: o }, io) {
-  checkFlags("models", o);
-  const out = writer(io.stdout), report = [];
-  for (const provider of providerList(o, ctx.env)) if (!knownProvider(provider, ctx.env)) throw new UsageError(`unknown provider ${JSON.stringify(provider)}`);
-  if (o.refresh) await requireWritableRoot(ctx); // the refreshed catalog is written there; probe nothing first
-  for (const provider of providerList(o, ctx.env)) {
-    if (!knownProvider(provider, ctx.env)) throw new UsageError(`unknown provider ${JSON.stringify(provider)}`);
-    const adapter = await loadAdapter(provider, ctx.env);
-    if (!adapter) {
-      const statics = loadStatic()[provider];
-      report.push({ provider, available: false, models: statics ? Object.keys(statics.models ?? statics.families ?? {}) : [], aliases: statics?.aliases ?? {} });
-      continue;
-    }
-    let refreshed = null, warning = null;
-    if (o.refresh && adapter.catalog?.listing !== false) {
-      try {
-        const launcher = adapter.resolveLauncher(ctx.env);
-        if (!launcher) throw new LauncherError(`${provider} CLI is not installed; keeping the saved or static catalog`);
-        const probe = await adapter.probe(launcher, guardedEnv(ctx.env)); // a probe is a provider child too (A5.1)
-        if (probe?.models) refreshed = saveRefreshedCatalog(ctx.home, provider, probe.models).updatedAt;
-        else warning = `${provider} returned no model listing; keeping the saved or static catalog`;
-      } catch (error) { warning = error.message; }
-    }
-    const catalog = catalogFor(adapter, ctx.home);
-    report.push({ provider, available: true, refreshedAt: catalog.refreshedAt ?? refreshed, models: Object.entries(catalog.models).map(([id, efforts]) => ({ id, efforts })), aliases: catalog.aliases,
-      ...(warning ? { warning } : {}) });
-  }
-  if (o.json) out(`${JSON.stringify(report)}\n`);
-  else for (const r of report) {
-    if (!r.available) { out(`${r.provider}: provider not available in this build · static catalog: ${r.models.join(", ") || "none"}\n`); continue; }
-    out(`${r.provider}${r.refreshedAt ? ` (refreshed ${r.refreshedAt})` : " (static catalog)"}\n${r.models.map((m) => `  ${m.id}: ${m.efforts.join(", ") || "-"}`).join("\n")}\n`);
-    if (Object.keys(r.aliases).length) out(`  aliases: ${Object.entries(r.aliases).map(([a, id]) => `${a}=${id}`).join(", ")}\n`);
-    if (r.warning) out(`  warning: ${r.warning}\n`);
-  }
-  return 0;
-}
-
-/** setup [--to p] [--live] [--set policy.json]: binary, login, version, catalog age, tiers, launcher kind, preflight, trade-offs. */
-async function setupVerb(ctx, parsed, io, deps) {
-  const { options: o } = parsed;
-  checkFlags("setup", o);
-  const out = writer(io.stdout), report = [];
-  if (o.set !== undefined) {
-    const supplied = readJson(path.resolve(ctx.cwd, o.set)) ?? (() => { throw new UsageError(`cannot read policy file ${o.set}`); })();
-    await requireWritableRoot(ctx); // policy.json lives there
-    const policy = setPolicy(ctx.home, supplied);
-    out(o.json ? "" : `policy ${policy.version} stored: read roots ${policy.readRoots.length}, web ${policy.web}, MCP ${policy.allowMcp}\n`);
-  }
-  for (const provider of providerList(o, ctx.env)) {
-    if (!knownProvider(provider, ctx.env)) throw new UsageError(`unknown provider ${JSON.stringify(provider)}`);
-    const adapter = await loadAdapter(provider, ctx.env);
-    if (!adapter) {
-      const { name, env: binEnv } = BINARIES[provider] ?? { name: provider, env: null };
-      let binary = null;
-      try { binary = resolveLauncher({ name, binEnv, env: ctx.env, nativeOnly: provider === "claude" })?.path ?? null; } catch { binary = null; }
-      report.push({ provider, available: false, binary, name });
-      continue;
-    }
-    const entry = { provider, available: true, binary: null, kind: null, version: null, loggedIn: null, tiers: tiersFor(adapter)[provider], preflight: null, warnings: [] };
-    try {
-      const launcher = adapter.resolveLauncher(ctx.env);
-      if (!launcher) throw new LauncherError(`${provider} not found: install its CLI or set ${adapter.binEnv}`);
-      Object.assign(entry, { binary: launcher.path, kind: launcher.kind });
-      const probe = await adapter.probe(launcher, guardedEnv(ctx.env)); // a probe is a provider child too (A5.1)
-      Object.assign(entry, { version: probe?.version ?? null, loggedIn: probe?.loggedIn ?? null });
-      entry.warnings.push(...(Array.isArray(probe?.warnings) ? probe.warnings : []));
-      const pre = await runPreflight({ home: ctx.home, provider, launcher, descriptors: adapter.preflight({ stateRoot: ctx.home, env: ctx.env, platform: deps.platform ?? process.platform, verb: "setup", cwd: ctx.cwd }),
-        env: ctx.env, platform: deps.platform ?? process.platform });
-      entry.preflight = pre.cached ? "ok (cached)" : "ok";
-    } catch (error) {
-      entry.preflight = error instanceof PreflightBlocked ? `preflight_blocked: ${error.detail}` : null;
-      entry.warnings.push(error.message);
-      if (error instanceof PreflightBlocked) entry.action = error.action;
-    }
-    if (provider === "gemini") entry.warnings.push("Gemini read-only turns can search the web; --web is not offered for Gemini");
-    report.push(entry);
-  }
-  if (o.json) { if (!o.live) out(`${JSON.stringify(report)}\n`); }
-  else for (const r of report) {
-    if (!r.available) { out(`${r.provider}: ${r.name} ${r.binary ?? "not found"} · provider not available in this build\n`); continue; }
-    out(`${r.provider}: ${r.binary ?? "not found"}${r.kind ? ` (${r.kind})` : ""}${r.version ? ` · ${r.version}` : ""}${r.loggedIn === null ? "" : r.loggedIn ? " · logged in" : " · not logged in"}`
-      + `${r.tiers ? ` · tiers ${Object.entries(r.tiers).map(([t, v]) => `${t}=${v.model}/${v.effort}`).join(" ")}` : ""} · preflight ${r.preflight ?? "not run"}\n`);
-    for (const w of r.warnings) out(`  warning: ${w}\n`);
-    if (r.action) out(`  action: ${r.action}\n`);
-  }
-  if (o.live) {
-    let code = 0, attempted = 0;
-    const combineExit = (a, b) => [a, b].find((value) => value !== 0 && value !== 10) ?? (a || b);
-    for (const r of report.filter((x) => x.available)) {
-      if (!r.binary || !r.preflight?.startsWith("ok")) {
-        r.live = { provider: r.provider, status: "skipped", exit: 1, error: "provider is not ready; see setup warnings" };
-        if (o.to) code = combineExit(code, 1);
-        continue;
-      }
-      attempted += 1;
-      const live = { verb: "ask", options: { to: r.provider, tier: "consult", ...(o.json ? { json: true } : {}) }, positionals: [], hasDashDash: true };
-      let captured = "";
-      const liveIo = o.json ? { ...io, stdout: { write: (text) => { captured += text; return true; } } } : io;
-      try {
-        code = combineExit(code, await runTurnVerb(ctx, live, "Reply with exactly PASS.", liveIo, deps));
-        if (o.json) r.live = JSON.parse(captured);
-      } catch (error) {
-        const exit = error instanceof UsageError ? 2 : 1;
-        r.live = { provider: r.provider, status: error instanceof PreflightBlocked ? "preflight_blocked" : "failed", exit, error: error.message,
-          ...(error instanceof PreflightBlocked ? { action: error.action } : {}) };
-        if (!o.json) out(`${r.provider}: live check failed: ${error.message}\n`);
-        code = combineExit(code, exit);
-      }
-    }
-    if (!attempted) code = combineExit(code, 1);
-    if (o.json) out(`${JSON.stringify(report)}\n`);
-    return code;
-  }
-  return 0;
-}
-
-const CONTROL = { wait: waitVerb, cancel: cancelVerb, models: modelsVerb, setup: setupVerb };
+const CONTROL = { wait: waitVerb, cancel: cancelVerb, ...createCatalogCommands({ runTurnVerb, requireWritableRoot }) };
 
 /**
  * Entry: returns the exit code. `io` carries stdout, stderr and stdin; `deps` are test seams for the process query

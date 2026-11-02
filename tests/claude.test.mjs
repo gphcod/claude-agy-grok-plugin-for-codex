@@ -78,19 +78,20 @@ test("probe: version and login from the two non-billable probes; no model listin
   assert.ok(!JSON.stringify(warned).includes("example.com"));
 });
 
-test("preflight descriptors: state root, Claude storage, four cold probes and the network, in the S3.1 order", () => {
+test("preflight descriptors: state root, process capability, Claude storage, four cold probes and network", () => {
   const env = { ...baseEnv, COUNCIL_CLAUDE_BIN: FAKE, HOME: "/home/u", CLAUDE_CONFIG_DIR: "" };
   const d = adapter.preflight({ stateRoot: "/state", env, platform: "linux", verb: "ask", cwd: "/w" });
-  assert.deepEqual(d.map((x) => [x.kind, x.access ?? null]), [["dir", "write"], ["dir", "write"], ["exec", null], ["exec", null], ["exec", null], ["exec", null], ["network", null]]);
+  assert.deepEqual(d.map((x) => [x.kind, x.access ?? null]), [["dir", "write"], ["process-table", null], ["dir", "write"], ["exec", null], ["exec", null], ["exec", null], ["exec", null], ["network", null]]);
   assert.equal(d[0].target, "/state");
-  assert.equal(d[1].target, path.resolve("/home/u", ".claude", "projects"));
+  assert.equal(d[1].target, "ps");
+  assert.equal(d[2].target, path.resolve("/home/u", ".claude", "projects"));
   assert.equal(claudeStorage({ CLAUDE_CONFIG_DIR: "/cfg" }), path.resolve("/cfg", "projects"));
   const exec = d.filter((x) => x.kind === "exec");
   assert.deepEqual(exec.map((x) => x.target.args.slice(1, 4)), [["--version"], ["auth", "status", "--json"], ["--help"], ["-p", "--append-system-prompt-file", sentinelOf("/state")]]);
   assert.ok(exec.every((x) => x.target.command === process.execPath && x.target.args[0] === FAKE), "probes run through the resolved launcher");
   assert.equal(exec[1].target.recordOutput, false, "the account status is never cached");
   assert.deepEqual([exec[3].target.expectStatus, exec[3].target.expectText], [1, "Append system prompt file not found"]);
-  assert.equal(d[6].target, "https://api.anthropic.com");
+  assert.equal(d.at(-1).target, "https://api.anthropic.com");
   assert.equal(adapter.preflight({ stateRoot: "/s", env: { ...env, ANTHROPIC_BASE_URL: "https://gw.example" }, platform: "linux" }).at(-1).target, "https://gw.example");
   assert.ok(d.every((x) => x.why && x.action), "every descriptor names its resource and its action line");
 });

@@ -93,7 +93,7 @@ test("--json suppresses the start line; text output prints it on stderr only", (
   assert.equal(json.stderr, "");
   assert.equal(JSON.parse(json.stdout).status, "ok");
   const text = w.call(["ask", "--to", "null", "--", "q"]);
-  assert.match(text.stderr, /^\[council\] provider=null job=[a-z0-9]{16} thread=[0-9a-f-]{36}\n$/);
+  assert.match(text.stderr, /^\[council\] provider=null job=[a-z0-9]{16}\n$/);
   assert.doesNotMatch(text.stdout, /\[council\]/);
 });
 

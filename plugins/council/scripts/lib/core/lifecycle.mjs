@@ -256,7 +256,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
         try {
           save(job); // Recovery finds the child by its recorded operands; no per-turn process query.
           if (cancelled()) stop("cancelled"); // Covers the cancellation-before/while-spawning race.
-          else if (turn.thread || built.requestedThreadId) announce();
+          else announce(); // The recovery job is durable even before a provider discovers its native thread id.
           if (built.stdin !== undefined && child.stdin) child.stdin.end(built.stdin);
         } catch (error) { persistenceFailed = true; stop(`launch storage failed: ${error.message}`); }
       });

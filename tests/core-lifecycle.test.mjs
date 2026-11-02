@@ -55,15 +55,15 @@ test("a throwing review finalizer records a finished failure and releases the th
   assert.equal(inspectClaim(w.home, "null", turn.thread).state, "absent");
 });
 
-test("prompt-file and answer-file profiles with a discovered id: the claim is taken on discovery before the id is published", async () => {
+test("a recovery job is announced at spawn before native discovery; the discovered thread is still claimed before publication", async () => {
   const w = makeWorld();
   const env = { COUNCIL_NULL_ID: "discovered", COUNCIL_NULL_INPUT: "prompt-file", COUNCIL_NULL_OUTPUT: "answer-file" };
   const seen = [];
   const turn = turnFor(w, { thread: null, env, prompt: "from a file" });
-  const result = await runTurn(w, turn, { json: false }, { announce: (job) => seen.push({ thread: job.threadId, claim: inspectClaim(w.home, "null", job.threadId).state }) });
+  const result = await runTurn(w, turn, { json: false }, { announce: (job) => seen.push({ job: job.id, thread: job.threadId, durable: Boolean(loadJob(w.home, job.id)?.pid) }) });
   assert.equal(result.job.code, 0, result.job.error);
   assert.match(result.job.threadId, /^discovered-\d+$/);
-  assert.deepEqual(seen, [{ thread: result.job.threadId, claim: "owned" }], "announced once, after the discovered id was claimed");
+  assert.deepEqual(seen, [{ job: result.job.id, thread: null, durable: true }], "the saved recovery handle is available before the first provider event");
   assert.equal(result.answer, "fake answer to: from a file");
   assert.equal(fs.readFileSync(result.job.promptFile, "utf8"), "from a file");
   assert.equal(result.job.answerFile, path.join(result.job.dir, "answer.md"));

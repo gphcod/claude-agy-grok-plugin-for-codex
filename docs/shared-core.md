@@ -26,8 +26,8 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 | `preflight.mjs` | Codex runs the companion inside its sandbox; preflight descriptors, `preflight_blocked` and the Claude policy store (`setup --set`) exist on this host only |
 | `args.mjs` | no slash commands, so no `splitLeading`; Codex-only flags (`--prompt-file`, `--confirm-ended`, `--allow-command`, `--max-turns`, `--live`, `--set`) |
 | `stdin.mjs` | the Codex call forms (heredoc, PowerShell here-string, `--prompt-file`) and the no-stdin rule for control verbs, bare review and `--next-input` |
-| `lifecycle.mjs` | the held-output lock released only by `cancel --confirm-ended` (A7.8) and the SIGTERM grace step; the twin has no `--confirm-ended` |
-| `output.mjs` | the footer token `batch i/n` for batched reviews (the twin has `unreviewed N` too, so that token is shared), the `thread locked` hint |
+| `lifecycle.mjs` | the held-output lock released only by `cancel --confirm-ended` (A7.8), the SIGTERM grace step, and 1.1.0 recovery-job announcement at spawn before native thread discovery; the twin has no `--confirm-ended` |
+| `output.mjs` | the footer token `batch i/n`, the `thread locked` hint, 1.1.0 compact stderr without native thread UUID, and native `usage` in JSON (the twin has `unreviewed N` too, so that token is shared) |
 | `launcher.mjs` | Claude's native-only PATH rule with the configured-JS exception; the twin launches codex instead of claude |
 | `git.mjs` | collection for batched snapshots (`--commit` via diff-tree, first-parent merges, shallow-history exit 2); the twin hands `--base/--commit/--uncommitted` to codex's native review |
 | `review.mjs` | the batch prompt, ledger reconciliation and the normalized result carrying `id`, `decision` and `coverage.pending` |
