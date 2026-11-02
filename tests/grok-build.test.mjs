@@ -19,13 +19,13 @@ const request = (extra = {}) => ({ verb: "ask", nextInput: false, text: "q", pro
 
 test("ask: the A5.1 argv in order, a fresh session uuid claimed before spawn, the prompt file composed, agent explore", () => {
   const b = grok.buildTurn(request());
-  assert.deepEqual(b.args.slice(0, 10), ["--prompt-file", "/state/jobs/abcdefghijklmnop/prompt.md", "--output-format", "streaming-json", "--model", "grok-4.7", "--effort", "low", "--no-auto-update", "--agent"]);
+  assert.deepEqual(b.args.slice(0, 10), ["--prompt-file", path.join("/state/jobs/abcdefghijklmnop", "prompt.md"), "--output-format", "streaming-json", "--model", "grok-4.7", "--effort", "low", "--no-auto-update", "--agent"]);
   assert.deepEqual(b.args.slice(9, 18), ["--agent", "explore", "--always-approve", "--no-subagents", "--disable-web-search", "--disallowed-tools", HOSTILE.join(","), "--deny", "MCPTool(*)"]);
   assert.deepEqual(b.args.slice(18, 20), ["--rules", CONTRACT_LINE]);
   assert.equal(b.args[20], "--session-id");
   assert.equal(b.args[21], b.requestedThreadId);
   assert.equal(b.args.length, 22);
-  assert.deepEqual([b.promptFile, b.promptText, b.stdin, b.readOnly, b.agent, b.answerFile], ["/state/jobs/abcdefghijklmnop/prompt.md", "Instructions for this turn (advice, read-only).\n\nq", undefined, true, "explore", null]);
+  assert.deepEqual([b.promptFile, b.promptText, b.stdin, b.readOnly, b.agent, b.answerFile], [path.join("/state/jobs/abcdefghijklmnop", "prompt.md"), "Instructions for this turn (advice, read-only).\n\nq", undefined, true, "explore", null]);
   assert.deepEqual([b.env.PATH, b.env.GROK_CLAUDE_RULES_ENABLED, b.env.GROK_CODEX_DEPTH], ["/bin", "0", "1"]);
   assert.notEqual(grok.buildTurn(request()).requestedThreadId, b.requestedThreadId);
 });

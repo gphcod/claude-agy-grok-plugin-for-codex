@@ -37,7 +37,7 @@ S5.7. Donor: gemini-plugin-for-codex 0.1.2 (AGYX), `skills/agy/scripts/agy.mjs` 
 | review allow filtered to `read_file(...)`/`read_url(...)`, `agentMode: ""`, `toolPermission` strict or request-review | same | same | |
 | global deny/ask arrays merged before rules are added | same | same | Session arrays replace the global ones (S1.2, the twin's scratch-HOME probe) |
 | `--json-schema` not used (review answers were prose) | `--json-schema <path>` on reviews and review discussions | intentionally different | One schema for all providers (A5.2); agy enforces it through `finish` (S1.2) |
-| Windows `ask` refused ("unqualified") | turn verbs `--to gemini` exit 2 on `win32` with the A8 message; `setup` warns | same | Until S7 qualifies Windows |
+| Windows `ask` refused ("unqualified") | Gemini turn verbs run on `win32` | intentionally different | Checked in `docs/qualification/windows.md` |
 | `agy.exe`/`agy` from PATH | `COUNCIL_AGY_BIN`, else PATH | renamed | |
 
 ## Results and exit codes
@@ -82,4 +82,4 @@ S5.7. Donor: gemini-plugin-for-codex 0.1.2 (AGYX), `skills/agy/scripts/agy.mjs` 
 - Project-specific agy policies and alternate settings locations are not merged (only the global file is read), as in AGYX.
 - Local cleanup covers observed local processes only; remote backend work is not cancelled by stopping agy.
 - agy's language server was not observed on 1.4.12 (S1.2); the group stop covers it when present.
-- Gemini on Windows is unsupported until S7.
+- Gemini on Windows is checked (`docs/qualification/windows.md`).

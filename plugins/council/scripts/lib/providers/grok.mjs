@@ -64,7 +64,7 @@ export function recipe(kind, { web = false, defaultAgent = false } = {}) {
  * Child environment. Claude skills, agents, hooks and MCP stay off inside Grok (hook recursion); read-only turns also
  * skip Claude's rules directories; a task drops an inherited disabled setting so Grok's default applies. The guard
  * variables Grok's own plugins read (GROK_CODEX_DEPTH, GROK_BUILD_DEPTH) and COUNCIL_DEPTH are set here; the core adds
- * all five (A5.1).
+ * all of them (A5.1).
  */
 export function compatEnv(base, readOnly) {
   const env = {
@@ -111,7 +111,7 @@ export const loginFile = (env, platform = process.platform) => { const home = ho
 const realOr = (p) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
 function gitTop(cwd, env) {
   const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd, env, encoding: "utf8", shell: false, windowsHide: true, timeout: 15000 });
-  return r.status === 0 ? r.stdout.trim() : null;
+  return r.status === 0 ? realOr(r.stdout.trim()) : null; // Git prints C:/x/y on Windows
 }
 
 // ---- lib/reader.mjs, as parseEvent ----

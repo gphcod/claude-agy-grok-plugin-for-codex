@@ -2,6 +2,7 @@
 // the coordinator's corrections from the twin's confirmation review). Each test names the finding it pins.
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
@@ -11,7 +12,7 @@ import { claimThread, inspectClaim } from "../plugins/council/scripts/lib/core/c
 import { executionController, ownedExecution } from "../plugins/council/scripts/lib/core/execution.mjs";
 import { runManagedTurn, cancelManaged } from "../plugins/council/scripts/lib/core/lifecycle.mjs";
 
-const { main } = await import(ENTRY);
+const { main } = await import(pathToFileURL(ENTRY).href);
 const timers = { inactivityMs: 30000, deadlineMs: 60000 };
 const finding = (extra = {}) => ({ id: "F1", severity: "high", title: "Off by one", body: "The loop skips item 0.", file: "README.md", line_start: 1, line_end: 1, confidence: 0.9, recommendation: "Start at 0.", ...extra });
 const structured = (value) => ({ COUNCIL_FAKE_STRUCTURED: JSON.stringify(value) });
@@ -58,7 +59,7 @@ test("F3: cancel without the provider module reads ownership as unknown: no stop
   const refused = w.call(["cancel", id, "--timeout", "3"], { env: { COUNCIL_TEST_NULL_ADAPTER: "0" } });
   assert.equal(refused.status, 1, refused.stdout + refused.stderr);
   assert.match(refused.stdout, /module is not available in this build, so job [a-z0-9]{16}'s processes cannot be identified and nothing was stopped or released: restore it, then run cancel/);
-  assert.ok(alive(child), "nothing was signalled");
+  if (process.platform !== "win32") assert.ok(alive(child), "nothing was signalled"); // Windows ends the child with its hard-killed parent.
   assert.equal(inspectClaim(w.home, "null", thread).state, "owned", "the claim is kept");
   assert.ok(!fs.existsSync(path.join(w.home, "jobs", id, "stopped")));
   assert.equal(w.call(["cancel", id, "--timeout", "15"]).status, 0, "with the module back, cancel recovers it");
@@ -307,7 +308,7 @@ test("S2.9 fix 1: an unrecorded member born after a cleanup-pending job ended ke
   assert.ok(!fs.existsSync(path.join(job.dir, "stopped")));
 });
 
-test("S2.9 fix 2: a native binary under a path with spaces is owned when the path exists, and unknown (never gone) when it cannot be told apart", () => {
+test("S2.9 fix 2: a native binary under a path with spaces is owned when the path exists, and unknown (never gone) when it cannot be told apart", { skip: process.platform === "win32" && "macOS text rows; a Windows row carries its parsed argv" }, () => {
   const w = makeWorld();
   const bin = path.join(w.dir, "First Last", ".grok", "bin", "grok");
   fs.mkdirSync(path.dirname(bin), { recursive: true });

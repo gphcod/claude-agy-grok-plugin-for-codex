@@ -14,7 +14,7 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 | `review-input.mjs` | 2a6be74ac43f554bcb9b9a3345f137db41e1262cc6c39449a12595b2403a3128 | tests/core-review-input.test.mjs, tests/core-review.test.mjs | byte-identical to grok_plugin_for_codex 1.1.0 and claude_plugin_for_codex 0.5.0 |
 | `findings.mjs` | 029222020fe88754e65343850cb0f0e7cda45f1858e8af854ed29dd03b5c8fab | tests/core-findings.test.mjs, tests/core-review.test.mjs | identified ledger, critical/high blockers |
 | `jobs.mjs` | 43a9e79b47e4c772b510cf31e2cc13ade48087fd4f95387baaec4700a4c252f7 | tests/core-jobs.test.mjs, tests/core-requests.test.mjs, tests/core-review-fixes.test.mjs | reads its state-root variable from host.mjs |
-| `execution.mjs` | e24b926c85a1afeb84dbb780791a1916d70431d373b828adf812a0df64d3275c | tests/core-execution.test.mjs, tests/core-windows.test.mjs, tests/core-cancel.test.mjs, tests/core-review-fixes.test.mjs, tests/core-snapshot-tz.test.mjs | reads its guard variables and binary names from host.mjs |
+| `execution.mjs` | 3320d713d18e44d9cc248da1bdca3d53d97560c07254b4644eda0044987ba41c | tests/core-execution.test.mjs, tests/core-windows.test.mjs, tests/core-cancel.test.mjs, tests/core-review-fixes.test.mjs, tests/core-snapshot-tz.test.mjs | reads its guard variables and binary names from host.mjs |
 
 `jobs.mjs` and `execution.mjs` are host-neutral because every host constant they use comes from `host.mjs`; they stay in this table only while the twin's copies do the same.
 

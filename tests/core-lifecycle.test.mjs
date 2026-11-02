@@ -3,6 +3,7 @@
 // held-pipe handling). Entry-driven cases (wait --timeout, replay counters) run through main() in S2.6.
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
@@ -258,8 +259,8 @@ test("a lost owner: the hard-killed companion's job is recovered by cancel, whic
   const w = makeWorld();
   const running = w.start ? null : null;
   // Run the turn in a child process so it can be killed.
-  const script = `import { runManagedTurn } from ${JSON.stringify(path.join(process.cwd(), "plugins/council/scripts/lib/core/lifecycle.mjs"))};
-    import adapter from ${JSON.stringify(path.join(process.cwd(), "tests/fixtures/null-adapter.mjs"))};
+  const script = `import { runManagedTurn } from ${JSON.stringify(pathToFileURL(path.join(process.cwd(), "plugins/council/scripts/lib/core/lifecycle.mjs")).href)};
+    import adapter from ${JSON.stringify(pathToFileURL(path.join(process.cwd(), "tests/fixtures/null-adapter.mjs")).href)};
     const turn = JSON.parse(process.argv[1]); turn.build = (jobDir) => adapter.buildTurn({ verb: "ask", prompt: "q", model: "null-model", effort: "low", env: process.env, resume: false, threadId: turn.thread, jobDir });
     await runManagedTurn({ home: process.env.COUNCIL_CODEX_HOME, env: process.env, cwd: process.cwd(), session: null }, adapter, turn, () => turn, { json: false, deadlineMs: 60000, inactivityMs: 60000 }, { announce: (job) => console.log("job=" + job.id) });`;
   const { spawn } = await import("node:child_process");
@@ -276,7 +277,8 @@ test("a lost owner: the hard-killed companion's job is recovered by cancel, whic
   const grand = w.job(id).pid;
   child.kill("SIGKILL");
   await new Promise((resolve) => child.on("exit", resolve));
-  assert.ok(alive(grand), "the orphaned fake child survives its companion");
+  // Windows ends a non-detached child with its hard-killed parent (libuv's job object); only POSIX leaves an orphan.
+  if (process.platform !== "win32") assert.ok(alive(grand), "the orphaned fake child survives its companion");
   const before = fs.readFileSync(path.join(w.home, "jobs", id, "meta.json"), "utf8");
   w.ageBeat(id);
   assert.equal(stateOf(loadJob(w.home, id)), "lost");

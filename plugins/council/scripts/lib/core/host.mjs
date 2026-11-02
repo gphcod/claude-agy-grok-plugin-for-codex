@@ -10,8 +10,8 @@ export const defaultStateRoot = () => path.join(os.homedir(), ".codex", "council
 export const SESSION_ENV = "CODEX_THREAD_ID";
 /** The reply budget override (A3.5). */
 export const ROUNDS_ENV = "COUNCIL_CODEX_ROUNDS";
-/** Guard variables: every provider child receives all five; admission refuses when any is set (A5.1). */
-export const DEPTH_VARIABLES = ["COUNCIL_DEPTH", "CLAUDE_PLUGIN_CODEX_DEPTH", "GROK_CODEX_DEPTH", "GROK_BUILD_DEPTH", "AGY_BRIDGE_DEPTH"];
+/** Guard variables: every provider child receives all of them, so no plugin this one replaces can nest either; admission refuses when any is set (A5.1). */
+export const DEPTH_VARIABLES = ["COUNCIL_DEPTH", "CODEX_COMPANION_DEPTH", "CLAUDE_PLUGIN_CODEX_DEPTH", "GROK_CODEX_DEPTH", "GROK_BUILD_DEPTH", "AGY_BRIDGE_DEPTH"];
 export const depthEnv = () => Object.fromEntries(DEPTH_VARIABLES.map((name) => [name, "1"]));
 /** The environment of every provider child: turns, probes and exec preflight descriptors alike (A5.1). */
 export const guardedEnv = (env = process.env) => ({ ...env, ...depthEnv() });

@@ -2,7 +2,7 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It replaces three single-provider Codex plugins (claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0, gemini-plugin-for-codex 0.1.2) and is the Codex-hosted twin of [Council for Claude Code](https://github.com/gphcod/codex-agy-grok-plugin-for-claude).
 
-Status: release candidate `1.0.0-rc.1`, not yet tagged. macOS is checked against fakes and the installed CLIs' non-billable probes; the qualification matrix and the Windows session (`PLAN.md` S7) are still to run, and Gemini is unsupported on Windows until then.
+Status: release candidate `1.0.0-rc.2`, not yet tagged. macOS is checked against fakes and the installed CLIs' non-billable probes; Windows 11 passes the test suites and the installed scripts against the real CLIs (`docs/qualification/windows.md`); the installed route inside a Codex chat and the qualification matrix are still to run.
 
 ## Install
 
@@ -25,7 +25,7 @@ enabled = true
 
 For a local checkout, `codex plugin marketplace add /absolute/path/to/claude-agy-grok-plugin-for-codex` instead of the Git form. Start a new Codex chat after installing; the skill is `$council`.
 
-Requires Node.js 18.20.8 or a later 18.x, or Node.js 22.19.0 or later (not Node 20), plus the `claude`, `agy` and `grok` CLIs installed and logged in (any subset works; `setup` reports the rest). The plugin has no runtime dependencies. Check the installation with `$council setup`.
+Requires Node.js 22.19.0 or later, plus the `claude`, `agy` and `grok` CLIs installed and logged in (any subset works; `setup` reports the rest). The plugin has no runtime dependencies. Check the installation with `$council setup`.
 
 ## Call forms
 
@@ -175,7 +175,7 @@ The current verb's permissions are enforced on every launch, so a `reply` after 
 | Platform | claude | grok | gemini |
 |---|---|---|---|
 | macOS | supported; fakes, probes and live S3.5 record | supported; fakes, probes and live S4.6 record | supported; fakes, probes and live S5.6 record |
-| Windows | qualification pending (S7.2); native `claude.exe` from PATH or a configured JS entry, never a `.cmd`/`.ps1` wrapper | qualification pending (S7.2) | unsupported until qualified: `setup` says so and turn verbs `--to gemini` exit 2 |
+| Windows | checked: native `claude.exe` from PATH, or a configured JS entry, never a `.cmd`/`.ps1` wrapper | checked: native `grok.exe`; the npm shim is not yet checked | checked: native `agy.exe` |
 | Linux | optional, not qualified | optional, not qualified | optional, not qualified |
 
 Windows launches never go through `cmd.exe`; process identity and cleanup use the adapter's ownership evidence. No launcher kind is trusted to exit cleanly yet, so every clean exit is followed by a process-table scan.
@@ -184,7 +184,7 @@ Windows launches never go through `cmd.exe`; process identity and cleanup use th
 
 - **Gemini read-only turns can search the web.** agy's `search_web(*)` deny rule did not block the search (two probes, S1.2), so council cannot switch it off; `--web` is not offered for Gemini and `setup` prints this line.
 - **Gemini tasks without `--allow-command` run any command** when the global agy `toolPermission` is `always-proceed`; `setup` warns in that case.
-- **Gemini on Windows** is unsupported until the S7.2 session qualifies it.
+- **A hard-killed companion on Windows** takes its provider child with it, unlike POSIX; `cancel` still recovers the job.
 - **A clean exit is not trusted** on any launcher kind until S7 qualifies one: the post-exit scan costs time, and a held pipe locks the thread until `cancel --confirm-ended`.
 - **`edited N` on a task** counts the paths the provider's events name plus the working-tree changes between a Git snapshot before the spawn and one after the turn, so an edit made through a shell counts; a change you make in the same tree during the turn counts too. Outside Git, on a failed git call, past 5,000 dirty paths or with a path that is not valid UTF-8 only the events count, and the turn never fails for it; ignored files are invisible to the snapshot. A submodule counts as one path when its dirty state changes; edits inside an already dirty submodule count only if the events name them.
 - **Workspace checks around Gemini turns** use the same bounded snapshots: outside Git, or with a partial snapshot and no detected change, the footer says `coverage unknown`; a detected change on a read-only turn is `incomplete` (exit 10).

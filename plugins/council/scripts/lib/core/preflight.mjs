@@ -90,11 +90,16 @@ async function checkNetwork(descriptor, env) {
   try {
     const response = await fetch(new URL(descriptor.target).origin, { method: "HEAD", signal: AbortSignal.timeout(descriptor.timeoutMs ?? 8000), redirect: "manual" });
     return { ok: true, status: response.status };
-  } catch (error) { return { ok: false, detail: `network access failed (${error.cause?.code || error.name})` }; }
+  } catch (error) {
+    const code = error.cause?.code || error.name;
+    // A stand-in target (agy talks to another host) that a filtering network refuses at TLS still shows a network.
+    if (descriptor.tlsRefusalPasses && /^ERR_SSL_|^ERR_TLS_|CERT|UNABLE_TO_VERIFY_LEAF_SIGNATURE/.test(code)) return { ok: true, unverified: `TLS to ${descriptor.target} failed (${code})` };
+    return { ok: false, detail: `network access failed (${code})` };
+  }
 }
 async function checkExec(descriptor, env) {
   const { command, args = [], expectStatus = 0, expectText = null, recordOutput = true } = descriptor.target;
-  // An exec descriptor starts a provider child: it gets the five guard variables like every turn (A5.1).
+  // An exec descriptor starts a provider child: it gets the guard variables like every turn (A5.1).
   const result = await startProbe(command, args, { env: guardedEnv(env), timeoutMs: descriptor.timeoutMs ?? 15000 });
   if (result.error) return { ok: false, detail: `probe failed: ${result.error}` };
   const text = `${result.stdout}${result.stderr}`;

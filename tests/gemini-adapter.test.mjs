@@ -14,7 +14,7 @@ import { hasFlagOperand } from "../plugins/council/scripts/lib/core/execution.mj
 import { createReader } from "../plugins/council/scripts/lib/core/reader.mjs";
 import { DEPTH_VARIABLES } from "../plugins/council/scripts/lib/core/host.mjs";
 
-const { configuredPolicy, sessionSettings, printTimeout, stdinMessage, snapshot, workspace, changes, allowCommandProblem, READ_ONLY_DENY, WINDOWS_UNSUPPORTED, LIMIT } = G;
+const { configuredPolicy, sessionSettings, printTimeout, stdinMessage, snapshot, workspace, changes, allowCommandProblem, READ_ONLY_DENY, WINDOWS_QUALIFIED, LIMIT } = G;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FAKE = path.join(ROOT, "tests", "fixtures", "fake-agy.mjs");
 const CONTRACT = path.join(ROOT, "plugins", "council", "contract.md");
@@ -32,7 +32,7 @@ function home(global) {
   return dir;
 }
 /** buildTurn refuses on Windows as a backstop to checkRequest (A8); the cases that build a launch run elsewhere. */
-const buildsHere = { skip: process.platform === "win32" && "A8: buildTurn refuses on Windows (asserted by the Windows backstop test)" };
+const buildsHere = {};
 const launcher = () => gemini.resolveLauncher({ COUNCIL_AGY_BIN: FAKE });
 /** A TurnRequest as the entry builds it. */
 function request(extra = {}) {
@@ -81,7 +81,7 @@ test("S5.1 launcher: COUNCIL_AGY_BIN wins (a .mjs runs through node); without it
   assert.equal(gemini.resolveLauncher({ PATH: "" }), null);
   const dir = tmp();
   fs.writeFileSync(path.join(dir, "agy"), "#!/bin/sh\necho 1.4.12\n", { mode: 0o755 });
-  assert.deepEqual(gemini.resolveLauncher({ PATH: dir }, "darwin"), { command: path.join(dir, "agy"), args: [], path: path.join(dir, "agy"), kind: "native" });
+  if (process.platform !== "win32") assert.deepEqual(gemini.resolveLauncher({ PATH: dir }, "darwin"), { command: path.join(dir, "agy"), args: [], path: path.join(dir, "agy"), kind: "native" }); // A POSIX PATH splits on the colon of a Windows drive.
 });
 
 test("S5.1 ownership is the job's own --settings operand, so two concurrent jobs never cross-match", () => {
@@ -99,7 +99,7 @@ test("S5.1 ownership is the job's own --settings operand, so two concurrent jobs
 });
 
 test("S5.1 probe: --version and models (login evidence) through the fake, Gemini ids only, and setup warnings", async () => {
-  const env = (extra = {}, global) => ({ ...baseEnv, HOME: home(global), ...extra });
+  const env = (extra = {}, global) => { const dir = home(global); return { ...baseEnv, HOME: dir, USERPROFILE: dir, ...extra }; };
   const ok = await gemini.probe(launcher(), env({}, { toolPermission: "request-review" }), "darwin");
   assert.deepEqual([ok.version, ok.loggedIn, ok.warnings], ["1.4.12", true, []]);
   const ids = ok.models.map((m) => m.id);
@@ -110,14 +110,14 @@ test("S5.1 probe: --version and models (login evidence) through the fake, Gemini
   assert.deepEqual((await gemini.probe(launcher(), env({}, { toolPermission: "strict" }), "darwin")).warnings, []);
   assert.deepEqual((await gemini.probe(launcher(), env(), "darwin")).warnings, [], "no global settings file");
   assert.match((await gemini.probe(launcher(), env({}, "{oops"), "darwin")).warnings[0], /global agy settings unreadable, so no Gemini turn can start: .*invalid JSON/);
-  assert.deepEqual((await gemini.probe(launcher(), env(), "win32")).warnings, [WINDOWS_UNSUPPORTED]);
+  assert.deepEqual((await gemini.probe(launcher(), env(), "win32")).warnings, [], "Windows is qualified (A8)");
   const out = await gemini.probe(launcher(), env({ COUNCIL_FAKE_LOGGED_OUT: "1" }), "darwin");
   assert.deepEqual([out.loggedIn, out.models], [false, null]);
 });
 
-test("S5.1 preflight: state root (write, first since S1.4), agy state (write), loopback listener, process table, the two cold probes, network; none on win32", () => {
+test("S5.1 preflight: state root (write, first since S1.4), agy state (write), loopback listener, process table, the two cold probes, network; the same on win32", () => {
   const h = home();
-  const list = gemini.preflight({ stateRoot: "/state", env: { HOME: h, COUNCIL_AGY_BIN: FAKE }, platform: "darwin", verb: "ask", cwd: h });
+  const list = gemini.preflight({ stateRoot: "/state", env: { HOME: h, USERPROFILE: h, COUNCIL_AGY_BIN: FAKE }, platform: "darwin", verb: "ask", cwd: h });
   assert.deepEqual(list.map((d) => d.kind), ["dir", "dir", "listener", "process-table", "exec", "exec", "network"]);
   assert.deepEqual([list[0].target, list[0].access, list[1].target, list[1].access, list[2].target], ["/state", "write", path.join(h, ".gemini", "antigravity-cli"), "write", "127.0.0.1"]);
   assert.deepEqual(list[4].target.args, [FAKE, "--version"]);
@@ -125,13 +125,17 @@ test("S5.1 preflight: state root (write, first since S1.4), agy state (write), l
   for (const d of list) assert.ok(d.why && d.action, `${d.kind} carries why and an action line`);
   assert.equal(gemini.preflight({ stateRoot: "/s", env: { HOME: h, COUNCIL_AGY_LISTEN_HOST: "192.0.2.1", PATH: "" }, platform: "darwin" }).find((d) => d.kind === "listener").target, "192.0.2.1");
   assert.ok(!gemini.preflight({ stateRoot: "/s", env: { HOME: h, PATH: "" }, platform: "darwin" }).some((d) => d.kind === "exec"), "no binary, no probe descriptors");
-  assert.deepEqual(gemini.preflight({ stateRoot: "/s", env: { HOME: h }, platform: "win32" }), [], "Windows: checkRequest refuses with exit 2 instead");
+  const windows = gemini.preflight({ stateRoot: "/s", env: { HOME: h, USERPROFILE: h, PATH: "" }, platform: "win32" });
+  assert.deepEqual(windows.map((d) => d.kind), ["dir", "dir", "listener", "process-table", "network"], "Windows is qualified (A8)");
+  assert.equal(windows[3].target, "powershell Win32_Process");
+  assert.deepEqual([windows[4].tlsRefusalPasses, list.at(-1).tlsRefusalPasses], [true, undefined], "the stand-in target is lenient on Windows only");
 });
 
 test("S5.1 checkRequest: Windows (A8), --web, --allow-command outside a task or malformed; a task's allow-command passes", () => {
   const r = (extra) => ({ verb: "ask", web: false, allowCommands: [], ...extra });
-  assert.equal(gemini.checkRequest(r({}), {}, "win32"), WINDOWS_UNSUPPORTED);
-  assert.equal(gemini.checkRequest(r({ verb: "task" }), {}, "win32"), WINDOWS_UNSUPPORTED);
+  assert.equal(WINDOWS_QUALIFIED, true, "docs/qualification/windows.md records the session");
+  assert.equal(gemini.checkRequest(r({}), {}, "win32"), null);
+  assert.equal(gemini.checkRequest(r({ verb: "task" }), {}, "win32"), null);
   assert.equal(gemini.checkRequest(r({}), {}, "darwin"), null);
   assert.match(gemini.checkRequest(r({ web: true }), {}, "darwin"), /--web is not offered for gemini/);
   for (const verb of ["ask", "reply", "review"]) assert.match(gemini.checkRequest(r({ verb, allowCommands: ["node x"] }), {}, "darwin"), /applies only to task --to gemini/);
@@ -179,7 +183,7 @@ test("S5.2 buildTurn: a read-only ask carries the exact A5.1 flag set, the job's
   assert.deepEqual(built.args, ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", "87s", "--sandbox", "--settings", settingsPath,
     "--model", "gemini-4-argon", "--effort", "high"]);
   assert.deepEqual(settingsOf(built), { permissions: { allow: [], ask: [], deny: ["read_file(.env)", ...READ_ONLY_DENY] }, agentMode: "", toolPermission: "request-review" });
-  assert.equal(fs.statSync(settingsPath).mode & 0o777, 0o600);
+  if (process.platform !== "win32") assert.equal(fs.statSync(settingsPath).mode & 0o777, 0o600); // Windows has no such mode bits.
   assert.deepEqual([built.readOnly, built.requestedThreadId, built.answerFile, built.contractCarrier, built.agent], [true, null, null, "stdin", null]);
   const lines = built.stdin.split("\n");
   assert.deepEqual([lines.length, lines[1]], [2, ""]);
@@ -422,6 +426,6 @@ test("S5.4 review plan: agy enforces --json-schema (S1.2), so the schema travels
   assert.equal(gemini.reviewPlan({ snapshot: null }, { adversarial: true }).promptTemplate, "adversarial-review");
 });
 
-test("A8 backstop: on Windows buildTurn throws the unsupported message", { skip: process.platform !== "win32" && "Windows only; runs in the S7.2 session" }, () => {
-  assert.throws(() => gemini.buildTurn(request()), (error) => error.message === WINDOWS_UNSUPPORTED);
+test("A8: on a qualified Windows buildTurn builds the turn", { skip: process.platform !== "win32" && "Windows only" }, () => {
+  assert.ok(gemini.buildTurn(request()).args.includes("--sandbox"));
 });

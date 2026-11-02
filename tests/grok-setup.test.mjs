@@ -36,7 +36,7 @@ test("preflight descriptors: state root (first since S1.4), login file from the 
   const d = grok.preflight({ stateRoot: "/state", env, platform: "darwin", verb: "ask", cwd: "/w" });
   assert.deepEqual(d.map((x) => [x.kind, x.access ?? null]), [["dir", "write"], ["file", "read"], ["process-table", null], ["exec", null], ["exec", null]]);
   assert.equal(d[0].target, "/state");
-  assert.equal(d[1].target, "/home/someone/.grok/auth.json");
+  assert.equal(d[1].target, path.join("/home/someone", ".grok", "auth.json"));
   assert.deepEqual(d[3].target.args.slice(-1), ["--version"]);
   assert.deepEqual(d[4].target.args.slice(-1), ["models"]);
   assert.ok(new RegExp(d[4].target.expectText).test("You are logged in with grok.com.\n"));

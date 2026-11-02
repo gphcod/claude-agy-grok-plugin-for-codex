@@ -185,7 +185,8 @@ test("a query that fails or times out is unknown and names its cause; malformed 
   assert.deepEqual(processSnapshot({ platform: "darwin", run: () => ({ status: 2, stdout: "", stderr: "ps: illegal option -- w\n" }) }), { state: "unknown", rows: [], error: "process query failed: ps: illegal option -- w" });
   assert.deepEqual(processSnapshot({ platform: "win32", powershell: () => ({ status: 0, stdout: "ok\r\n" }) }), { state: "unknown", rows: [] });
   assert.deepEqual(processSnapshot({ platform: "darwin", pid: 42, run: () => ({ status: 1, stdout: "" }) }), table(), "an absent targeted pid is gone");
-  const uid = process.getuid?.() ?? 0;
+  process.getuid ??= () => 0; // Windows has none; the darwin parser compares with it.
+  const uid = process.getuid();
   const output = `42 1 42 ${uid} Z Mon Oct  5 10:00:00 2026 grok --prompt-file x\n`;
   assert.deepEqual(processSnapshot({ platform: "darwin", pid: 42, run: () => ({ status: 0, stdout: output }) }), table(), "zombies do not live");
   const live = processSnapshot({ platform: "darwin", run: () => ({ status: 0, stdout: `43 1 43 ${uid} S Mon Oct  5 10:00:00 2026 grok --prompt-file x\n44 43 43 -2 S Mon Oct  5 10:00:00 2026 nobody\n` }) });

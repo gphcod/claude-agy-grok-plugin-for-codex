@@ -7,6 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ANSWER_CAP, capAnswer, elapsed, footer, modelToken, readAnswer, recoveryHint, renderResult, resultJson, startLine, utf8Prefix } from "../plugins/council/scripts/lib/core/output.mjs";
 
+const ANSWER = path.join("/state/jobs/k3f9k3f9k3f9k3f9", "answer.md");
 const base = { id: "k3f9k3f9k3f9k3f9", dir: "/state/jobs/k3f9k3f9k3f9k3f9", provider: "grok", verb: "ask", outcome: "ok", code: 0, model: "grok-4.7", effort: "high",
   requestedEffort: "high", spawnedAt: "2026-10-31T10:00:00.000Z", endedAt: "2026-10-31T10:00:38.000Z", round: 1, rounds: 9, threadId: "t-1", admitted: true, edited: [] };
 
@@ -36,8 +37,8 @@ test("the footer: unreviewed and batch only on reviews and --next-input replies;
   assert.equal(footer({ ...review, verb: "reply", nextInput: true }, false), "council grok needs attention · job k3f9k3f9k3f9k3f9 · grok-4.7/high · 38s · round 1/9 · unreviewed 2 · batch 1/3");
   assert.equal(footer({ ...base, unreviewed: ["x"], batch: { index: 1, total: 2 } }, false), "council grok ok · job k3f9k3f9k3f9k3f9 · grok-4.7/high · 38s · round 1/9", "an ask shows neither");
   assert.equal(footer({ ...base, modelVerified: false, model: "gpt-6.1-sol" }, false), "council grok ok · job k3f9k3f9k3f9k3f9 · gpt-6.1-sol/high · 38s · round 1/9 · model unverified");
-  assert.equal(footer(base, true), "council grok ok · job k3f9k3f9k3f9k3f9 · grok-4.7/high · 38s · round 1/9 · full: /state/jobs/k3f9k3f9k3f9k3f9/answer.md");
-  assert.equal(footer({ ...base, answerClipped: true }, false).endsWith("full: /state/jobs/k3f9k3f9k3f9k3f9/answer.md"), true);
+  assert.equal(footer(base, true), `council grok ok · job k3f9k3f9k3f9k3f9 · grok-4.7/high · 38s · round 1/9 · full: ${ANSWER}`);
+  assert.equal(footer({ ...base, answerClipped: true }, false).endsWith(`full: ${ANSWER}`), true);
   assert.equal(footer({ ...base, outcome: "failed", code: 1, cleanupPending: true, error: "lost" }, false),
     "council grok failed · job k3f9k3f9k3f9k3f9 · grok-4.7/high · 38s · round 1/9 · error: lost · cleanup pending; next: cancel k3f9k3f9k3f9k3f9; do not resume");
   assert.equal(recoveryHint({ ...base, claimHeld: true }), "cleanup pending; next: cancel k3f9k3f9k3f9k3f9; do not resume");
@@ -51,7 +52,7 @@ test("the footer: unreviewed and batch only on reviews and --next-input replies;
   assert.match(footer({ ...base, mutationCoverage: "unknown" }), / · coverage unknown$/);
   const everything = footer({ ...base, provider: "gemini", verb: "reply", nextInput: true, outcome: "attention", requestedEffort: "xhigh", effort: "high", model: "gemini-4-argon",
     unreviewed: ["u"], batch: { index: 2, total: 2 }, modelVerified: false, answerClipped: true, error: "e", cleanupPending: true }, false);
-  assert.equal(everything, "council gemini needs attention · job k3f9k3f9k3f9k3f9 · gemini-4-argon/high<=xhigh · 38s · round 1/9 · unreviewed 1 · batch 2/2 · model unverified · full: /state/jobs/k3f9k3f9k3f9k3f9/answer.md · error: e · cleanup pending; next: cancel k3f9k3f9k3f9k3f9; do not resume");
+  assert.equal(everything, `council gemini needs attention · job k3f9k3f9k3f9k3f9 · gemini-4-argon/high<=xhigh · 38s · round 1/9 · unreviewed 1 · batch 2/2 · model unverified · full: ${ANSWER} · error: e · cleanup pending; next: cancel k3f9k3f9k3f9k3f9; do not resume`);
 });
 
 test("renderResult prints the answer then the footer; an empty answer prints the footer alone", () => {
@@ -70,7 +71,7 @@ test("the --json object carries every A3.4 field and bounds its lists", () => {
     ["grok", "k3f9k3f9k3f9k3f9", "t-1", "codex-1", "grok-4.7", true, "high", "high", "consult", 1, 9, "approve", 0, 0.0123]);
   assert.deepEqual(json.coverage, { reviewRef: "r", snapshotId: "s", status: "partial", total: 4, pending: 2, reviewed: 1, unreviewed: ["a", "b"], unsupportedCount: 1, synthesisPending: true, blocking: false });
   assert.deepEqual([json.edited.length, json.editedCount, json.failedCommands, json.failedCommandCount, json.batch], [10, 100, ["make"], 1, { index: 1, total: 2 }]);
-  assert.equal(json.answerFile, "/state/jobs/k3f9k3f9k3f9k3f9/answer.md");
+  assert.equal(json.answerFile, ANSWER);
   assert.equal(resultJson({ ...base, modelVerified: false, model: "gpt-6.1-sol" }, "").modelVerified, false);
   assert.equal(resultJson({ ...base, model: null }, "").model, "default");
   assert.equal(resultJson(base, "").coverage, null);

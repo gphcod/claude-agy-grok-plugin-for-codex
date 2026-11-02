@@ -92,11 +92,11 @@ export function validate() {
 
   assert.match(readme, /codex plugin marketplace add gphcod\/claude-agy-grok-plugin-for-codex/, "README install block");
   assert.match(readme, /codex plugin add council@council-for-codex/, "README install block");
-  assert.ok(readme.replace(/\s+/g, " ").includes("Requires Node.js 18.20.8 or a later 18.x, or Node.js 22.19.0 or later (not Node 20)"),
+  assert.ok(readme.replace(/\s+/g, " ").includes("Requires Node.js 22.19.0 or later"),
     "README must state the engines range");
 
-  assert.equal(pkg.engines.node, ">=18.20.8 <19 || >=22.19.0");
-  const nodeSupport = { "18.20.7": false, "18.20.8": true, "18.99.0": true, "19.0.0": false, "20.3.0": false, "22.0.0": false,
+  assert.equal(pkg.engines.node, ">=22.19.0");
+  const nodeSupport = { "18.20.8": false, "20.3.0": false, "22.0.0": false, "22.18.9": false,
     "22.19.0": true, "24.0.0": true };
   for (const [version, expected] of Object.entries(nodeSupport)) {
     assert.equal(satisfiesEngines(version, pkg.engines.node), expected, `engines ${pkg.engines.node} and Node ${version}`);

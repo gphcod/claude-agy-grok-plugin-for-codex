@@ -72,7 +72,7 @@ const session = sessionId ?? resumeId;
 log({ argv, cwd: process.cwd(), prompt, session, agent: explore ? "explore" : "default", readOnly, web, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^GROK_|DEPTH$/.test(k))) });
 
 const fixtures = streams("grok");
-const fill = (events) => events.map((e) => JSON.parse(JSON.stringify(e).replaceAll("<SESSION>", session).replaceAll("<CWD>", process.cwd()).replaceAll("<REQUEST>", randomUUID())));
+const fill = (events) => events.map((e) => JSON.parse(JSON.stringify(e).replaceAll("<SESSION>", session).replaceAll("<CWD>", JSON.stringify(process.cwd()).slice(1, -1)).replaceAll("<REQUEST>", randomUUID())));
 let exitCode = 0;
 const play = (events) => { for (const e of events) { emitJson(e); if (e.type === "error") exitCode = 1; } };
 switch (which) {

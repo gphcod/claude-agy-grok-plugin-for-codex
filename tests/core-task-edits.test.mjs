@@ -28,7 +28,7 @@ test("an event edit and a shell edit of the same file are one edit; other event 
   assert.deepEqual(edited(task(w, { "README.md": "# both\n" }, { env: { COUNCIL_FAKE_EDITS: "README.md" } })), [1, ["README.md"]]);
   assert.deepEqual(edited(task(w, null, { env: { COUNCIL_FAKE_EDITS: "gone.js" } })), [1, ["gone.js"]], "an event edit no snapshot sees stays (edited, then reverted or ignored)");
   fs.mkdirSync(path.join(w.workspace, "sub"));
-  assert.deepEqual(edited(task(w, { "../README.md": "# up\n" }, { cwd: path.join(w.workspace, "sub"), env: { COUNCIL_FAKE_EDITS: path.join(w.workspace, "README.md") } })), [1, [path.join(w.workspace, "README.md")]], "one file named two ways, outside the cwd");
+  assert.deepEqual(edited(task(w, { "../README.md": "# up\n" }, { cwd: path.join(w.workspace, "sub"), env: { COUNCIL_FAKE_EDITS: path.join(w.workspace, "README.md") } })), [1, [path.join(w.workspace, "README.md").split(path.sep).join("/")]], "one file named two ways, outside the cwd");
 });
 
 test("a new untracked file is counted, also in a new directory", () => {

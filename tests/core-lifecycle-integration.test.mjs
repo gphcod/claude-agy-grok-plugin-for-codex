@@ -132,7 +132,8 @@ test("a first run under an aliased state root that did not exist yet is still re
   const child = JSON.parse(fs.readFileSync(path.join(home, "jobs", id, "meta.json"), "utf8")).pid;
   running.child.kill("SIGKILL");
   await running.exited;
-  assert.ok(alive(backend) && alive(child), "the backend and the launcher outlive the companion");
+  // Windows ends a non-detached child with its hard-killed parent (libuv's job object); only POSIX leaves an orphan.
+  assert.ok(alive(backend) && (process.platform === "win32" || alive(child)), "the backend and the launcher outlive the companion");
   const cancel = w.call(["cancel", id, "--timeout", "15"], { env: { COUNCIL_CODEX_HOME: path.join(alias, "state") } });
   assert.equal(cancel.status, 0, cancel.stdout + cancel.stderr);
   await until(() => !alive(backend) && !alive(child), 5000);
@@ -264,7 +265,7 @@ test("two concurrent recovery calls cannot rewrite result metadata or leave an o
   await until(() => !alive(job.pid), 5000);
 });
 
-test("a stopped backend is no evidence about a separate grandchild still holding the launcher's pipes", (t) => {
+test("a stopped backend is no evidence about a separate grandchild still holding the launcher's pipes", async (t) => {
   const w = makeWorld();
   const backendPid = path.join(w.dir, "backend.pid"), grandchildPid = path.join(w.dir, "grandchild.pid");
   const r = w.call(["ask", "--to", "null", "--", "q"], { env: { COUNCIL_FAKE_BACKEND: backendPid, COUNCIL_FAKE_GRANDCHILD: grandchildPid, COUNCIL_FAKE_HOLD_MS: "20000" } });
@@ -272,7 +273,7 @@ test("a stopped backend is no evidence about a separate grandchild still holding
   t.after(() => { try { process.kill(grandchild, "SIGKILL"); } catch { /* gone */ } });
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(footerOf(r.stdout), /survived the launcher/);
-  assert.ok(!alive(Number(fs.readFileSync(backendPid, "utf8"))), "the backend was stopped");
+  await until(() => !alive(Number(fs.readFileSync(backendPid, "utf8"))), 5000); // A Windows process killed by taskkill takes a moment to finish exiting.
   assert.ok(alive(grandchild), "the pipe holder is still running: nothing identified it as owned");
   const job = w.job(jobIdOf(r.stderr));
   assert.equal(job.cleanupPending, true, "an unexplained held pipe keeps cleanup pending");

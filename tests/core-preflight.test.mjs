@@ -37,6 +37,13 @@ test("descriptors: dir, file, exec, listener and process-table report ok or a de
   const server = net.createServer((socket) => socket.destroy());
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const refused = await runDescriptor({ kind: "network", target: `http://127.0.0.1:${server.address().port}`, timeoutMs: 2000 }, { env: {} });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE" } }); };
+  try {
+    assert.equal((await runDescriptor({ kind: "network", target: "https://blocked.example", tlsRefusalPasses: true }, { env: {} })).ok, true, "a stand-in target's TLS refusal still shows a network");
+    assert.equal((await runDescriptor({ kind: "network", target: "https://blocked.example" }, { env: {} })).ok, false, "a real endpoint's TLS failure blocks");
+  }
+  finally { globalThis.fetch = realFetch; }
   server.close();
   assert.equal(refused.ok, false, "a connection that is torn down fails the network check");
 });

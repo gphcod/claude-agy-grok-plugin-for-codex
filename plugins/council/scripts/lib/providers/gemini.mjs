@@ -19,7 +19,8 @@ export const BIN_ENV = "COUNCIL_AGY_BIN";
 /** Frame, partial-answer and settings caps (AGYX native.mjs LIMIT, settings.mjs 2 MiB). */
 export const LIMIT = 4 * 1024 * 1024;
 const SETTINGS_CAP = 2 * 1024 * 1024;
-/** A8: Gemini is qualified on macOS only until S7 qualifies Windows. */
+/** A8: S7 qualified Windows (docs/qualification/windows.md); false restores the refusal below. */
+export const WINDOWS_QUALIFIED = true;
 export const WINDOWS_UNSUPPORTED = "gemini (agy) is not supported on Windows in this release (A8): only macOS is qualified; use --to claude or --to grok";
 /** The deny-rule / approval signature on a tool step (A2; AGYX native.mjs `denial`). */
 export const DENIAL = /permission (?:check failed|denied)|approval (?:required|denied)|user.configured deny/i;
@@ -30,7 +31,8 @@ export const READ_ONLY_DENY = ["write_file(*)", "edit_file(*)", "command(*)", "u
 const READ_ONLY_ALLOW = /^(read_file|read_url)\(.*\)$/;
 const SUFFIX = /-(low|medium|high)$/;
 
-const homeOf = (env = {}) => env.HOME || env.USERPROFILE || os.homedir();
+// Windows agy finds its home through USERPROFILE and ignores HOME, which Git Bash also sets.
+const homeOf = (env = {}) => (process.platform === "win32" ? env.USERPROFILE || env.HOME : env.HOME || env.USERPROFILE) || os.homedir();
 /** `<HOME>/.gemini/antigravity-cli`: agy's backend state, which it writes even on read-only turns (AGYX docs/P0.md). */
 export const stateDir = (env) => path.join(homeOf(env), ".gemini", "antigravity-cli");
 export const globalSettingsFile = (env) => path.join(stateDir(env), "settings.json");
@@ -241,7 +243,7 @@ const adapter = {
     const parsed = listing.status === 0 ? parseModelListing("gemini", listing.stdout) : null;
     const models = parsed && Object.keys(parsed.models).length ? Object.entries(parsed.models).map(([id, efforts]) => ({ id, efforts })) : null;
     const warnings = [];
-    if (platform === "win32") warnings.push(WINDOWS_UNSUPPORTED);
+    if (platform === "win32" && !WINDOWS_QUALIFIED) warnings.push(WINDOWS_UNSUPPORTED);
     try {
       if (configuredPolicy(globalSettingsFile(env)).toolPermission === "always-proceed") {
         warnings.push("Gemini tasks without --allow-command run any command: the global agy toolPermission is always-proceed");
@@ -249,10 +251,10 @@ const adapter = {
     } catch (error) { warnings.push(`global agy settings unreadable, so no Gemini turn can start: ${error.message}`); }
     return { version: version.status === 0 ? version.stdout.trim() : null, loggedIn: listing.status === 0, models, warnings };
   },
-  /** Resources agy needs inside the Codex sandbox (A2, AGYX docs/P0.md); none on Windows, where checkRequest refuses. */
+  /** Resources agy needs inside the Codex sandbox (A2, AGYX docs/P0.md); none on Windows while checkRequest refuses there. */
   preflight(ctx) {
     const env = ctx.env ?? {};
-    if (ctx.platform === "win32") return [];
+    if (ctx.platform === "win32" && !WINDOWS_QUALIFIED) return [];
     const launcher = (() => { try { return this.resolveLauncher(env, ctx.platform); } catch { return null; } })();
     const sandbox = "Run Codex with a sandbox that allows it (danger-full-access), or run the call outside the sandbox; the line grants no escalation.";
     return [
@@ -260,17 +262,17 @@ const adapter = {
       { kind: "dir", target: stateDir(env), access: "write", timeoutMs: 1000, why: "agy backend state (~/.gemini/antigravity-cli)", action: `Grant write access to ${stateDir(env)}. ${sandbox}` },
       // COUNCIL_AGY_LISTEN_HOST is a diagnostic seam (tests bind an unassignable address to prove the blocked path).
       { kind: "listener", target: env.COUNCIL_AGY_LISTEN_HOST || "127.0.0.1", timeoutMs: 2000, why: "agy's loopback listener", action: `Allow a loopback listener. ${sandbox}` },
-      { kind: "process-table", target: "ps", timeoutMs: 20000, why: "process inspection for cleanup", action: `Allow the process query (ps). ${sandbox}` },
+      { kind: "process-table", target: ctx.platform === "win32" ? "powershell Win32_Process" : "ps", timeoutMs: 20000, why: "process inspection for cleanup", action: `Allow the process query (${ctx.platform === "win32" ? "PowerShell Win32_Process" : "ps"}). ${sandbox}` },
       ...(launcher ? [
         { kind: "exec", target: { command: launcher.command, args: [...launcher.args, "--version"], expectText: "\\d+\\.\\d+" }, timeoutMs: 15000, why: "agy version probe", action: "Install agy or set COUNCIL_AGY_BIN." },
         { kind: "exec", target: { command: launcher.command, args: [...launcher.args, "models"], expectText: "gemini-" }, timeoutMs: 30000, why: "agy model listing (login evidence)", action: "Run agy once to sign in, then retry." },
       ] : []),
-      { kind: "network", target: "https://generativelanguage.googleapis.com/", timeoutMs: 8000, why: "network access to the Gemini backend", action: `Allow network access. ${sandbox}` },
+      { kind: "network", target: "https://generativelanguage.googleapis.com/", ...(ctx.platform === "win32" ? { tlsRefusalPasses: true } : {}), timeoutMs: 8000, why: "network access to the Gemini backend", action: `Allow network access. ${sandbox}` },
     ];
   },
   /** Refusals before any job record (exit 2): Windows (A8), --web (A3.3), --allow-command outside tasks or malformed. */
   checkRequest(request, env = {}, platform = process.platform) {
-    if (platform === "win32") return WINDOWS_UNSUPPORTED;
+    if (platform === "win32" && !WINDOWS_QUALIFIED) return WINDOWS_UNSUPPORTED;
     if (request.web) return "--web is not offered for gemini: its read-only turns cannot switch web search off (S1.2)";
     const commands = request.allowCommands ?? [];
     if (commands.length && request.verb !== "task") return "--allow-command applies only to task --to gemini";
@@ -278,7 +280,7 @@ const adapter = {
     return null;
   },
   buildTurn(request) {
-    if (process.platform === "win32") throw new Error(WINDOWS_UNSUPPORTED);
+    if (process.platform === "win32" && !WINDOWS_QUALIFIED) throw new Error(WINDOWS_UNSUPPORTED);
     const env = request.env ?? {};
     const readOnly = request.verb !== "task";
     const settings = sessionSettings({ readOnly, allowCommands: readOnly ? [] : request.allowCommands ?? [] }, configuredPolicy(globalSettingsFile(env)));
