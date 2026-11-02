@@ -187,7 +187,7 @@ for (const sh of powershells.length ? powershells : [{ name: "powershell" }]) {
 
     test(`${sh.name}, ${provider}: '@ and non-ASCII go through --prompt-file with $null piped`, { skip: POWERSHELL_SKIP }, async () => {
       const w = world();
-      const text = "first line\n'@ looks like a terminator\nnon-ASCII 漢字";
+      const text = "first line\n'@ looks like a terminator\n\u2019@ so does this\nnon-ASCII 漢字";
       const file = path.join(w.dir, "prompt.txt");
       fs.writeFileSync(file, text, "utf8");
       const run = await shell(w, sh, bareForm("powershell", { verb: "ask", provider, flags: `--prompt-file "${file}"`, stdinNull: true }));

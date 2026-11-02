@@ -108,7 +108,7 @@ export function alive(pid) {
   const ps = spawnSync("ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" });
   return ps.status === 0 && !ps.stdout.trim().startsWith("Z");
 }
-export async function until(check, timeout = 15000) {
+export async function until(check, timeout = process.platform === "win32" ? 40000 : 15000) { // Windows process queries cost a second or more under load.
   for (const end = Date.now() + timeout; Date.now() < end; await new Promise((r) => setTimeout(r, 25))) {
     const value = check(); if (value) return value;
   }

@@ -110,12 +110,12 @@ test("the deadline and the inactivity timeout stop the child (SIGTERM the group,
   const w = makeWorld();
   for (const [options, pattern] of [[{ deadlineMs: 300, inactivityMs: 20000 }, /deadline passed/], [{ deadlineMs: 20000, inactivityMs: 400 }, /printed nothing before the inactivity deadline/]]) {
     const started = Date.now();
-    const result = await runTurn(w, turnFor(w, { env: { COUNCIL_FAKE_HANG: "1" } }), options, { retryMs: 200, shutdownMs: 5000 });
+    const result = await runTurn(w, turnFor(w, { env: { COUNCIL_FAKE_HANG: "1" } }), options, { retryMs: 200, shutdownMs: process.platform === "win32" ? 20000 : 5000 });
     assert.equal(result.job.code, 1, result.job.error);
     assert.match(result.job.error, pattern);
     assert.deepEqual([result.job.cleanupPending, result.job.claimHeld], [false, false]);
     assert.ok(!alive(result.job.pid), "the hanging child was stopped");
-    assert.ok(Date.now() - started < 8000);
+    assert.ok(Date.now() - started < (process.platform === "win32" ? 25000 : 8000));
   }
   assert.deepEqual([SHUTDOWN_MS, RETRY_MS, DRAIN_MS, PIPE_WAIT_MS], [60000, 10000, 1500, 12000], "production defaults");
 });
@@ -195,7 +195,7 @@ test("cancel with the owner live only writes the marker and the owner stops its 
   const w = makeWorld();
   const turn = turnFor(w, { env: { COUNCIL_FAKE_HANG: "1" } });
   let jobId = null;
-  const running = runTurn(w, turn, { json: false }, { retryMs: 200, shutdownMs: 5000, announce: (job) => { jobId = job.id; } });
+  const running = runTurn(w, turn, { json: false }, { retryMs: 200, shutdownMs: process.platform === "win32" ? 20000 : 5000, announce: (job) => { jobId = job.id; } });
   await until(() => jobId && w.job(jobId).pid);
   const pid = w.job(jobId).pid;
   assert.ok(alive(pid));
@@ -404,7 +404,7 @@ test("a spawn failure fails the turn with cleanup confirmed, afterTurn once, and
 test("a concurrent turn on a busy thread is refused without spawning, and the history is unchanged", async () => {
   const w = makeWorld();
   const thread = randomUUID();
-  const first = runTurn(w, turnFor(w, { thread, env: { COUNCIL_FAKE_HANG: "1" } }), {}, { retryMs: 200, shutdownMs: 5000, beforeSpawn: () => new Promise((r) => setTimeout(r, 400)) });
+  const first = runTurn(w, turnFor(w, { thread, env: { COUNCIL_FAKE_HANG: "1" } }), {}, { retryMs: 200, shutdownMs: process.platform === "win32" ? 20000 : 5000, beforeSpawn: () => new Promise((r) => setTimeout(r, 400)) });
   await until(() => inspectClaim(w.home, "null", thread).state === "owned");
   const second = await runTurn(w, turnFor(w, { thread, confirmed: true, verb: "reply" }));
   assert.equal(second.job.code, 1);
