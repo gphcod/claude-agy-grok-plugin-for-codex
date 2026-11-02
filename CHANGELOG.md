@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (unreleased; 1.0.0-rc.3 candidate)
+## 1.0.0 (unreleased; 1.0.0-rc.4 candidate)
 
 First release of Council for Codex: one Codex plugin, `council`, that calls Claude Code (`claude` 2.1.314), Gemini (`agy` 1.4.12) and Grok (`grok` 1.0.70). It replaces claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0 and gemini-plugin-for-codex 0.1.2.
 
@@ -9,6 +9,10 @@ First release of Council for Codex: one Codex plugin, `council`, that calls Clau
 - A clean exit now waits up to 5 s for process-group members that are still exiting, so a provider's short-lived helpers no longer fail a finished turn with `cleanup pending`. Nothing signals them; any that outlast the wait still leave cleanup pending.
 - agy runs with `PWD` set to the real working directory. agy takes its workspace root from `PWD`, so a folder reached through a symlink (`/tmp` on macOS) had every read and edit denied in headless mode.
 - A Gemini review may read its saved review input under the state root; headless agy denied that as outside the workspace, which left reviews of several files with nothing reviewed.
+
+### PowerShell (1.0.0-rc.4)
+
+- A text line starting with a curly quote and `@` ends a PowerShell here-string too, so the skill sends it through `--prompt-file`.
 
 ### Windows (checked 2026-11-01, `docs/qualification/windows.md`)
 
