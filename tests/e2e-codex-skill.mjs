@@ -12,7 +12,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { makeWorld, ROOT, PLUGIN_ROOT, BINARY } from "./helpers.mjs";
 import { PROVIDERS } from "../plugins/council/scripts/lib/core/host.mjs";
-import { WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
+import { WINDOWS_QUALIFIED, WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
 
 const skill = fs.readFileSync(path.join(PLUGIN_ROOT, "skills", "council", "SKILL.md"), "utf8");
 const blocks = [...skill.matchAll(/```(?:bash|sh|powershell|pwsh)?\r?\n([\s\S]*?)```/g)].map((m) => m[1]).filter((b) => /scripts[\\/]council\.mjs/.test(b));
@@ -28,7 +28,7 @@ if (process.platform === "win32") {
   for (const exe of ["powershell.exe", "pwsh"]) if (onPath(exe)) SHELLS.push({ name: exe, form: "powershell", argv: (script) => [exe, ["-NoProfile", "-NonInteractive", "-Command", script]] });
 }
 /** A8: on Windows every Gemini turn verb is refused with exit 2 before any job; the call form must still carry the code. */
-const refusedHere = (provider) => provider === "gemini" && process.platform === "win32";
+const refusedHere = (provider) => provider === "gemini" && process.platform === "win32" && !WINDOWS_QUALIFIED;
 function assertRefused(run, label) {
   assert.equal(run.code, 2, `${label}: ${run.stdout}${run.stderr}`);
   assert.ok(run.stderr.includes(WINDOWS_UNSUPPORTED), `${label}: the A8 refusal: ${run.stderr}`);

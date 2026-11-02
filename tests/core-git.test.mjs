@@ -68,7 +68,7 @@ test("--commit decodes a commit touching many entry classes (add, modify, delete
   assert.equal(byPath["gone.txt"].status, "D");
   assert.equal(byPath["moved.txt"].oldPath, "move-me.txt");
   assert.match(byPath["moved.txt"].status, /^R/);
-  assert.equal(byPath["script.sh"].status, "M");
+  if (symlinks) assert.equal(byPath["script.sh"].status, "M"); // Windows records no execute bit.
   assert.equal(byPath["bin.dat"].kind, "binary");
   assert.equal(byPath["deep/nested/new.txt"].status, "A");
   if (symlinks) assert.equal(byPath.alias.newMode, "120000");
@@ -301,7 +301,7 @@ test("diff.relative never narrows a review run from a subdirectory, dirty or aga
   assert.deepEqual(collectTarget(src, { commit: "HEAD" }).entries.map((e) => e.path).sort(), ["a.txt", "src/a.txt"]);
 });
 
-test("type changes and submodule display settings stay reviewable and keep raw-path ownership", () => {
+test("type changes and submodule display settings stay reviewable and keep raw-path ownership", posixOnly, () => {
   const dir = repo();
   git(dir, ["switch", "-qc", "topic"]);
   write(dir, "link-blob", "target\n");

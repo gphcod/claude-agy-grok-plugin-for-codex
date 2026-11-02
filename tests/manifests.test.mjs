@@ -40,7 +40,7 @@ test("the validator passes on the checked-out tree and runs as a script", () => 
 test("the entry resolves binaries on setup without stdin, without spawning, and refuses providers this build lacks with exit 2", () => {
   const entry = path.join(PLUGIN, "scripts", "council.mjs");
   const state = fs.mkdtempSync(path.join(os.tmpdir(), "council-manifests-"));
-  const env = { ...process.env, PATH: "", COUNCIL_CODEX_HOME: state };
+  const env = { ...process.env, PATH: "", COUNCIL_CODEX_HOME: state, HOME: state, USERPROFILE: state };
   for (const name of Object.keys(env)) if (/^(COUNCIL_(?!CODEX_HOME)|CLAUDE_PLUGIN_CODEX_DEPTH|GROK_CODEX_DEPTH|GROK_BUILD_DEPTH|AGY_BRIDGE_DEPTH)/.test(name)) delete env[name];
   const setup = spawnSync(process.execPath, [entry, "setup"], { encoding: "utf8", env, stdio: ["pipe", "pipe", "pipe"], timeout: 10000 });
   assert.equal(setup.status, 0, setup.stderr);

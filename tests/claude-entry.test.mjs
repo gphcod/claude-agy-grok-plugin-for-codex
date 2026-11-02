@@ -215,8 +215,8 @@ test("preflight blocked: Claude's storage not writable exits 1 with the action l
   fs.writeFileSync(file, "");
   const r = w.claude(["ask", "--to", "claude", "--", "q"], "ok", { env: { CLAUDE_CONFIG_DIR: file } });
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /preflight_blocked: Claude session storage \(dir .*not-a-dir\/projects\)/);
-  assert.match(r.stderr, /\naction: Grant write access to .*not-a-dir\/projects/);
+  assert.match(r.stderr, /preflight_blocked: Claude session storage \(dir .*not-a-dir[\\/]projects\)/);
+  assert.match(r.stderr, /\naction: Grant write access to .*not-a-dir[\\/]projects/);
   assert.deepEqual([w.probes().length, w.launches().length], [0, 0]);
   const loggedOut = w.claude(["ask", "--to", "claude", "--", "q"], "ok", { env: { COUNCIL_FAKE_LOGGED_OUT: "1" } });
   assert.equal(loggedOut.status, 1);

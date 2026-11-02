@@ -43,7 +43,7 @@ export async function readStdin() {
 export const emitJson = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 /** A detached grandchild that inherits stdout and keeps it open for `ms` after this process exits. */
 export function holdPipes(ms = HOLD_MS) {
-  const child = spawn(process.execPath, ["-e", `setTimeout(() => {}, ${ms})`], { stdio: ["ignore", "inherit", "inherit"], detached: true, windowsHide: true });
+  const child = spawn(process.execPath, ["-e", `setTimeout(() => {}, ${ms})`, process.env.TEMP ?? ""], { stdio: ["ignore", "inherit", "inherit"], detached: true, windowsHide: true });
   child.unref();
   return child.pid;
 }

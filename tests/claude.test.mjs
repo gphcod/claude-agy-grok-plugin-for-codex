@@ -83,8 +83,8 @@ test("preflight descriptors: state root, Claude storage, four cold probes and th
   const d = adapter.preflight({ stateRoot: "/state", env, platform: "linux", verb: "ask", cwd: "/w" });
   assert.deepEqual(d.map((x) => [x.kind, x.access ?? null]), [["dir", "write"], ["dir", "write"], ["exec", null], ["exec", null], ["exec", null], ["exec", null], ["network", null]]);
   assert.equal(d[0].target, "/state");
-  assert.equal(d[1].target, path.join("/home/u", ".claude", "projects"));
-  assert.equal(claudeStorage({ CLAUDE_CONFIG_DIR: "/cfg" }), path.join("/cfg", "projects"));
+  assert.equal(d[1].target, path.resolve("/home/u", ".claude", "projects"));
+  assert.equal(claudeStorage({ CLAUDE_CONFIG_DIR: "/cfg" }), path.resolve("/cfg", "projects"));
   const exec = d.filter((x) => x.kind === "exec");
   assert.deepEqual(exec.map((x) => x.target.args.slice(1, 4)), [["--version"], ["auth", "status", "--json"], ["--help"], ["-p", "--append-system-prompt-file", sentinelOf("/state")]]);
   assert.ok(exec.every((x) => x.target.command === process.execPath && x.target.args[0] === FAKE), "probes run through the resolved launcher");

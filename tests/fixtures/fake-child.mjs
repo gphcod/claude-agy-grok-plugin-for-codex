@@ -43,7 +43,7 @@ if (process.env.COUNCIL_FAKE_BACKEND && !process.env.COUNCIL_FAKE_IS_BACKEND) {
   fs.writeFileSync(process.env.COUNCIL_FAKE_BACKEND, String(backend.pid));
 }
 if (process.env.COUNCIL_FAKE_GRANDCHILD) {
-  const grandchild = spawn(process.execPath, ["-e", `setTimeout(() => {}, ${Number(process.env.COUNCIL_FAKE_HOLD_MS ?? 20000)})`], { stdio: ["ignore", "inherit", "inherit"], detached: true, windowsHide: true });
+  const grandchild = spawn(process.execPath, ["-e", `setTimeout(() => {}, ${Number(process.env.COUNCIL_FAKE_HOLD_MS ?? 20000)})`, process.env.TEMP ?? ""], { stdio: ["ignore", "inherit", "inherit"], detached: true, windowsHide: true });
   grandchild.unref();
   fs.writeFileSync(process.env.COUNCIL_FAKE_GRANDCHILD, String(grandchild.pid));
 }
@@ -82,7 +82,7 @@ if (process.env.COUNCIL_FAKE_HANG) { await new Promise((resolve) => setTimeout(r
 // COUNCIL_FAKE_END_FATAL: the end event is fatal yet carries cost and structured output.
 out({ type: "end", thread, cost: 0.001, ...(structured ? { structured } : {}), ...(unconfirmed ? { unconfirmed } : {}), ...(process.env.COUNCIL_FAKE_END_FATAL ? { fatal: process.env.COUNCIL_FAKE_END_FATAL } : {}) });
 if (scenario === "hold-pipes") {
-  const child = spawn(process.execPath, ["-e", `setTimeout(() => {}, ${Number(process.env.COUNCIL_FAKE_HOLD_MS ?? 2000)})`], { stdio: ["ignore", "inherit", "inherit"], detached: true, windowsHide: true });
+  const child = spawn(process.execPath, ["-e", `setTimeout(() => {}, ${Number(process.env.COUNCIL_FAKE_HOLD_MS ?? 2000)})`, process.env.TEMP ?? ""], { stdio: ["ignore", "inherit", "inherit"], detached: true, windowsHide: true });
   child.unref();
   if (process.env.COUNCIL_FAKE_HOLD_PID) fs.writeFileSync(process.env.COUNCIL_FAKE_HOLD_PID, String(child.pid));
 }

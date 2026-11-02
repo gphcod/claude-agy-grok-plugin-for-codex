@@ -1,8 +1,19 @@
 # Changelog
 
-## 1.0.0 (unreleased; 1.0.0-rc.1 candidate)
+## 1.0.0 (unreleased; 1.0.0-rc.2 candidate)
 
 First release of Council for Codex: one Codex plugin, `council`, that calls Claude Code (`claude` 2.1.314), Gemini (`agy` 1.4.12) and Grok (`grok` 1.0.70). It replaces claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0 and gemini-plugin-for-codex 0.1.2.
+
+### Windows (checked 2026-11-01, `docs/qualification/windows.md`)
+
+- Gemini (agy) runs on Windows; the refusal stays behind `WINDOWS_QUALIFIED`.
+- Requires Node 22.19.0 or later; Node 18 is no longer supported.
+- `git rev-parse --show-toplevel` output is made native, so repository roots compare equal to other paths.
+- PowerShell and taskkill run from their system paths, so a narrow or planted PATH cannot break cleanup.
+- `cancel` no longer records a recovery on a job its owner finished during a slow process query.
+- Guard variables are the union of every replaced plugin's, so a call inside a council child cannot start one of them.
+- The test runner stops leftover fixture processes, retries removing its temp root and fails the run if it cannot.
+- On Windows, the Gemini network preflight treats a TLS refusal of its stand-in target as a reachable network; Claude's real endpoint stays strict.
 
 ### Added
 

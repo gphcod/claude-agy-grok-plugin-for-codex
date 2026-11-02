@@ -84,7 +84,7 @@ test("both scripts set Windows PowerShell's module path first and use only ASCII
   for (const script of scripts) assert.ok(script.startsWith("$env:PSModulePath=\"$PSHOME\\Modules\";$ErrorActionPreference='Stop';"), script);
   assert.equal(scripts[0].match(/-cmatch '\^\[ -~\]\*\\z'/g).length, 2);
   assert.ok(scripts[0].endsWith("if ($rows.Count) { $rows -join \"\n\" }; 'complete'"));
-  assert.match(scripts[1], /taskkill \/T \/F \/PID \$env:CC_KILL_PID/);
+  assert.match(scripts[1], /taskkill\.exe" \/T \/F \/PID \$env:CC_KILL_PID/);
 });
 
 test("a malformed field or framing reads as unknown, never as fewer processes", () => {

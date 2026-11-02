@@ -2,8 +2,7 @@
 // fake-agy.mjs, fake-grok.mjs) in one state root, one Codex session and one workspace. Every provider binary is a small
 // recording wrapper in front of its fake, so each invocation (probe, preflight exec descriptor or turn) is counted and
 // its guard variables checked. No test reaches a real CLI: the three COUNCIL_*_BIN variables name the wrappers, and the
-// HTTPS proxy variable makes the network descriptors skip their live request. On Windows every Gemini turn verb is
-// refused with exit 2 and the A8 message before any job, so the turn cases there run Claude and Grok and assert the refusal.
+// HTTPS proxy variable makes the network descriptors skip their live request.
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -12,7 +11,6 @@ import { pathToFileURL } from "node:url";
 import { makeWorld, jobIdOf, footerOf, until, alive, ROOT, BINARY } from "./helpers.mjs";
 import { DEPTH_VARIABLES, PROVIDERS } from "../plugins/council/scripts/lib/core/host.mjs";
 import { requestJobId } from "../plugins/council/scripts/lib/core/jobs.mjs";
-import { WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
 
 const FAKES = { claude: "fake-claude.mjs", gemini: "fake-agy.mjs", grok: "fake-grok.mjs" };
 const SESSION = "codex-integration-thread";
@@ -21,9 +19,8 @@ const COLD_PROBES = { claude: 4, gemini: 2, grok: 2 };
 /** The scenario each fake plays for a resumed read-only turn and for an edit turn. */
 const RESUME = { claude: "resume", gemini: "resume", grok: "resume" };
 const TASK = { claude: "task", gemini: "task", grok: "resume" };
-/** A8: on Windows every Gemini turn verb exits 2 before any job (gemini.mjs checkRequest); the turn cases there run claude and grok. */
 const WIN = process.platform === "win32";
-const TURN_PROVIDERS = WIN ? PROVIDERS.filter((p) => p !== "gemini") : PROVIDERS;
+const TURN_PROVIDERS = PROVIDERS;
 const RESUME_DENY_MARKERS = ["search_replace", "write", "run_terminal_cmd", "search_tool", "use_tool"];
 
 /** One state root, one session, one workspace; the three providers behind recording wrappers. */
@@ -72,12 +69,6 @@ const large = (w) => { for (let i = 0; i < 3; i++) fs.writeFileSync(path.join(w.
 test("three providers in one session and workspace, in sequence: bare wait lists all three, each reply stays with its provider, a conflicting --to starts nothing", () => {
   const w = world();
   const jobs = {};
-  if (WIN) {
-    const refused = w.run(["ask", "--to", "gemini", "--", "hello gemini"]);
-    assert.equal(refused.status, 2, refused.stdout + refused.stderr);
-    assert.ok(refused.stderr.includes(WINDOWS_UNSUPPORTED));
-    assert.equal(w.turns("gemini").length, 0);
-  }
   for (const provider of TURN_PROVIDERS) {
     const r = w.run(["ask", "--to", provider, "--effort", "low", "--", `hello ${provider}`]);
     assert.equal(r.status, 0, `${provider}: ${r.stdout}${r.stderr}`);
@@ -212,7 +203,6 @@ test("models --refresh and setup cover the three providers; every probe, preflig
     assert.match(setup.stdout, new RegExp(`^${provider}: \\S+${BINARY[provider][0]}\\.mjs \\(node-script\\) · .* · logged in · tiers consult=\\S+ exec=\\S+ deep=\\S+ · preflight ok$`, "m"), provider);
   }
   assert.match(setup.stdout, /warning: Gemini read-only turns can search the web; --web is not offered for Gemini/);
-  if (WIN) assert.ok(setup.stdout.includes(`warning: ${WINDOWS_UNSUPPORTED}`), "setup reports Gemini unsupported on Windows (A8)");
   for (const provider of TURN_PROVIDERS) assert.equal(w.run(["ask", "--to", provider, "--", "q"]).status, 0, provider);
   const all = w.invoked();
   assert.ok(all.length >= TURN_PROVIDERS.length + 2 + 2 + 4 + 2 + 2, `probes, descriptors and turns were all recorded (${all.length})`);
@@ -236,11 +226,12 @@ for (const provider of TURN_PROVIDERS) {
 
     const running = w.start(["ask", "--to", provider, "--request-id", "orphan", "--", "slow"], { env: { COUNCIL_FAKE_SCENARIO: "slow", COUNCIL_FAKE_SLOW_MS: "30000" } });
     const id = requestJobId(provider, SESSION, w.workspace, "orphan");
-    await until(() => w.turns(provider).length === 4 && fs.existsSync(path.join(w.home, "jobs", id, "meta.json")) && w.job(id).pid && w.job(id).leader);
+    await until(() => w.turns(provider).length === 4 && fs.existsSync(path.join(w.home, "jobs", id, "meta.json")) && w.job(id).pid && (WIN || w.job(id).leader));
     const child = w.job(id).pid;
     running.child.kill("SIGKILL");
     await running.exited;
-    assert.ok(alive(child), "the child outlives its companion");
+    // Windows ends a non-detached child with its hard-killed parent (libuv's job object); only POSIX leaves an orphan.
+    if (!WIN) assert.ok(alive(child), "the child outlives its companion");
     const before = count();
     const cancel = w.call(["cancel", id, "--timeout", "15"]);
     assert.equal(cancel.status, 0, cancel.stdout + cancel.stderr);
@@ -266,7 +257,7 @@ for (const provider of TURN_PROVIDERS) {
 
     const dying = w.start(["reply", review, "--next-input", "--request-id", "second"], { env: { COUNCIL_FAKE_SCENARIO: "slow", COUNCIL_FAKE_SLOW_MS: "30000" } });
     const id = requestJobId(provider, SESSION, w.workspace, "second");
-    await until(() => turns().length === 2 && fs.existsSync(path.join(w.home, "jobs", id, "meta.json")) && w.job(id).pid && w.job(id).leader);
+    await until(() => turns().length === 2 && fs.existsSync(path.join(w.home, "jobs", id, "meta.json")) && w.job(id).pid && (WIN || w.job(id).leader));
     const killedUnits = units(turns()[1]);
     assert.ok(killedUnits && killedUnits !== units(turns()[0]), "the dying turn carried the second batch");
     const child = w.job(id).pid;
@@ -298,8 +289,8 @@ for (const provider of TURN_PROVIDERS) {
 
 test("replay and cancel isolation: a request id is bound to its first provider; cancelling one provider's job leaves another's running job and a third's record alone", async () => {
   const w = world();
-  // The third provider's finished job: Gemini, except on Windows, where Gemini turns are refused (A8).
-  const gemini = WIN ? null : w.run(["ask", "--to", "gemini", "--", "finished first"]);
+  // The third provider's finished job.
+  const gemini = w.run(["ask", "--to", "gemini", "--", "finished first"]);
   if (gemini) assert.equal(gemini.status, 0, gemini.stderr);
   const geminiJob = gemini ? jobIdOf(gemini.stderr) : null;
   const geminiMeta = gemini ? fs.readFileSync(path.join(w.home, "jobs", geminiJob, "meta.json"), "utf8") : null;

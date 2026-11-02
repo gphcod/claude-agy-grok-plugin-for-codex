@@ -9,7 +9,7 @@ import { Readable } from "node:stream";
 import { makeWorld, until, alive, ROOT } from "./helpers.mjs";
 import { main } from "../plugins/council/scripts/council.mjs";
 import { requestKey } from "../plugins/council/scripts/lib/core/jobs.mjs";
-import { WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
+import { WINDOWS_QUALIFIED, WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
 
 const posixUser = process.platform !== "win32" && process.getuid?.() !== 0;
 
@@ -99,6 +99,7 @@ test("invalid input still exits 2 when the state root is blocked: an unknown pro
   const io = { stdout: { write: () => true }, stderr: { write: (s) => { stderr += s; return true; } }, stdin: Readable.from([]) };
   const env = { ...w.env, COUNCIL_AGY_BIN: path.join(ROOT, "tests", "fixtures", "fake-agy.mjs") };
   const code = await main(["ask", "--to", "gemini", "--request-id", "g1", "--", "q"], env, io, { cwd: w.workspace, platform: "win32" });
+  if (WINDOWS_QUALIFIED) { assert.notEqual(code, 0, "the state root check still stops it"); assert.ok(!stderr.includes(WINDOWS_UNSUPPORTED), stderr); return; }
   assert.equal(code, 2, stderr);
   assert.ok(stderr.includes(WINDOWS_UNSUPPORTED), stderr);
   assert.deepEqual(w.fakeCalls(), []);

@@ -8,12 +8,10 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { makeWorld, jobIdOf, footerOf, alive, until } from "./helpers.mjs";
 import { main } from "../plugins/council/scripts/council.mjs";
-import { READ_ONLY_DENY, WINDOWS_UNSUPPORTED } from "../plugins/council/scripts/lib/providers/gemini.mjs";
+import { READ_ONLY_DENY } from "../plugins/council/scripts/lib/providers/gemini.mjs";
 
 const FAKE = path.resolve("tests", "fixtures", "fake-agy.mjs");
-/** A8: on Windows every Gemini turn verb exits 2 before any job, so the cases that run turns are skipped there and the
- *  last test asserts the refusal instead. */
-const turns = { skip: process.platform === "win32" && "A8: Gemini turn verbs exit 2 on Windows (asserted by the Windows refusal test)" };
+const turns = {};
 /** A world wired to fake-agy, with an optional global agy settings file under its HOME. */
 function world({ git = true, global } = {}) {
   const w = makeWorld({ git });
@@ -228,6 +226,7 @@ test("the stop path ends agy's language-server child with its group (deadline), 
   const server = w.logged().find((e) => e.languageServer).languageServer;
   await until(() => !alive(server), 5000);
   assert.equal(w.job(jobIdOf(stopped.stderr)).cleanupPending, false);
+  if (process.platform === "win32") return; // No reparenting to pid 1 there.
   const orphan = world();
   const r = await inProcess(orphan, ["ask", "--to", "gemini", "--json", "--", "q"], { env: { COUNCIL_FAKE_SCENARIO: "language-server-orphan", COUNCIL_FAKE_ORPHAN_MS: "1200" }, hooks: { beatMs: 100 } });
   const json = JSON.parse(r.stdout);
@@ -281,15 +280,10 @@ test("a backend persistence error on agy's stderr makes a successful turn need a
   assert.equal(w.job(JSON.parse(r.stdout).job).incomplete, "agy's diagnostics report denied host access (stderr); the turn may not have persisted");
 });
 
-test("on Windows every Gemini turn verb exits 2 with the A8 message before any job or launch; setup says so", { skip: process.platform !== "win32" && "Windows only (A8); runs in the S7.2 session" }, () => {
+test("on a qualified Windows Gemini turns run (A8); setup carries no refusal", { skip: process.platform !== "win32" && "Windows only (A8)" }, () => {
   const w = world();
-  fs.writeFileSync(path.join(w.workspace, "change.txt"), "x\n");
-  for (const args of [["ask", "--to", "gemini", "--", "q"], ["review", "--to", "gemini"], ["task", "--to", "gemini", "--", "edit"]]) {
-    const r = w.gemini(args);
-    assert.equal(r.status, 2, `${args.join(" ")}: ${r.stdout}${r.stderr}`);
-    assert.ok(r.stderr.includes(WINDOWS_UNSUPPORTED), r.stderr);
-  }
-  assert.equal(w.fakeCalls().length, 0, "nothing reached agy");
-  assert.equal(fs.existsSync(path.join(w.home, "jobs")) ? fs.readdirSync(path.join(w.home, "jobs")).length : 0, 0, "no job record");
-  assert.ok(w.call(["setup", "--to", "gemini"]).stdout.includes(`warning: ${WINDOWS_UNSUPPORTED}`));
+  const r = w.gemini(["ask", "--to", "gemini", "--", "q"]);
+  assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+  assert.equal(w.fakeCalls().length, 1);
+  assert.ok(!w.call(["setup", "--to", "gemini"]).stdout.includes("not supported on Windows"));
 });

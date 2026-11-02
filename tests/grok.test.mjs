@@ -270,7 +270,7 @@ test("preflight: a hidden login file exits 1 preflight_blocked naming it, with z
   const w = world({ login: false });
   const r = w.grok(["ask", "--to", "grok", "--", "q"]);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /^council: preflight_blocked: Grok login file \(file .*\.grok\/auth\.json\): read access is missing \(ENOENT\)\naction: Grant read access to .*auth\.json/);
+  assert.match(r.stderr, /^council: preflight_blocked: Grok login file \(file .*\.grok[\\/]auth\.json\): read access is missing \(ENOENT\)\naction: Grant read access to .*auth\.json/);
   assert.deepEqual([w.fakeCalls().length, w.probes().length], [0, 0]);
   assert.equal(fs.existsSync(path.join(w.home, "jobs")) ? fs.readdirSync(path.join(w.home, "jobs")).length : 0, 0);
   const keyed = w.grok(["ask", "--to", "grok", "--", "q"], { env: { GROK_API_KEY: "test-key" } });

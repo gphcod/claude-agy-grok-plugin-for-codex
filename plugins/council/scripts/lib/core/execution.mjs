@@ -1,7 +1,7 @@
 // Process inspection and ownership (S2.4), ported from grok_plugin_for_codex 1.1.0 lib/execution.mjs and lib/winargs.mjs
 // (inline). `ownsExecution` delegates the job-specific argv evidence to `adapter.ownsProcess(row, job, platform,
 // hasFlagOperand)`; darwin's ps adds `pgid=`; the empty-command-line list covers the three provider binaries and node; the
-// depth guard reads the five A5.1 variables.
+// depth guard reads the A5.1 variables.
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -15,11 +15,13 @@ export const QUERY_MS = 20000;
 const norm = (s, platform) => platform === "win32" ? String(s).replace(/\\/g, "/").toLowerCase() : String(s);
 const decodeHex = (s) => /^(?:[0-9a-f]{4})*$/.test(s) ? (s.match(/.{4}/g) ?? []).map((c) => String.fromCharCode(parseInt(c, 16))).join("") : null;
 const decodeText = (s) => s[0] === "=" ? (/^[\x20-\x7e]*$/.test(s.slice(1)) ? s.slice(1) : null) : s[0] === "x" ? decodeHex(s.slice(1)) : null;
-const psRun = (script, env, timeout = QUERY_MS) => spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+/** Windows PowerShell by its system path, so a narrow or planted PATH cannot break or hijack the identity-checked query and kill. */
+const powershellExe = () => { const file = process.env.SystemRoot ? path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe") : null; return file && fs.existsSync(file) ? file : "powershell.exe"; };
+const psRun = (script, env, timeout = QUERY_MS) => spawnSync(powershellExe(), ["-NoProfile", "-NonInteractive", "-Command", script], {
   env: { ...process.env, ...env }, encoding: "utf8", shell: false, windowsHide: true, timeout, maxBuffer: 16 * 1024 * 1024,
 });
 
-/** The depth guard (A5.1): refuse to run when any of the five variables is set in this process's environment. */
+/** The depth guard (A5.1): refuse to run when any of the variables is set in this process's environment. */
 export function depthGuard(env = process.env) {
   const set = DEPTH_VARIABLES.filter((name) => env[name]);
   return set.length ? `refusing a nested call: ${set.join(", ")} set; this process runs inside a provider turn started by a plugin` : null;
@@ -334,7 +336,7 @@ if ($p.HasExited) { 'gone'; exit };
 $q=Get-CimInstance Win32_Process -Filter "ProcessId=$env:CC_KILL_PID";
 if (-not $q -or -not $q.CommandLine) { 'unknown'; exit };
 if ("$($q.CreationDate.ToUniversalTime().Ticks)" -ne $env:CC_KILL_STAMP -or $q.CommandLine -cne $env:CC_KILL_RAW) { 'mismatch'; exit };
-taskkill /T /F /PID $env:CC_KILL_PID | Out-Null;
+& "$env:SystemRoot\\System32\\taskkill.exe" /T /F /PID $env:CC_KILL_PID | Out-Null;
 if ($LASTEXITCODE -eq 0 -or $p.HasExited) { 'sent' } else { 'unknown' }`;
 
 /**

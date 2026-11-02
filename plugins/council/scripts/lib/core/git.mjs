@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { UsageError } from "./args.mjs";
+import { canonical } from "./fs.mjs";
 import { SNAPSHOT_CAP, trackedInput, untrackedPaths, utf8 } from "./review-input.mjs";
 
 const DIFF_BUFFER = 64 * 1024 * 1024;
@@ -29,7 +30,7 @@ export function checked(result, what) {
 /** The repository root of `cwd`, or null outside Git. */
 export function gitRoot(cwd) {
   const r = git(cwd, ["rev-parse", "--show-toplevel"], { timeoutMs: 15000 });
-  return !r.error && r.status === 0 ? r.stdout.trim() : null;
+  return !r.error && r.status === 0 ? canonical(r.stdout.trim()) : null; // Git prints C:/x/y on Windows; every other path here is native
 }
 /** `<ref>^{commit}` as a full object id, or null; a ref that could be read as an option is refused. */
 export function oidOf(cwd, ref) {

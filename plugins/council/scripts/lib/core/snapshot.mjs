@@ -21,9 +21,9 @@ function git(root, args, env, { timeoutMs = SNAPSHOT.timeoutMs, cap = SNAPSHOT.m
 }
 /** The Git scope of a workspace: its realpath and repository root, or `git: false` outside Git. */
 export function workspace(cwd, env = {}) {
-  const real = fs.realpathSync(cwd);
+  const real = fs.realpathSync.native(cwd);
   const r = git(real, ["rev-parse", "--show-toplevel"], env);
-  return { cwd: real, root: r.code === 0 ? fs.realpathSync(r.output.toString("utf8").trim()) : real, git: r.code === 0 };
+  return { cwd: real, root: r.code === 0 ? fs.realpathSync.native(r.output.toString("utf8").trim()) : real, git: r.code === 0 };
 }
 function readBounded(file, remaining) {
   const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
@@ -154,6 +154,6 @@ export function workspaceEdits(job, cwd, env = {}) {
     if (!moved) return null;
     for (const name of moved) names.add(name);
   }
-  const base = fs.realpathSync(cwd);
+  const base = fs.realpathSync.native(cwd);
   return [...names].sort().map((name) => path.relative(base, path.join(after.root, name)).split(path.sep).join("/"));
 }

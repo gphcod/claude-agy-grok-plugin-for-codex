@@ -89,7 +89,7 @@ test("cancel while the owner companion runs only marks the job; the owner stops 
   const finished = await running.exited;
   assert.equal(finished.code, 1);
   assert.match(footerOf(finished.stdout), new RegExp(`^council null cancelled · job ${job}`));
-  assert.ok(!alive(child));
+  await until(() => !alive(child), 5000); // A Windows process killed by taskkill takes a moment to finish exiting.
   assert.ok(!fs.existsSync(path.join(w.home, "jobs", job, "stopped")), "no second metadata writer");
   assert.equal(w.call(["cancel", job]).status, 0, "a finished job counts as stopped");
 });
@@ -119,7 +119,8 @@ test("a hard-killed companion keeps its thread blocked until cancel recovers it;
   const thread = w.job(id).requestedThreadId;
   running.child.kill("SIGKILL");
   await running.exited;
-  assert.ok(alive(child), "the child outlives its companion");
+  // Windows ends a non-detached child with its hard-killed parent (libuv's job object); only POSIX leaves an orphan.
+  if (process.platform !== "win32") assert.ok(alive(child), "the child outlives its companion");
   const before = fs.readFileSync(path.join(w.home, "jobs", id, "meta.json"), "utf8");
   const blocked = w.call(["reply", thread, "--to", "null", "--", "again"]);
   assert.equal(blocked.status, 1, "the requested id of a lost job is still claimed");
