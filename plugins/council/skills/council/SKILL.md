@@ -26,7 +26,7 @@ Change a delimiter found alone in the text. Text over 64 KiB, or in PowerShell o
 - `wait` lists this session's jobs; `wait <job>`, `cancel [job]` (no `--to`), `models`, `setup`. `--web` (not gemini), `--model`, `--effort`.
 
 ## Policy
-Tiers consult/exec/deep: claude default/high sonnet/high default/xhigh; grok 4.7/high build-fast/xhigh 4.7/xhigh; gemini argon/high flash/high argon/high.
+Tiers consult/exec/deep: claude claude-opus-5-5/high sonnet/high default/xhigh; grok 4.7/high build-fast/xhigh 4.7/xhigh; gemini argon/medium flash/high argon/high.
 User named no model: `ask`/`reply`/`review` only with `--tier consult`; ask once before higher effort (not for gemini). Named model: tier by complexity; explicit flags win. `task` only when the user authorizes edits, at default tier exec; `cancel --confirm-ended` only on the user's word.
 Each review, task, exec, deep, xhigh or max call gets `--request-id <new word>`; retrying the identical call, flags included, replays the first result.
 Fan-out: one `ask` per provider as parallel shell calls, same brief, own `--request-id`; then `reply <job>`, never `--last`.

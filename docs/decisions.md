@@ -339,3 +339,17 @@ Round 2 (review of these branches by Codex and Gemini 4 Argon; the twin gets R1 
 ## 2026-11-01 The test runner keeps its temp directories in one removed root
 
 The default suite makes thousands of directories under `os.tmpdir()` and most tests never remove them; about 43,000 entries and 9 GB had built up over this project's runs. `scripts/run-tests.mjs` now points `TMPDIR`, `TMP` and `TEMP` at one `council-run-*` directory per default run and removes it afterwards. Live runs keep the real temp directory, because they write result files there. A direct `node --test` is unchanged. The twin has the same change.
+
+## 2026-11-02 Release review and 1.0.0
+
+The user authorized installing from the marketplace, paid testing and discussion with Gemini 4 Argon, Claude and Grok through Council, fixing validated issues, and committing, merging and tagging on main. `docs/qualification/review-2026-11-02.md` records every finding and its disposition.
+
+- A3.3 amended: Claude review turns default to 20, matching ask/reply, because a two-turn limit can terminate context reads before structured output. A5's TurnRequest gains `reviewRoot`; the existing `reviewInputRoot` is documented and retained on discussion turns. These are per-review read scopes, not changes to the saved user policy.
+- A7.7 clarified: pending status follows the newest state for the same review; retained jobs protect the immutable snapshot directories they reference. Old pending metadata does not pin completed, expired reviews forever.
+- A7 finalization clarified: once a done marker publishes the provider result, claim release failure preserves that outcome and reports cleanup pending. Release retries busy operations; a failed rmdir restores the owned marker, rather than deleting an unidentified empty claim.
+- Critical job/thread metadata reads are strict, with bounded busy retries. Optional caches keep permissive missing/unreadable semantics. State-root validation resolves existing ancestors and checks both workspace and plugin before creating directories.
+- `setup --live --json` remains an array, adding a `live` result to each provider report. Missing CLIs are skipped, actual failures outrank exit 10, and no ready provider returns failure. `models --refresh` keeps each missing provider's saved/static catalog with a warning and continues.
+- Updated pins for claims, fs, findings, jobs and reader. These algorithms remain host-neutral; propagation to the separate Claude-hosted twin is deferred rather than claiming byte identity. This task changes only the Codex repository.
+- Release qualification uses the existing macOS record plus this Windows marketplace and in-chat review. No GitHub Actions are required; checks run locally and commits carry `[skip ci]`.
+- Claude round 2 found that strict metadata reads made optional pruning abort unrelated new work. Pruning now skips an unreadable inventory without removing anything, and admission tolerates housekeeping failure. Strict selection errors name the record and recovery options. A regression proves a fresh ask succeeds while a corrupt unrelated job remains intact.
+- The owner's 2026-11-02 follow-ups set consultation defaults to exact `claude-opus-5-5/high`, `grok-4.7/high`, and `gemini-4-argon/medium`; explicit execution/deep tiers and model overrides remain available. Tiers, skill, README and tests are aligned.

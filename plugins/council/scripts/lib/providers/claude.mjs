@@ -30,7 +30,7 @@ export const TASK_DISALLOWED = ["Bash(git push*)", "Bash(git reset --hard*)", "B
 /** Tools a read-only launch must never advertise in its init event. */
 const MUTATING = [...EDIT_TOOLS, "Bash"];
 /** `--max-turns` defaults by verb (A3.3). */
-export const MAX_TURNS = Object.freeze({ review: 2, ask: 20, reply: 20, task: 30 });
+export const MAX_TURNS = Object.freeze({ review: 20, ask: 20, reply: 20, task: 30 });
 export const EMPTY_MCP = '{"mcpServers":{}}';
 export const NO_HOOKS = '{"disableAllHooks":true}';
 /** The serialized stdin line's cap (CLAUDEX runtime.mjs LIMITS.requestBytes). */
@@ -69,7 +69,7 @@ export function buildArgs(request, session) {
   args.push("--tools", tools.join(","));
   if (!policy.allowMcp) args.push("--mcp-config", EMPTY_MCP, "--strict-mcp-config");
   args.push("--settings", NO_HOOKS, "--no-chrome");
-  for (const root of policy.readRoots ?? []) args.push("--add-dir", root);
+  for (const root of new Set([...(policy.readRoots ?? []), request.reviewRoot, request.reviewInputRoot].filter(Boolean))) args.push("--add-dir", root);
   if (request.structured && request.schemaPath) args.push("--json-schema", JSON.stringify(JSON.parse(fs.readFileSync(request.schemaPath, "utf8"))));
   // --allowedTools and --disallowedTools are variadic, so they come last (docs/spike/claude.md).
   if (allowed.length) args.push("--allowedTools", allowed.join(","));

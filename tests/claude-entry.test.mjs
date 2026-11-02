@@ -36,7 +36,7 @@ const READ_ONLY = { mode: "dontAsk", tools: READ, allowed: [], disallowed: [], c
 const TASK_SET = { mode: "acceptEdits", tools: TASK, allowed: ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"], disallowed: DISALLOWED, contract: CONTRACT, snapshot: "on", mcpOff: true, hooksOff: true };
 const subset = (actual, expected) => Object.fromEntries(Object.keys(expected).map((k) => [k, actual[k]]));
 
-test("ask: pong, the init-reported model in the footer when default was requested, cold then warm probes", () => {
+test("ask: the explicit Opus 5.5 default, CLI-default override, cold then warm probes", () => {
   const w = world();
   const r = w.claude(["ask", "--to", "claude", "--effort", "low", "--", "Reply with pong"]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
@@ -46,7 +46,7 @@ test("ask: pong, the init-reported model in the footer when default was requeste
   assert.deepEqual(w.probes().map((p) => p.probe), ["version", "auth", "help", "capability"], "cold: CLAUDEX's four probes");
   const [call] = w.launches();
   assert.deepEqual(subset(flags(call), READ_ONLY), READ_ONLY);
-  assert.deepEqual([flags(call).model, flags(call).maxTurns, flags(call).resume], [null, "20", null], "default omits --model; ask gets 20 turns");
+  assert.deepEqual([flags(call).model, flags(call).maxTurns, flags(call).resume], ["claude-opus-5-5", "20", null], "the default pins Opus 5.5; ask gets 20 turns");
   assert.ok(call.prompt.startsWith(`${template("advice")}\n\nReply with pong`), "the advice template travels in the input");
   for (const name of ["COUNCIL_DEPTH", "CLAUDE_PLUGIN_CODEX_DEPTH", "GROK_CODEX_DEPTH", "GROK_BUILD_DEPTH", "AGY_BRIDGE_DEPTH"]) assert.equal(call.env[name], "1");
   const job = json(w.call(["wait", jobIdOf(r.stderr), "--json"]));
@@ -111,7 +111,7 @@ test("review → task --thread → reply: schema and two turns on the review, th
   const reply = w.claude(["reply", jobIdOf(task.stderr), "--", "F1 fixed?"], "review-findings");
   assert.ok([0, 10].includes(reply.status), reply.stdout + reply.stderr);
   const calls = w.launches();
-  assert.deepEqual(calls.map((c) => [flags(c).mode, flags(c).schema, flags(c).maxTurns]), [["dontAsk", true, "2"], ["acceptEdits", false, "30"], ["dontAsk", true, "20"]]);
+  assert.deepEqual(calls.map((c) => [flags(c).mode, flags(c).schema, flags(c).maxTurns]), [["dontAsk", true, "20"], ["acceptEdits", false, "30"], ["dontAsk", true, "20"]]);
   assert.deepEqual(subset(flags(calls[0]), READ_ONLY), READ_ONLY);
   assert.deepEqual(subset(flags(calls[1]), READ_ONLY), subset(TASK_SET, READ_ONLY));
   assert.deepEqual(subset(flags(calls[2]), READ_ONLY), READ_ONLY);
@@ -228,7 +228,7 @@ test("setup and models: the claude row from the probes, no listing to refresh", 
   const w = world();
   const setup = w.call(["setup", "--to", "claude"]);
   assert.equal(setup.status, 0, setup.stderr);
-  assert.match(setup.stdout, /^claude: .*fake-claude\.mjs \(node-script\) · 2\.1\.314 \(Claude Code\) · logged in · tiers consult=default\/high exec=sonnet\/high deep=default\/xhigh · preflight ok/);
+  assert.match(setup.stdout, /^claude: .*fake-claude\.mjs \(node-script\) · 2\.1\.314 \(Claude Code\) · logged in · tiers consult=claude-opus-5-5\/high exec=sonnet\/high deep=default\/xhigh · preflight ok/);
   assert.ok(!setup.stdout.includes("firstParty"));
   const models = w.call(["models", "--to", "claude", "--refresh"]);
   assert.equal(models.status, 0);

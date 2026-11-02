@@ -51,7 +51,7 @@ test("version and models: the probes the preflight caches", { skip }, () => {
 test("setup and models --refresh --to gemini", { skip }, () => {
   const setup = council(["setup", "--to", "gemini"]);
   assert.equal(setup.status, 0, setup.stdout + setup.stderr);
-  assert.match(setup.stdout, /^gemini: \S+agy \(native\) · 1\.4\.\d+ · logged in · tiers consult=gemini-4-argon\/high/);
+  assert.match(setup.stdout, /^gemini: \S+agy \(native\) · 1\.4\.\d+ · logged in · tiers consult=gemini-4-argon\/medium/);
   assert.match(setup.stdout, /warning: Gemini read-only turns can search the web/);
   console.log(`# live setup: ${setup.stdout.trim().replace(/\n/g, " | ")}`);
   const refresh = council(["models", "--to", "gemini", "--refresh"]);

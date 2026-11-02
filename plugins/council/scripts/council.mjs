@@ -191,13 +191,13 @@ function planTurn(ctx, adapter, verb, o, text, memo) {
       schemaCarrier = plan.schemaCarrier;
       const inputRoot = jobId ? path.join(ctx.home, "jobs", jobId, "review-input") : "";
       const first = startReviewTurn(review, jobId ?? "pending", inputRoot);
-      reviewState = { ...first.state, adversarial: Boolean(o.adversarial), focus: text };
+      reviewState = { ...first.state, adversarial: Boolean(o.adversarial), focus: text, workspaceRoot: review.root };
       batch = first.batch;
       target = review.label;
       unreviewed = review.unsupported;
       reviewFiles = { snapshot: review.snapshot, diff: review.fullDiff };
       prompt = buildBatchReviewPrompt({ adversarial: Boolean(o.adversarial), focus: text, ledger: [], batchText: first.text, label: review.label, unsupported: review.unsupported,
-        state: first.state, embedSchema: schemaCarrier === "embed" ? fs.readFileSync(SCHEMA_PATH, "utf8") : null });
+        state: reviewState, embedSchema: schemaCarrier === "embed" ? fs.readFileSync(SCHEMA_PATH, "utf8") : null });
     } else if (nextInput) {
       if (!reviewState) throw new UsageError("--next-input requires a thread started by review");
       const next = continueReviewTurn(reviewState, Boolean(jobId));
@@ -219,7 +219,8 @@ function planTurn(ctx, adapter, verb, o, text, memo) {
     const resume = Boolean(thread);
     const request = {
       verb, nextInput, text, prompt, instructions, contractPath: path.join(PLUGIN_ROOT, "contract.md"), model: settings.modelId, effort: settings.effort, resume,
-      threadId: thread?.threadId ?? null, cwd, env: ctx.env, reviewInputRoot: verb === "review" || nextInput ? reviewState?.inputRoot || null : null, schemaPath: structuredReview ? SCHEMA_PATH : null, structured: structuredReview, readOnly: verb !== "task",
+      threadId: thread?.threadId ?? null, cwd, env: ctx.env, reviewInputRoot: structuredReview ? reviewState?.inputRoot || null : null,
+      reviewRoot: structuredReview ? reviewState?.workspaceRoot || null : null, schemaPath: structuredReview ? SCHEMA_PATH : null, structured: structuredReview, readOnly: verb !== "task",
       web: Boolean(o.web ?? base?.web), allowCommands: o["allow-command"] ?? [], maxTurns: o["max-turns"] !== undefined ? Number(o["max-turns"]) : null,
       maxBudgetUsd: o["max-budget-usd"] !== undefined ? Number(o["max-budget-usd"]) : null, policy, agent: prev?.agent ?? thread?.record?.agent ?? null, launcher,
       deadlineMs: seconds(o.deadline, DEADLINE_S, "deadline") * 1000, // agy's --print-timeout is set from it (A3.3)
@@ -449,19 +450,26 @@ async function modelsVerb(ctx, { options: o }, io) {
       report.push({ provider, available: false, models: statics ? Object.keys(statics.models ?? statics.families ?? {}) : [], aliases: statics?.aliases ?? {} });
       continue;
     }
-    let refreshed = null;
+    let refreshed = null, warning = null;
     if (o.refresh && adapter.catalog?.listing !== false) {
-      const probe = await adapter.probe(adapter.resolveLauncher(ctx.env), guardedEnv(ctx.env)); // a probe is a provider child too (A5.1)
-      if (probe?.models) refreshed = saveRefreshedCatalog(ctx.home, provider, probe.models).updatedAt;
+      try {
+        const launcher = adapter.resolveLauncher(ctx.env);
+        if (!launcher) throw new LauncherError(`${provider} CLI is not installed; keeping the saved or static catalog`);
+        const probe = await adapter.probe(launcher, guardedEnv(ctx.env)); // a probe is a provider child too (A5.1)
+        if (probe?.models) refreshed = saveRefreshedCatalog(ctx.home, provider, probe.models).updatedAt;
+        else warning = `${provider} returned no model listing; keeping the saved or static catalog`;
+      } catch (error) { warning = error.message; }
     }
     const catalog = catalogFor(adapter, ctx.home);
-    report.push({ provider, available: true, refreshedAt: catalog.refreshedAt ?? refreshed, models: Object.entries(catalog.models).map(([id, efforts]) => ({ id, efforts })), aliases: catalog.aliases });
+    report.push({ provider, available: true, refreshedAt: catalog.refreshedAt ?? refreshed, models: Object.entries(catalog.models).map(([id, efforts]) => ({ id, efforts })), aliases: catalog.aliases,
+      ...(warning ? { warning } : {}) });
   }
   if (o.json) out(`${JSON.stringify(report)}\n`);
   else for (const r of report) {
     if (!r.available) { out(`${r.provider}: provider not available in this build · static catalog: ${r.models.join(", ") || "none"}\n`); continue; }
     out(`${r.provider}${r.refreshedAt ? ` (refreshed ${r.refreshedAt})` : " (static catalog)"}\n${r.models.map((m) => `  ${m.id}: ${m.efforts.join(", ") || "-"}`).join("\n")}\n`);
     if (Object.keys(r.aliases).length) out(`  aliases: ${Object.entries(r.aliases).map(([a, id]) => `${a}=${id}`).join(", ")}\n`);
+    if (r.warning) out(`  warning: ${r.warning}\n`);
   }
   return 0;
 }
@@ -506,7 +514,7 @@ async function setupVerb(ctx, parsed, io, deps) {
     if (provider === "gemini") entry.warnings.push("Gemini read-only turns can search the web; --web is not offered for Gemini");
     report.push(entry);
   }
-  if (o.json) out(`${JSON.stringify(report)}\n`);
+  if (o.json) { if (!o.live) out(`${JSON.stringify(report)}\n`); }
   else for (const r of report) {
     if (!r.available) { out(`${r.provider}: ${r.name} ${r.binary ?? "not found"} · provider not available in this build\n`); continue; }
     out(`${r.provider}: ${r.binary ?? "not found"}${r.kind ? ` (${r.kind})` : ""}${r.version ? ` · ${r.version}` : ""}${r.loggedIn === null ? "" : r.loggedIn ? " · logged in" : " · not logged in"}`
@@ -515,11 +523,31 @@ async function setupVerb(ctx, parsed, io, deps) {
     if (r.action) out(`  action: ${r.action}\n`);
   }
   if (o.live) {
-    let code = 0;
+    let code = 0, attempted = 0;
+    const combineExit = (a, b) => [a, b].find((value) => value !== 0 && value !== 10) ?? (a || b);
     for (const r of report.filter((x) => x.available)) {
-      const live = { verb: "ask", options: { to: r.provider, tier: "consult" }, positionals: [], hasDashDash: true };
-      code = Math.max(code, await runTurnVerb(ctx, live, "Reply with exactly PASS.", io, deps));
+      if (!r.binary || !r.preflight?.startsWith("ok")) {
+        r.live = { provider: r.provider, status: "skipped", exit: 1, error: "provider is not ready; see setup warnings" };
+        if (o.to) code = combineExit(code, 1);
+        continue;
+      }
+      attempted += 1;
+      const live = { verb: "ask", options: { to: r.provider, tier: "consult", ...(o.json ? { json: true } : {}) }, positionals: [], hasDashDash: true };
+      let captured = "";
+      const liveIo = o.json ? { ...io, stdout: { write: (text) => { captured += text; return true; } } } : io;
+      try {
+        code = combineExit(code, await runTurnVerb(ctx, live, "Reply with exactly PASS.", liveIo, deps));
+        if (o.json) r.live = JSON.parse(captured);
+      } catch (error) {
+        const exit = error instanceof UsageError ? 2 : 1;
+        r.live = { provider: r.provider, status: error instanceof PreflightBlocked ? "preflight_blocked" : "failed", exit, error: error.message,
+          ...(error instanceof PreflightBlocked ? { action: error.action } : {}) };
+        if (!o.json) out(`${r.provider}: live check failed: ${error.message}\n`);
+        code = combineExit(code, exit);
+      }
     }
+    if (!attempted) code = combineExit(code, 1);
+    if (o.json) out(`${JSON.stringify(report)}\n`);
     return code;
   }
   return 0;
@@ -537,14 +565,15 @@ export async function main(argv, env = process.env, io = { stdout: process.stdou
   try {
     // (1) Parse argv, honour --cwd.
     parsed = parseArgv(argv);
-    if (parsed.verb === "help") { io.stdout.write(`${USAGE}\n`); return 0; }
+    if (parsed.verb === "help" || parsed.options.help) { io.stdout.write(`${USAGE}\n`); return 0; }
     const cwd = canonical(path.resolve(parsed.options.cwd ?? deps.cwd ?? process.cwd()));
     if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) throw new UsageError(`--cwd ${parsed.options.cwd} is not a directory`);
     // (2) Guards: no nested call, state outside the workspace.
     const nested = depthGuard(env);
     if (nested) throw new StateError(nested);
-    const home = homeDir(env);
+    const home = homeDir(env, { create: false });
     assertStateOutsideWorkspace(home, cwd);
+    assertStateOutsideWorkspace(home, PLUGIN_ROOT);
     const ctx = { env, home, cwd, session: hostSession(env), platform: deps.platform ?? process.platform };
     const text = await readText(parsed, { stream: io.stdin, env }); // control verbs, bare review and --next-input read no stdin
     if (CONTROL[parsed.verb]) {

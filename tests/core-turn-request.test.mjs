@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { makeWorld, jobIdOf } from "./helpers.mjs";
 import { DEPTH_VARIABLES } from "../plugins/council/scripts/lib/core/host.mjs";
 
-const KEYS = ["verb", "nextInput", "text", "prompt", "instructions", "contractPath", "model", "effort", "resume", "threadId", "cwd", "reviewInputRoot", "schemaPath", "structured", "readOnly", "web",
+const KEYS = ["verb", "nextInput", "text", "prompt", "instructions", "contractPath", "model", "effort", "resume", "threadId", "cwd", "reviewRoot", "reviewInputRoot", "schemaPath", "structured", "readOnly", "web",
   "allowCommands", "maxTurns", "maxBudgetUsd", "agent", "jobDir", "envKeys", "policy", "launcherKind", "deadlineMs"].sort();
 function world() {
   const w = makeWorld();
@@ -65,12 +65,20 @@ test("review and --next-input: structured, the schema path, the batch prompt as 
   const r = w.requests().at(-1);
   assert.deepEqual([r.verb, r.structured, r.readOnly, r.instructions, r.text, r.nextInput], ["review", true, true, null, "focus", false]);
   assert.equal(r.schemaPath, path.join(process.cwd(), "plugins", "council", "schemas", "review-output.schema.json"));
+  assert.equal(r.reviewRoot, fs.realpathSync(w.workspace));
+  assert.equal(r.reviewInputRoot, path.join(w.home, "jobs", job, "review-input"));
   assert.match(r.prompt, /^Instructions for this turn \(structured code review, read-only\)[\s\S]*User focus: focus\n[\s\S]*Batch units: u1/);
   w.call(["reply", job, "--next-input"]);
   const next = w.requests().at(-1);
   assert.deepEqual([next.verb, next.nextInput, next.structured, next.resume, next.text], ["reply", true, true, true, ""]);
   assert.match(next.prompt, /User focus: focus\n/, "the review's focus is carried to every batch");
   assert.match(next.prompt, /Batch units: u\d/);
+  assert.equal(next.reviewRoot, r.reviewRoot);
+  assert.equal(next.reviewInputRoot, r.reviewInputRoot);
+  w.call(["reply", job, "--", "F1 AGREE"]);
+  const discussion = w.requests().at(-1);
+  assert.equal(discussion.reviewRoot, r.reviewRoot);
+  assert.equal(discussion.reviewInputRoot, r.reviewInputRoot, "discussion retains the saved-input read permission");
 });
 
 test("a stored policy reaches the adapter; provider-scoped values are passed through only where accepted", () => {

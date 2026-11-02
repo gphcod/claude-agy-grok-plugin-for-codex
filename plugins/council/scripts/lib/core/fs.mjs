@@ -29,16 +29,21 @@ export function writeFileAtomic(file, content) {
   }
 }
 
-/** Parsed JSON, or null when the file is missing or unreadable; Windows' short read locks are retried. */
-export function readJson(file) {
-  for (let attempt = 0; ; attempt += 1) {
+/** Parsed JSON; a missing file is null. Strict state reads propagate other errors instead of hiding a live record. */
+export function readJson(file, { strict = false } = {}) {
+  for (const deadline = Date.now() + 5000; ; ) {
     try {
       return JSON.parse(fs.readFileSync(file, "utf8"));
     } catch (error) {
-      if (error?.code === "ENOENT" || attempt >= 4) {
+      if (error?.code === "ENOENT") return null;
+      if (!BUSY.includes(error?.code) || Date.now() >= deadline) {
+        if (strict) {
+          error.message = `cannot read state record ${file}: ${error.message}; leave it intact and restore it from backup, or use a separate COUNCIL_CODEX_HOME for new work`;
+          throw error;
+        }
         return null;
       }
-      sleepSync(10);
+      sleepSync(20);
     }
   }
 }

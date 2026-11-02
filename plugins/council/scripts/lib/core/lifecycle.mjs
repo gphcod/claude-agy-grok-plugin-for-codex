@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { BusyError, claimThread, claimHeld, releaseClaims } from "./claims.mjs";
-import { createJob, saveJob, markDone, markStopped, loadJob, cleanupNeeded, jobView, markRequestPrepared, saveThread } from "./jobs.mjs";
+import { createJob, saveJob, markDone, markStopped, loadJob, loadThread, cleanupNeeded, jobView, markRequestPrepared, saveThread } from "./jobs.mjs";
 import { BEAT_MS, refreshBeat } from "./heartbeat.mjs";
 import { executionController, companionState, recordRecoveryEvidence, QUERY_MS } from "./execution.mjs";
 import { spawnChild } from "./launcher.mjs";
@@ -125,6 +125,10 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     // Every task counts working-tree changes, so an edit made through a shell is counted (S7.1); read-only turns have no such check here.
     if (job.verb === "task") snapshotBefore(job, job.cwd, ctx.env);
     if (adapter.beforeTurn) await adapter.beforeTurn({ job, request: turn, cwd: job.cwd, env: ctx.env });
+    if (job.threadId && job.agent === "default") {
+      const record = loadThread(ctx.home, provider, job.threadId);
+      if (record && record.agent !== "default") (hooks.saveThread ?? saveThread)(ctx.home, { ...record, agent: "default" });
+    }
     await hooks.beforeSpawn?.(job);
     if (cancelled()) {
       reason = "cancelled";
@@ -378,7 +382,9 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     outcome = "failed";
     let answerText = null;
     try { answerText = io.readFileSync(answerFile, "utf8"); } catch (failure) { if (failure.code !== "ENOENT") error = `answer storage failed: ${failure.message}`; }
-    const review = error ? null : turn.finalizeReview ? turn.finalizeReview({ seen, job, answerText, answerFile }) : { error: "no review finalizer" };
+    let review = null;
+    try { if (!error) review = turn.finalizeReview ? turn.finalizeReview({ seen, job, answerText, answerFile }) : { error: "no review finalizer" }; }
+    catch (failure) { error = `review integrity: ${failure.message}`; }
     if (review?.error) error = review.error;
     else if (review) {
       try {
@@ -422,9 +428,16 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     save(job); finishMarker(job);
     if (cleanupConfirmed) { releaseClaims(ctx.home, job); released = true; }
   } catch (failure) {
-    Object.assign(job, { code: 1, outcome: "failed", status: "failed", cleanupPending: true, attention: null, error: `finalization failed: ${failure.message}` });
-    if (!job.done && job.reviewStateBase) job.reviewState = job.reviewStateBase;
-    if (!job.done) { try { save(job); finishMarker(job); } catch { /* storage is gone: the heartbeat lapses and recovery reads the job as lost */ } }
+    if (job.done) {
+      // The provider result was already published. A failed claim release must not turn completed edits into a
+      // failed task in this caller while replay reports success; retain the result and expose recovery separately.
+      Object.assign(job, { cleanupPending: true, error: `claim release failed: ${failure.message}` });
+      try { save(job); } catch { /* claimHeld still exposes the obstruction when replay reads the published result */ }
+    } else {
+      Object.assign(job, { code: 1, outcome: "failed", status: "failed", cleanupPending: true, attention: null, error: `finalization failed: ${failure.message}` });
+      if (job.reviewStateBase) job.reviewState = job.reviewStateBase;
+      try { save(job); finishMarker(job); } catch { /* storage is gone: the heartbeat lapses and recovery reads the job as lost */ }
+    }
   }
   // The usage refusal (exit 2) only once its job is finalized and the claim released; otherwise the storage failure and
   // its recovery handle (the job id, `cancel <job>`) are the result (exit 1).

@@ -29,7 +29,7 @@ Frozen at S2.7 (2026-10-31), amended at S2.8 (review fixes; see docs/decisions.m
 | Host session variable | `CODEX_THREAD_ID` | the Claude Code session id |
 | State root | `COUNCIL_CODEX_HOME`, default `~/.codex/council` | `COUNCIL_HOME`, default `~/.council` |
 | Rounds variable | `COUNCIL_CODEX_ROUNDS` | the twin's own |
-| Guard variables | five on every child: `COUNCIL_DEPTH`, `CLAUDE_PLUGIN_CODEX_DEPTH`, `GROK_CODEX_DEPTH`, `GROK_BUILD_DEPTH`, `AGY_BRIDGE_DEPTH` | four (A5.1 of the twin) |
+| Guard variables | six on every child: `COUNCIL_DEPTH`, `CODEX_COMPANION_DEPTH`, `CLAUDE_PLUGIN_CODEX_DEPTH`, `GROK_CODEX_DEPTH`, `GROK_BUILD_DEPTH`, `AGY_BRIDGE_DEPTH` | four (A5.1 of the twin) |
 | Blocking rule | Codex has no background tasks: one shell call per exchange blocks until the model answers; `wait <job>` only after a lost shell handle | background tasks and slash commands |
 | Call forms | POSIX heredoc and PowerShell here-string ending `; exit $LASTEXITCODE`; `--prompt-file` for text over 64 KiB, or in PowerShell over 16 KiB or non-ASCII | slash commands with `splitLeading` on heredoc text |
 | Preflight | the companion runs inside Codex's sandbox; the adapter's `preflight(ctx)` descriptors run before any submission; a blocked resource exits 1 `preflight_blocked` with its action line | none |

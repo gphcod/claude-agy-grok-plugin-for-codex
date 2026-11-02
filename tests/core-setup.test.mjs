@@ -64,6 +64,31 @@ test("setup --live makes exactly one minimal submission per available provider a
   assert.equal(w.fakeCalls().length, 1);
 });
 
+test("setup --live --json emits one JSON document containing the report and live result", () => {
+  const w = makeWorld({ git: false });
+  const result = w.call(["setup", "--to", "null", "--live", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.length, 1);
+  assert.equal(report[0].provider, "null");
+  assert.equal(report[0].live.exit, 0);
+  assert.equal(report[0].live.provider, "null");
+  assert.equal(w.fakeCalls().length, 1);
+});
+
+test("model refresh and live setup continue when only a subset of provider CLIs is installed", () => {
+  const w = makeWorld({ git: false });
+  const refreshed = w.call(["models", "--refresh", "--json"]);
+  assert.equal(refreshed.status, 0, refreshed.stderr);
+  assert.equal(JSON.parse(refreshed.stdout).find((entry) => entry.provider === "null").refreshedAt !== null, true);
+  const live = w.call(["setup", "--live", "--json"]);
+  assert.equal(live.status, 0, live.stderr);
+  const report = JSON.parse(live.stdout);
+  assert.equal(report.find((entry) => entry.provider === "null").live.exit, 0);
+  for (const entry of report.filter((item) => item.provider !== "null")) assert.equal(entry.live.status, "skipped");
+  assert.equal(w.fakeCalls().length, 1);
+});
+
 test("models prints the static catalog, says which providers this build lacks, and --refresh writes the listing under the state root", () => {
   const w = makeWorld({ git: false });
   const r = w.call(["models"]);

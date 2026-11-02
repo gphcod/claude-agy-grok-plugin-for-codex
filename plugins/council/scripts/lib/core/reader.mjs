@@ -40,7 +40,8 @@ export function createReader(adapter, { cwd = process.cwd(), expectedThreadId = 
       fail(result.fatal); return;
     }
     if (result.threadId !== undefined && result.threadId !== null) {
-      if (expectedThreadId && String(result.threadId).toLowerCase() !== String(expectedThreadId).toLowerCase()) { fail(`the provider answered on thread ${JSON.stringify(result.threadId)}, expected ${expectedThreadId}`); return; }
+      const expected = expectedThreadId || state.threadId;
+      if (expected && String(result.threadId).toLowerCase() !== String(expected).toLowerCase()) { fail(`the provider answered on thread ${JSON.stringify(result.threadId)}, expected ${expected}`); return; }
       if (state.threadId === null && refused === null) {
         if (onThread?.(result.threadId) === false) refused = result.threadId; // never published
         else state.threadId = result.threadId;

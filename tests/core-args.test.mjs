@@ -28,6 +28,8 @@ test("everything after -- is text, even tokens that look like options", () => {
 });
 
 test("an unknown option or a value option without its value is a usage error", () => {
+  for (const verb of ["ask", "reply", "review", "wait"]) assert.throws(() => parseArgv([verb, "-v"]), /Unknown option -v/);
+  assert.deepEqual(parseArgv(["ask", "--", "-v"]).positionals, ["-v"]);
   assert.throws(() => parseOptions(["--bogus"]), (e) => e instanceof UsageError && /Unknown option --bogus\. Put -- before the text/.test(e.message));
   assert.throws(() => parseOptions(["--tier"]), (e) => e instanceof UsageError && /Missing value for --tier/.test(e.message));
   assert.throws(() => parseOptions(["--allow-command"]), /Missing value for --allow-command/);

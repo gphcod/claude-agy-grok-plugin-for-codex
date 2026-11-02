@@ -21,6 +21,8 @@
  * @property {boolean} resume           continue `threadId`
  * @property {string | null} threadId   the native thread id on a resume
  * @property {string} cwd
+ * @property {string | null} reviewRoot the collected repository root, including on structured discussion replies
+ * @property {string | null} reviewInputRoot the immutable saved input directory for every structured review turn
  * @property {Record<string, string>} env  the per-call environment; adapters never read process.env
  * @property {Launcher} launcher        the launcher the entry resolved for this call
  * @property {string | null} schemaPath the review schema on structured turns

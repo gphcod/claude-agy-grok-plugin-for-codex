@@ -73,6 +73,20 @@ test("a thread that differs from the expected one fails the turn; a missing id l
   assert.deepEqual([none.state.failed, none.state.threadId, none.state.completed], [null, null, true]);
 });
 
+test("a new turn pins its first discovered thread and refuses a later different thread", () => {
+  for (const changed of [start("t-2"), end({ thread: "t-2" })]) {
+    const result = read([start(), line({ type: "text", data: "kept" }), changed, end()], { expectedThreadId: null });
+    assert.match(result.state.failed, /answered on thread "t-2", expected t-1/);
+    assert.equal(result.state.threadId, "t-1");
+    assert.equal(result.state.completed, false);
+    assert.equal(result.text, "kept");
+    assert.deepEqual(result.threads, ["t-1"], "the conflicting thread is never published or claimed");
+  }
+  const same = read([start(), end({ thread: "T-1" })], { expectedThreadId: null });
+  assert.equal(same.state.failed, null);
+  assert.equal(same.state.completed, true);
+});
+
 test("edited paths are recorded once each, relative to cwd; failed commands and denials are collected", () => {
   const { state } = read([start(), line({ type: "tool", name: "edit", path: "/work/a.js", ok: true }), line({ type: "tool", name: "edit", path: "b.js", ok: true }),
     line({ type: "tool", name: "edit", path: "/work/a.js", ok: true }), line({ type: "tool", name: "edit", path: "/elsewhere/d.js", ok: true }),

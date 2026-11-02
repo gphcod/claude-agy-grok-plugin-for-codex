@@ -97,7 +97,8 @@ export function interpolate(template, values) {
  */
 export function buildBatchReviewPrompt({ adversarial = false, focus = "", ledger = [], batchText = "", embedSchema = null, label = "", unsupported = [], state = null, root = PLUGIN_ROOT }) {
   const template = loadTemplate(adversarial ? "adversarial-review" : "review", root);
-  const coverage = state ? coveragePrompt(state, batchText) : batchText;
+  const rootNote = state?.workspaceRoot ? `Repository root: ${JSON.stringify(state.workspaceRoot)}. Diff paths are relative to this directory; resolve context reads against it.\n` : "";
+  const coverage = rootNote + (state ? coveragePrompt(state, batchText) : batchText);
   const outside = unsupported.length
     ? ["These changes are not shown and are outside this review; do not approve them:", ...unsupported.slice(0, 20).map((o) => `- ${o}`),
       ...(unsupported.length > 20 ? [`${unsupported.length} unsupported paths in total; see the saved index.`] : [])].join("\n")

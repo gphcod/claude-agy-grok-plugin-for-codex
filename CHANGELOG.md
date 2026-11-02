@@ -1,8 +1,22 @@
 # Changelog
 
-## 1.0.0 (unreleased; 1.0.0-rc.4 candidate)
+## 1.0.0 (2026-11-02)
 
 First release of Council for Codex: one Codex plugin, `council`, that calls Claude Code (`claude` 2.1.314), Gemini (`agy` 1.4.12) and Grok (`grok` 1.0.70). It replaces claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0 and gemini-plugin-for-codex 0.1.2.
+
+### Release review fixes (2026-11-02)
+
+- Default consultation models are explicitly Claude Opus 5.5/high, Grok 4.7/high and Gemini 4 Argon/medium.
+- Help exits before reading input or starting a paid turn; unknown single-dash flags are rejected.
+- New turns reject a changed conversation id instead of completing under another thread's claim.
+- Claude reviews allow 20 turns for context reads; Claude and Gemini receive the repository root and saved-input read scope on every review and discussion turn.
+- Single-batch finding decisions resolve short ids by unique location, and throwing review finalizers finish as recoverable failures.
+- Pruning preserves snapshots referenced by retained discussions and retires obsolete pending batch state.
+- Model refresh and live setup support partial CLI installations; live setup emits one JSON document and failures take precedence over attention.
+- Metadata reads retry Windows locks and fail closed on existing corrupt records; claim release retries locks, preserves ownership evidence, and keeps an already published provider result consistent with replay.
+- Corrupt unrelated metadata leaves new work usable: pruning skips an unreadable state inventory, and errors identify the affected record and recovery options.
+- A resumed task records Grok's default agent before launch, and pending review continuation no longer hides unknown task mutation coverage.
+- Rejected state directories are never created, and state inside the installed plugin is refused.
 
 ### macOS (checked 2026-11-01, `docs/qualification/macos-check.md`)
 
@@ -27,7 +41,7 @@ First release of Council for Codex: one Codex plugin, `council`, that calls Clau
 
 ### Added
 
-- One `$council` skill (2,998 B, description 168 B) with the POSIX heredoc and PowerShell here-string call forms, the `--prompt-file` and no-stdin rules, verbs, tiers, the policy on effort and tasks, a parallel fan-out, `--request-id` rules, footer, exit codes and the discussion protocol.
+- One `$council` skill (2,965 B, description 168 B) with the POSIX heredoc and PowerShell here-string call forms, the `--prompt-file` and no-stdin rules, verbs, tiers, the policy on effort and tasks, a parallel fan-out, `--request-id` rules, footer, exit codes and the discussion protocol.
 - Verbs `ask`, `reply` (`<job|thread>`, `--thread`, `--last`, `--next-input`), `review` (`--uncommitted`, `--base`, `--commit`, `--adversarial`), `task` (`--thread`, Gemini `--allow-command`), `wait`, `cancel` (`--confirm-ended`), `models` (`--refresh`) and `setup` (`--live`, `--set`), each with `--to claude|gemini|grok`.
 - Per-call provider, model (aliases, pass-through with `model unverified`) and effort (one vocabulary, clamped downward and shown in the footer); tiers `consult`, `exec`, `deep` per provider, the Claude exec tier `sonnet`.
 - Structured reviews for every provider from a hash-checked snapshot, delivered in batches of at most 180,000 B with a synthesis pass, one draft-07 schema with finding ids and `AGREE`/`CHANGE`/`REJECT` decisions, and an identified findings ledger.
@@ -35,7 +49,7 @@ First release of Council for Codex: one Codex plugin, `council`, that calls Clau
 - One footer grammar (`council <provider> <status> · job <id> · <model>/<effort> · <duration> …`), a `--json` object, a 24 KiB answer preview with `full: <file>`, exit codes 0/10/20/1/2.
 - Sandbox preflight per provider and resource with `preflight_blocked` and one action line, cached cold probes (Claude four, agy two, grok two) and zero probes on a warm call.
 - State under `~/.codex/council/` (`COUNCIL_CODEX_HOME`): jobs, provider-namespaced thread claims and records, request records, catalog, preflight cache; pruning past 100 finished jobs; recovery of lost and cleanup-pending jobs by `cancel`; the held-output `thread locked` state released only by `cancel --confirm-ended` after a process-table check.
-- The five guard variables on every provider child, probe and preflight probe; admission refuses when any is set.
+- The six guard variables on every provider child, probe and preflight probe; admission refuses when any is set.
 - The unconfirmed-session rule: a turn whose provider never confirmed its thread keeps its answer and exit code, but the thread is not resumable (`reply`, `reply --last`, `task --thread` exit 2).
 - `npm run test:e2e` (the skill's call forms against the three fakes), `npm run measure` (framing bytes and skill size), `npm run core:check` (shared-core pins), `scripts/validate-plugin.mjs --installed <dir>`.
 

@@ -29,10 +29,21 @@ const hash = (value) => createHash("sha256").update(JSON.stringify(value)).diges
  * One canonical local state root. It is created before it is resolved: a root that did not exist yet would otherwise
  * keep its unresolved spelling (a symlink or junction) on first use.
  */
-export function homeDir(env = process.env) {
+export function homeDir(env = process.env, { create = true } = {}) {
   const root = path.resolve(env[STATE_ROOT_ENV] || defaultStateRoot());
-  try { fs.mkdirSync(root, { recursive: true }); } catch { /* canonical() falls back; a later write reports the error. */ }
-  return canonical(root);
+  if (create) try { fs.mkdirSync(root, { recursive: true }); } catch { /* a later write reports the error. */ }
+  // Resolve the existing ancestor before admission, without creating a rejected root through a junction or symlink.
+  let ancestor = root;
+  const suffix = [];
+  for (;;) {
+    try { return path.join(fs.realpathSync.native(ancestor), ...suffix.slice().reverse()); }
+    catch {
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) return canonical(root);
+      suffix.push(path.basename(ancestor));
+      ancestor = parent;
+    }
+  }
 }
 function isWithin(root, target) {
   const rel = path.relative(root, target);
@@ -82,7 +93,7 @@ export function createJob(home, fields, id = reserveJob(home)) {
   // The heartbeat before the record: a job a reader can load always has one.
   touchBeat(job);
   saveJob(job);
-  prune(home);
+  try { prune(home); } catch { /* housekeeping must never abort admission of a new, unrelated job */ }
   return job;
 }
 
@@ -181,12 +192,19 @@ export function loadJob(home, id) {
   if (!JOB_ID.test(id ?? "")) return null;
   const dir = path.join(jobsRoot(home), id);
   let names;
-  try { names = new Set(fs.readdirSync(dir)); } catch { return null; }
+  for (const deadline = Date.now() + 5000; ;) {
+    try { names = new Set(fs.readdirSync(dir)); break; }
+    catch (error) {
+      if (error.code === "ENOENT") return null;
+      if (BUSY.includes(error.code) && Date.now() < deadline) { sleepSync(20); continue; }
+      throw new StateError(`cannot read job directory ${dir}: ${error.message}; leave it intact and restore access, or use a separate COUNCIL_CODEX_HOME for new work`);
+    }
+  }
   const mtime = (file) => { try { return fs.statSync(file).mtime; } catch (error) { if (error.code === "ENOENT") return null; throw error; } };
   // Markers first: metadata read after done was seen is final.
   const done = names.has("done");
   const stoppedAt = names.has("stopped") ? mtime(path.join(dir, "stopped"))?.toISOString() ?? null : null;
-  const meta = readJson(path.join(dir, "meta.json"));
+  const meta = readJson(path.join(dir, "meta.json"), { strict: true });
   const beatMs = names.has("beat") ? mtime(path.join(dir, "beat"))?.getTime() ?? 0 : 0;
   return meta && { ...meta, dir, done, beatMs, stopped: stoppedAt !== null, stoppedAt, cancelRequested: names.has("cancel") };
 }
@@ -217,10 +235,32 @@ export function jobView(home, job) { return { ...job, cleanupPending: cleanupNee
  * is running, lost, needs cleanup, holds a claim or has review input pending is never deleted (A7.7).
  */
 export function prune(home) {
-  const finished = listJobs(home).filter((j) => (j.done || j.stopped) && !cleanupNeeded(j) && !reviewInputPending(j));
+  let jobs;
+  try { jobs = listJobs(home); }
+  catch { return; } // An unreadable record may reference any snapshot: keep everything until it can be inspected.
+  const reviewKey = (job) => job.reviewState ? `${job.provider}:${job.reviewState.reviewRef ?? job.reviewState.inputRoot ?? job.id}` : null;
+  const latestReviews = new Map();
+  for (const job of jobs) {
+    const key = reviewKey(job);
+    if (key && job.admitted !== false && !latestReviews.has(key)) latestReviews.set(key, job);
+  }
+  const finished = jobs.filter((j) => (j.done || j.stopped) && !cleanupNeeded(j) && !reviewInputPending(latestReviews.get(reviewKey(j)) ?? j));
+  const expired = new Map(finished.slice(KEEP_FINISHED).filter((job) => !claimHeld(home, job)).map((job) => [job.id, job]));
+  // Retained discussion and continuation jobs still need the root job's immutable snapshot. Keep dependencies too,
+  // even when that root's old metadata says complete; conversely, an old pending state is retired by newer coverage.
+  const retained = jobs.filter((job) => !expired.has(job.id));
+  for (const job of retained) for (const state of [job.reviewState, job.reviewStateBase]) {
+    if (typeof state?.inputRoot !== "string") continue;
+    const relative = path.relative(jobsRoot(home), path.resolve(state.inputRoot));
+    const owner = relative.split(path.sep)[0];
+    if (!path.isAbsolute(relative) && JOB_ID.test(owner) && expired.has(owner)) {
+      retained.push(expired.get(owner));
+      expired.delete(owner);
+    }
+  }
   const trash = path.join(home, "trash");
-  for (const job of finished.slice(KEEP_FINISHED)) {
-    if (claimHeld(home, job)) continue;
+  for (const job of expired.values()) {
+    if (claimHeld(home, job)) continue; // Recheck after dependency collection: another companion may have resumed it.
     try {
       fs.mkdirSync(trash, { recursive: true });
       fs.renameSync(job.dir, path.join(trash, `${job.id}-${randomBytes(4).toString("hex")}`));
@@ -298,7 +338,7 @@ export function saveThread(home, record) {
   fs.mkdirSync(threadsRoot(home), { recursive: true });
   writeFileAtomic(threadFile(home, record.provider, record.threadId), `${JSON.stringify({ ...record, updatedAt: new Date().toISOString() }, null, 2)}\n`);
 }
-export const loadThread = (home, provider, threadId) => readJson(threadFile(home, provider, threadId));
+export const loadThread = (home, provider, threadId) => readJson(threadFile(home, provider, threadId), { strict: true });
 /** The providers that hold a thread record for this native id. */
 export function threadProviders(home, threadId) {
   let names;

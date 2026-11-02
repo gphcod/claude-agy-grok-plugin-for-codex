@@ -55,7 +55,7 @@ test("a state root inside the workspace is refused with exit 1 before any record
   const r = w.call(["ask", "--to", "null", "--", "q"], { env: { COUNCIL_CODEX_HOME: inside } });
   assert.equal(r.status, 1);
   assert.match(r.stderr, /the state root .*\.council-state lies inside the workspace .*; set COUNCIL_CODEX_HOME to a directory outside it/);
-  assert.ok(!fs.existsSync(path.join(inside, "jobs")));
+  assert.ok(!fs.existsSync(inside), "a rejected state root is never created");
   const sub = path.join(w.workspace, "pkg");
   fs.mkdirSync(sub);
   assert.equal(w.call(["wait"], { cwd: sub, env: { COUNCIL_CODEX_HOME: path.join(sub, "state") } }).status, 1, "inside a subdirectory workspace too");

@@ -24,7 +24,7 @@ test("a small review completes in one batch: no round token, the review template
   assert.ok(sent.argv.includes("--schema"));
   assert.match(sent.prompt, /^Instructions for this turn \(structured code review, read-only\)/);
   assert.match(sent.prompt, /User focus: none given/);
-  assert.match(sent.prompt, /<review_input>\nReview snapshot [0-9a-f]{64}; review reference [a-z0-9]{16}\./);
+  assert.match(sent.prompt, /<review_input>\nRepository root: [^\n]+\nReview snapshot [0-9a-f]{64}; review reference [a-z0-9]{16}\./);
   assert.match(sent.prompt, /\+# changed/);
   const json = JSON.parse(review(w).stdout);
   assert.deepEqual([json.verdict, json.coverage.status, json.coverage.pending, json.exit], ["approve", "complete", 0, 0]);

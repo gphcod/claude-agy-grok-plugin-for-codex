@@ -280,6 +280,44 @@ test("prune deletes finished bodies past 100 through trash/ and never a running,
   assert.equal(loadThread(home, "grok", "t-5").round, 1, "thread records survive prune");
 });
 
+test("prune retires stale pending review state after the completed continuation expires", (t) => {
+  const { home } = fixture(t);
+  const finished = (i, extra = {}) => {
+    const job = createJob(home, { provider: "grok", status: "done", outcome: "ok", code: 0, admitted: true,
+      threadId: `thread-${i}`, spawnedAt: new Date(Date.UTC(2026, 0, 1) + i * 1000).toISOString(), ...extra });
+    markDone(job);
+    return job;
+  };
+  const root = finished(0);
+  const state = { reviewRef: root.id, inputRoot: path.join(root.dir, "review-input"), pending: 1, synthesisPending: true };
+  root.reviewState = state;
+  saveJob(root);
+  const continuation = finished(1, { threadId: root.threadId, reviewState: { ...state, pending: 0, synthesisPending: false } });
+  for (let i = 2; i < KEEP_FINISHED + 4; i++) finished(i);
+  prune(home);
+  assert.equal(loadJob(home, root.id), null, "the old pending snapshot is no longer a permanent pin");
+  assert.equal(loadJob(home, continuation.id), null);
+});
+
+test("prune keeps a completed review's input while a retained discussion still references it", (t) => {
+  const { home } = fixture(t);
+  const finished = (i, extra = {}) => {
+    const job = createJob(home, { provider: "grok", status: "done", outcome: "ok", code: 0, admitted: true,
+      threadId: `thread-${i}`, spawnedAt: new Date(Date.UTC(2026, 0, 1) + i * 1000).toISOString(), ...extra });
+    markDone(job);
+    return job;
+  };
+  const root = finished(0);
+  const state = { reviewRef: root.id, inputRoot: path.join(root.dir, "review-input"), pending: 0, synthesisPending: false };
+  root.reviewState = state;
+  saveJob(root);
+  const discussion = finished(1000, { threadId: root.threadId, reviewState: state });
+  for (let i = 1; i < KEEP_FINISHED + 4; i++) finished(i);
+  prune(home);
+  assert.ok(loadJob(home, discussion.id));
+  assert.ok(loadJob(home, root.id), "retained discussion coverage must not point at pruned input");
+});
+
 test("thread records live under threads/<provider>-<threadId>.json and name their providers", (t) => {
   const { home } = fixture(t);
   saveThread(home, { provider: "grok", threadId: "ABC-1", cwd: home, session: "s1", model: "grok-4.7", effort: "high", tier: "consult", round: 2, rounds: 9, agent: "explore" });

@@ -85,10 +85,10 @@ export function recoveryHint(job) {
   // The provider finished without confirming its thread (Grok's end without a session id): the thread is not resumable.
   if (job.unconfirmed) return oneLine(job.unconfirmed);
   if (job.outcome === "failed" && job.admitted && !job.threadId && job.requestedThreadId) return "thread not confirmed; start a new ask";
-  if (job.reviewState?.pending || job.reviewState?.synthesisPending) return `next: reply ${job.id} --next-input`;
+  const pendingReview = job.reviewState?.pending || job.reviewState?.synthesisPending ? `next: reply ${job.id} --next-input` : null;
   // An adapter that checks the workspace around a turn (Gemini's snapshots) could not tell whether it changed.
-  if (job.mutationCoverage === "unknown") return "coverage unknown";
-  return null;
+  if (job.mutationCoverage === "unknown") return ["coverage unknown", pendingReview].filter(Boolean).join("; ");
+  return pendingReview;
 }
 export function footer(job, clipped) {
   const parts = [`council ${job.provider} ${LABELS[job.outcome] ?? job.outcome}`, `job ${job.id}`, modelToken(job), elapsed(elapsedOf(job))];
@@ -113,7 +113,7 @@ export function renderResult(job, answer) {
 /** The --json object (A3.4). */
 export function resultJson(job, answer) {
   const { text, clipped } = capAnswer(answer);
-  const coverage = job.reviewState ? { reviewRef: job.reviewState.reviewRef, snapshotId: job.reviewState.snapshotId, status: job.reviewState.status,
+  const coverage = job.verb !== "task" && job.reviewState ? { reviewRef: job.reviewState.reviewRef, snapshotId: job.reviewState.snapshotId, status: job.reviewState.status,
     total: job.reviewState.total, pending: job.reviewState.pending, reviewed: job.reviewState.completed?.length ?? 0,
     unreviewed: (job.unreviewed ?? []).slice(0, 20).map((u) => collapsed(u, 200)), unsupportedCount: job.reviewState.unsupportedCount,
     synthesisPending: job.reviewState.synthesisPending, blocking: job.reviewState.blocking } : null;

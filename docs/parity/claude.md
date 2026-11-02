@@ -13,7 +13,7 @@ S3.6. Source: CLAUDEX `/Users/cia/GitCode/claude_plugin_for_codex` at `v0.5.0` (
 | `review --base <ref>` | `review --base <ref>` | same | merge base with HEAD plus untracked files (A5.2) |
 | — | `review --commit <sha>` | intentionally different | added: one commit, first-parent for merges (A5.2) |
 | `review --adversarial` | `review --adversarial` | same | `prompts/adversarial-review.md` from CLAUDEX `profiles/adversarial.txt` |
-| `review --with-context` (`review-context`, `adversarial-context` profiles) | — | intentionally different | dropped (PLAN.md S3.6): every review runs with the read tools `Read,Glob,Grep` and a two-turn cap (A3.3), so the separate context profile has no role; CLAUDEX's plain review ran with no tools |
+| `review --with-context` (`review-context`, `adversarial-context` profiles) | — | intentionally different | dropped (PLAN.md S3.6): every review runs with `Read,Glob,Grep` and up to 20 turns, so the separate context profile has no role; CLAUDEX's plain review ran with no tools |
 | review output schema (CLAUDEX `review-output.schema.json`) | `schemas/review-output.schema.json` | intentionally different | one draft-07 schema for all providers with required finding `id` and optional `decision` (A5.2); still passed by `--json-schema`, answer from `structured_output` |
 | `reply <handle> [delta]` | `reply <job\|thread> [-- delta]`, `reply --thread <id>` | renamed | handle is the 16-character job id (A3.3); the session uuid also works, as in CLAUDEX |
 | `reply --last` | `reply --last` | same | scoped by realpath(cwd) and `CODEX_THREAD_ID` (A7.2) |
@@ -28,7 +28,7 @@ S3.6. Source: CLAUDEX `/Users/cia/GitCode/claude_plugin_for_codex` at `v0.5.0` (
 | `setup --set <policy.json>` | `setup --set <policy.json>` | same | read roots → `--add-dir`, `web` → the web pair, `allowMcp` → no empty MCP config (S3.2) |
 | `--model <alias/id>` | `--model <alias/id>` | same | aliases `fable`, `opus`, `sonnet`, `haiku`, `default`; unknown ids pass through (`model unverified`); `default` omits `--model` |
 | `--effort <level>` (default `xhigh`) | `--effort <level>`, `--tier consult\|exec\|deep` | intentionally different | default from the tier (`consult` default/high, `exec` sonnet/high, `deep` default/xhigh, A2); the vocabulary is checked by council because the CLI ignores an unknown value (S1.1) |
-| `--max-turns <n>` | `--max-turns <n>` | same | Claude-only; defaults by verb: review 2, ask/reply 20, task 30 (A3.3) |
+| `--max-turns <n>` | `--max-turns <n>` | intentionally different | Claude-only; review/ask/reply 20, task 30; reviews permit context reads (2026-11-02 release review) |
 | `--max-budget-usd <amount>` | `--max-budget-usd <amount>` | same | Claude-only |
 | `--deadline-ms <ms>` | `--deadline <s>`, `--inactivity-timeout <s>` | renamed | seconds; inactivity timeout added (GROKX) |
 | `--rounds <n>` | `--rounds <n>`, `COUNCIL_CODEX_ROUNDS` | same | 9 replies by default |

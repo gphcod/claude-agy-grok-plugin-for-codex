@@ -41,6 +41,20 @@ test("a stdin/stream turn with a preassigned id completes: answer, thread confir
   assert.equal(result.job.cost, 0.001);
 });
 
+test("a throwing review finalizer records a finished failure and releases the thread claim", async () => {
+  const w = makeWorld();
+  const turn = turnFor(w, { extra: {
+    structuredReview: true,
+    finalizeReview() { throw new Error("saved review input is missing"); },
+  } });
+  const result = await runTurn(w, turn);
+  assert.equal(result.job.code, 1);
+  assert.match(result.job.error, /review integrity: saved review input is missing/);
+  assert.equal(loadJob(w.home, result.job.id).done, true);
+  assert.equal(result.job.cleanupPending, false);
+  assert.equal(inspectClaim(w.home, "null", turn.thread).state, "absent");
+});
+
 test("prompt-file and answer-file profiles with a discovered id: the claim is taken on discovery before the id is published", async () => {
   const w = makeWorld();
   const env = { COUNCIL_NULL_ID: "discovered", COUNCIL_NULL_INPUT: "prompt-file", COUNCIL_NULL_OUTPUT: "answer-file" };

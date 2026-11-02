@@ -1,6 +1,6 @@
 {
   "name": "claude-agy-grok-plugin-for-codex",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0",
   "description": "Council for Codex: one Codex plugin that calls Claude Code, Gemini (agy) and Grok for questions, discussions, reviews and authorized tasks.",
   "type": "module",
   "private": true,

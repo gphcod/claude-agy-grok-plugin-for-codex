@@ -6,14 +6,14 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 
 | Module | SHA-256 | Shared regression tests | Notes |
 |---|---|---|---|
-| `claims.mjs` | a98c4e38ef0af7546946013aa70aa30d231e17b2bbc79e57c28c142ef337e031 | tests/core-claims.test.mjs | claims/<provider>/<threadId>; GROKX claims + CODEXCC claimHeld |
+| `claims.mjs` | 0917dd4ebae389fc62091ad6d4cadde02f3aca0f87d09929aea5efa2df64983f | tests/core-claims.test.mjs, tests/core-release-recovery.test.mjs | claims/<provider>/<threadId>; GROKX claims + CODEXCC claimHeld; busy release recovery |
 | `heartbeat.mjs` | 9cd21526c25398ddd24580590819aa4dda6d1b908d01ff1313652912bf00a374 | tests/core-locks.test.mjs (heartbeat helpers), tests/core-jobs.test.mjs | extracted from GROKX jobs/lifecycle |
-| `reader.mjs` | f82f1571ceb54c91e8499ae37d4013e34763c31519dd27b9aae3fc69eff6e46b | tests/core-reader.test.mjs, tests/core-review-fixes.test.mjs | generic line reader over adapter.parseEvent |
+| `reader.mjs` | 47212cfb45ec94fa8e6d6ad51c6bd0d0ff47bf76e2cc43f4e41183acee81ecfa | tests/core-reader.test.mjs, tests/core-review-fixes.test.mjs | generic line reader over adapter.parseEvent |
 | `tiers.mjs` | 3a3749fcfc0c8fbea3a58dc0411f036d9725a06ba7efa2a06241bd9d9057ab90 | tests/core-catalog.test.mjs | tier table per host lives in tiers.json, not in the module |
-| `fs.mjs` | cb99a6ff5405e2c485590108b0561a2d251dc0b27f7c5709af31dcf0b86dde8f | tests/core-jobs.test.mjs (half-written meta.json) | byte-identical to grok_plugin_for_codex 1.1.0 lib/fs.mjs |
+| `fs.mjs` | defe8d47430cb9c324ac86f464ca7e5b39c34fe8f38ded230c098d6b799ef6e2 | tests/core-jobs.test.mjs, tests/core-release-recovery.test.mjs | derived from grok_plugin_for_codex 1.1.0 lib/fs.mjs; strict state reads and bounded lock retries |
 | `review-input.mjs` | 2a6be74ac43f554bcb9b9a3345f137db41e1262cc6c39449a12595b2403a3128 | tests/core-review-input.test.mjs, tests/core-review.test.mjs | byte-identical to grok_plugin_for_codex 1.1.0 and claude_plugin_for_codex 0.5.0 |
-| `findings.mjs` | 029222020fe88754e65343850cb0f0e7cda45f1858e8af854ed29dd03b5c8fab | tests/core-findings.test.mjs, tests/core-review.test.mjs | identified ledger, critical/high blockers |
-| `jobs.mjs` | 43a9e79b47e4c772b510cf31e2cc13ade48087fd4f95387baaec4700a4c252f7 | tests/core-jobs.test.mjs, tests/core-requests.test.mjs, tests/core-review-fixes.test.mjs | reads its state-root variable from host.mjs |
+| `findings.mjs` | 65a8c78a1e56127161c195bae4243445535230dc8f89d305bef5d7ce4d70e288 | tests/core-findings.test.mjs, tests/core-review.test.mjs | identified ledger, critical/high blockers; single-batch short-id decisions |
+| `jobs.mjs` | a917e0a372d489cb8f9fd1910ff67cc05b351b84bb81a74efcb10ea2d69167f7 | tests/core-jobs.test.mjs, tests/core-requests.test.mjs, tests/core-review-fixes.test.mjs, tests/core-release-recovery.test.mjs | reads its state-root variable from host.mjs; snapshot dependencies retained during pruning |
 | `execution.mjs` | 3320d713d18e44d9cc248da1bdca3d53d97560c07254b4644eda0044987ba41c | tests/core-execution.test.mjs, tests/core-windows.test.mjs, tests/core-cancel.test.mjs, tests/core-review-fixes.test.mjs, tests/core-snapshot-tz.test.mjs | reads its guard variables and binary names from host.mjs |
 
 `jobs.mjs` and `execution.mjs` are host-neutral because every host constant they use comes from `host.mjs`; they stay in this table only while the twin's copies do the same.
@@ -22,7 +22,7 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 
 | Module | Why it differs from the twin |
 |---|---|
-| `host.mjs` | the host constants themselves: state root (`COUNCIL_CODEX_HOME`, `~/.codex/council`), session variable (`CODEX_THREAD_ID`), rounds variable, the five guard variables, the binaries (claude, agy, grok), PowerShell rules |
+| `host.mjs` | the host constants themselves: state root (`COUNCIL_CODEX_HOME`, `~/.codex/council`), session variable (`CODEX_THREAD_ID`), rounds variable, the six guard variables, the binaries (claude, agy, grok), PowerShell rules |
 | `preflight.mjs` | Codex runs the companion inside its sandbox; preflight descriptors, `preflight_blocked` and the Claude policy store (`setup --set`) exist on this host only |
 | `args.mjs` | no slash commands, so no `splitLeading`; Codex-only flags (`--prompt-file`, `--confirm-ended`, `--allow-command`, `--max-turns`, `--live`, `--set`) |
 | `stdin.mjs` | the Codex call forms (heredoc, PowerShell here-string, `--prompt-file`) and the no-stdin rule for control verbs, bare review and `--next-input` |
