@@ -25,6 +25,10 @@ The global `toolPermission` here is `always-proceed`, so the turn's own settings
 - `generativelanguage.googleapis.com` fails its TLS handshake on this managed network while agy works, so on Windows a TLS refusal of that stand-in target counts as a reachable network.
 - Tests for what Windows lacks are skipped by platform: file names with a tab, newline or quote; FIFOs; `chmod` removing read access; POSIX signals, process groups and exec bits; symlinks without Developer Mode.
 
+## Inside a Codex chat
+
+`codex exec --sandbox danger-full-access` with `$council` at 1.0.0-rc.4 (2026-11-02): Codex loaded the skill, ran its PowerShell form, and Grok answered with exit 0 and the footer `council grok ok`. Under `workspace-write` the skill stops at `preflight_blocked` and submits nothing, as the README says.
+
 ## Not checked
 
-The installed route inside a Codex chat (`$council`), and the npm grok shim.
+Claude and Gemini turns inside Codex, and the npm grok shim.
