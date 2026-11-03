@@ -1,0 +1,108 @@
+{
+  "ownerDate": "2026-11-03 Pacific",
+  "repository": "claude-agy-grok-plugin-for-codex",
+  "version": "1.1.4",
+  "baseline": {
+    "version": "1.1.3",
+    "commit": "96db870d46d1856ead62b62d99dc8d84f6d488c9"
+  },
+  "frozenCommit": "7d253fe0ede93fdd9cacd0c788140362c43f0f38",
+  "payloadSha256": "0b62b03c9a4f55849f7218609d98e76de9cc8a8a096e744389200c527dd22942",
+  "payloadFiles": 42,
+  "skillBytes": 2987,
+  "descriptionBytes": 128,
+  "runtime": {
+    "files": 31,
+    "kb": 348.8,
+    "lines": 5338,
+    "long120": 713,
+    "long160": 207,
+    "largest": {
+      "file": "plugins/council/scripts/lib/core/lifecycle.mjs",
+      "lines": 567
+    },
+    "entry": 267
+  },
+  "testSource": {
+    "files": 83,
+    "lines": 12387,
+    "ratioToRuntime": 2.32
+  },
+  "tests": {
+    "total": 622,
+    "pass": 586,
+    "fail": 0,
+    "skipped": 36,
+    "new": 15,
+    "runs": [
+      {
+        "shell": "Git Bash",
+        "durationMs": 281297.9776
+      },
+      {
+        "shell": "PowerShell",
+        "durationMs": 281309.1223
+      }
+    ]
+  },
+  "helpers": {
+    "gemini-service.mjs": "7b21bee1dc4af7a2e9e66c632b2b9fad6718ab502677f4f6e6ba9dca3f29af37",
+    "request-publication.mjs": "bb64388a0bb9bdda457c504db8c0fd1a0cc1a69ca2fffe505b9f8325ed1065e8",
+    "jobs.mjs": "df9b014cb31ad77971eedec17727cbe87569951dc6612419c3ec07cfa4dc3408",
+    "identicalToClaudeHostedRc10": [
+      "gemini-service.mjs",
+      "request-publication.mjs"
+    ]
+  },
+  "reviews": {
+    "codex": {
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "plan": "one change, accepted: read the record fresh under the claim",
+      "diff": "no BLOCKER or MAJOR; verdict incomplete by design; exit 10 because its sandbox denied filesystem-backed test runs"
+    },
+    "grok": {
+      "model": "grok-4.7",
+      "effort": "high",
+      "plan": "agreed",
+      "diff": "approve, no findings"
+    },
+    "gemini": "not called, by the owner's choice"
+  },
+  "faultInjection": {
+    "variants": 9,
+    "caught": 9,
+    "note": "one variant got through at first; a separate test case was added, and it is now caught"
+  },
+  "benchmark": {
+    "file": "benchmark-1.1.4-windows.json",
+    "calls": 240,
+    "platform": "fake CLIs, no paid calls",
+    "medianDeltaPercentRange": [
+      -3.0,
+      2.6
+    ],
+    "overallMedianMs": {
+      "baseline": 2033.8,
+      "candidate": 2023.7
+    },
+    "reviewInputDeltaBytes": 3,
+    "reviewInputDeltaNote": "the same +3 B appears when both arms run identical 1.1.4 code"
+  },
+  "live": {
+    "file": "live-1.1.4-windows.json",
+    "provider": "grok",
+    "model": "grok-4.7",
+    "effort": "high",
+    "submittedTurns": 7,
+    "handPlacedMarkerNote": "that session really ran explore, so it is not a session that ran the default agent",
+    "unexplained": "the first scripted attempt got no job id and left an empty state root; output not captured; not seen again in three later starts"
+  },
+  "notVerified": [
+    "a live Grok task, which needs the owner's separate go-ahead",
+    "the real provider's handling of a session that truly ran the default agent",
+    "the kill at the exact spawn boundary with a real CLI",
+    "a job recovered under 1.1.3 or earlier, which is not corrected",
+    "exact-payload macOS, desktop discovery/wake and the Windows npm Grok shim"
+  ]
+}
