@@ -550,3 +550,7 @@ Every flag Part A passes to a provider was checked against `--help` of claude 2.
 ## Windows request publication amendment (2026-11-02 Pacific)
 
 A7’s logical request lifecycle and identifiers are unchanged. New request-format-2 roots remain immutable, with generation-specific binding/prepared publications and an unlink ownership gate. The physical envelope fails closed for older clients; current readers still understand completed legacy inline requests. Failed preparation only frees an owned, unprepared generation. Legacy unfinished requests require explicit reconciliation. See docs/qualification/windows-request-lock.md and the recorded review decisions.
+
+## 1.1.4 default-agent amendment (2026-11-03 Pacific)
+
+A7.8: recovery marks a thread whose lost turn may have run Grok's default agent, in a one-way file beside its record, before the job stops blocking the thread. The reasons are in `docs/decisions.md`.

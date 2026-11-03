@@ -8,7 +8,7 @@ import fs from "node:fs";
 import { saveServiceDraft } from "./gemini-service.mjs";
 import path from "node:path";
 import { BusyError, claimThread, claimHeld, releaseClaims } from "./claims.mjs";
-import { createJob, saveJob, markDone, markStopped, loadJob, loadThread, cleanupNeeded, jobView, markRequestPrepared, saveThread } from "./jobs.mjs";
+import { createJob, saveJob, markDone, markDefaultAgent, markStopped, loadJob, loadThread, cleanupNeeded, jobView, markRequestPrepared, saveThread } from "./jobs.mjs";
 import { BEAT_MS, refreshBeat } from "./heartbeat.mjs";
 import { executionController, companionState, recordRecoveryEvidence, QUERY_MS } from "./execution.mjs";
 import { spawnChild } from "./launcher.mjs";
@@ -533,6 +533,13 @@ export async function cancelManaged(ctx, job, { timeoutMs = 30000, control = exe
         const hook = await deferredAfterTurn(ctx, job, adapter, io, control);
         if (hook.busy) return { status: "running", code: 20, job: view(), error: hook.busy };
         if (hook.blocked) return { status: "unknown", code: 1, job: view(), error: hook.blocked };
+        // A lost turn may have moved its session to Grok's default agent and died before saving that. Set before the
+        // job stops blocking its thread, so every later selection reads it. A spawn that may not have run counts:
+        // that recipe is valid on a session that never used the agent; explore is not on one that did.
+        if (job.threadId && job.spawnAttempted && job.providerStarted !== false && job.agent === "default") {
+          try { markDefaultAgent(ctx.home, job.provider, job.threadId); }
+          catch (e) { return { status: "unknown", code: 1, job: view(), error: `cannot save the thread's agent: ${e.message}; claim and cancellation request retained` }; }
+        }
         markStopped(job);
         releaseClaims(ctx.home, job);
         const current = view();
