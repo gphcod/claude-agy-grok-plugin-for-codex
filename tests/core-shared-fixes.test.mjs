@@ -209,3 +209,18 @@ test("the real entry refuses retry for a resumed native Gemini 503 without any t
   assert.equal(replay.status, 1); assert.equal(JSON.parse(replay.stdout).job, result.job);
   assert.equal(fs.readFileSync(log, "utf8").trim().split("\n").length, 1, "one failed submission; same id replays it");
 });
+
+test("Claude F1: an explicit unstarted job id cannot replace pruned thread history", () => {
+  const w = makeWorld();
+  saveThread(w.home, { provider: "null", threadId: OLD, cwd: w.workspace, round: 1, rounds: 9,
+    model: "null-model", effort: "low", requestedEffort: "low", tier: "consult", agent: "explore" });
+  const failed = createJob(w.home, { ...fields(w, Date.now()), provider: "null", verb: "task", threadId: OLD,
+    providerStarted: false, model: "null-fast", effort: "high", requestedEffort: "high", tier: "exec", round: 2, rounds: 9, agent: "default" });
+  failed.code = 1; failed.outcome = "failed"; saveJob(failed); markDone(failed);
+  let request;
+  const capture = { ...adapter, buildTurn(input) { request = input; return adapter.buildTurn(input); } };
+  const next = planTurn(ctxFor(w), capture, "reply", { thread: failed.id }, "delta", {}).prepare(null);
+  assert.deepEqual([next.round, next.model, next.effort], [2, "null-model", "low"]);
+  next.build(path.join(w.home, "planned-job"));
+  assert.equal(request.agent, "explore");
+});

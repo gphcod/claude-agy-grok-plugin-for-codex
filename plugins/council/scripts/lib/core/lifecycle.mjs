@@ -121,7 +121,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     // Preparation complete (every prompt and review-input write done): the reservation becomes a tombstone, and only
     // then is the job admitted; a failure before this point leaves it unadmitted, so the entry frees the request id.
     if (options.requestKey) markRequestPrepared(ctx.home, options.requestKey, options.requestToken);
-    Object.assign(job, { admitted: true, admittedAt: new Date().toISOString() });
+    Object.assign(job, { admitted: true, admittedAt: new Date().toISOString(), providerStarted: false });
     save(job);
     // Every task counts working-tree changes, so an edit made through a shell is counted (S7.1); read-only turns have no such check here.
     if (job.verb === "task") snapshotBefore(job, job.cwd, ctx.env);
@@ -132,6 +132,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     } else {
       cleanupConfirmed = false;
       job.spawnAttempted = true;
+      delete job.providerStarted; // A crash after the spawn boundary is unknown until a child pid is saved.
       save(job); // Persist the exact operands before any executable can start.
       const startedAt = Date.now();
       let stoppedAt = 0, killedAt = 0, lastEventAt = startedAt, beatAt = startedAt, exitedAt = 0, termSent = false;

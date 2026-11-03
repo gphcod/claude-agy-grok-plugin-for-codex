@@ -109,7 +109,7 @@ export function resolveThread(ctx, verb, o) {
     if (!job.done && !job.stopped) throw new UsageError(`job ${job.id} has not confirmed a thread; wait ${job.id} or cancel ${job.id}`);
     throw new UsageError(job.requestedThreadId ? `job ${job.id} never confirmed thread ${job.requestedThreadId}; to try it anyway, pass it instead of the job id` : `job ${job.id} has no thread`);
   }
-  const prev = latestOnThread(ctx.home, job.provider, threadId) ?? job;
+  const prev = latestOnThread(ctx.home, job.provider, threadId) ?? (job.providerStarted === false ? null : job);
   return resumable({ provider: job.provider, threadId, prev, record: loadThread(ctx.home, job.provider, threadId) });
 }
 /** A thread whose last turn finished unconfirmed is not resumable (its record says so, or its latest job does): exit 2 with the hint. */

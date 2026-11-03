@@ -105,18 +105,19 @@ test("a release error after done preserves the successful result and can be reco
   assert.equal(loadJob(world.home, result.job.id).code, 0);
 });
 
-test("the default agent is recorded before a resumed task spawns", async () => {
+test("the default agent is durable after a resumed task starts, without changing an unstarted thread", async () => {
   const world = makeWorld();
   const turn = turnFor(world, { verb: "task", confirmed: true });
   saveThread(world.home, { provider: "null", threadId: turn.thread, agent: "explore", cwd: world.workspace });
   const build = turn.build;
   turn.build = (dir) => ({ ...build(dir), agent: "default" });
-  let checked = false;
+  let before = false, after = false;
   const result = await runManagedTurn(ctxFor(world), adapter, turn, null, timers, {
-    beforeSpawn() { assert.equal(loadThread(world.home, "null", turn.thread).agent, "default"); checked = true; },
+    beforeSpawn() { assert.equal(loadThread(world.home, "null", turn.thread).agent, "explore"); before = true; },
+    beforeFinalize(job) { assert.equal(job.providerStarted, true); assert.equal(loadThread(world.home, "null", turn.thread).agent, "default"); after = true; },
   });
   assert.equal(result.job.code, 0, result.job.error);
-  assert.equal(checked, true);
+  assert.deepEqual([before, after], [true, true]);
 });
 
 test("a task preserves pending review continuation while still reporting unknown mutation coverage", () => {

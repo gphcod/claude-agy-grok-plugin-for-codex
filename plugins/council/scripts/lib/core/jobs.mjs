@@ -301,7 +301,8 @@ export function findJob(home, ref, provider = null) {
     if (providers.length > 1) throw new UsageError(`thread ${ref} exists for ${providers.join(" and ")}; add --to <provider>`);
     provider = providers[0] ?? null;
   }
-  return provider ? latestOnThread(home, provider, ref) : null;
+  // Control verbs must still find an active preparation; start evidence only filters settings inheritance.
+  return provider ? listJobs(home).find((job) => job.admitted !== false && onThread(job, provider, ref)) ?? null : null;
 }
 
 /** Render a recovered failure without changing the original metadata or an already-finalized result. */
