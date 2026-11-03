@@ -11,11 +11,12 @@ const ANSWER = path.join("/state/jobs/k3f9k3f9k3f9k3f9", "answer.md");
 const base = { id: "k3f9k3f9k3f9k3f9", dir: "/state/jobs/k3f9k3f9k3f9k3f9", provider: "grok", verb: "ask", outcome: "ok", code: 0, model: "grok-4.7", effort: "high",
   requestedEffort: "high", spawnedAt: "2026-10-31T10:00:00.000Z", endedAt: "2026-10-31T10:00:38.000Z", round: 1, rounds: 9, threadId: "t-1", admitted: true, edited: [] };
 
-test("the start line names provider, job and thread, with the review target when there is one", () => {
-  assert.equal(startLine(base), "[council] provider=grok job=k3f9k3f9k3f9k3f9 thread=t-1");
-  assert.equal(startLine({ ...base, threadId: null, requestedThreadId: "req" }), "[council] provider=grok job=k3f9k3f9k3f9k3f9 thread=req");
-  assert.equal(startLine({ ...base, threadId: null }), "[council] provider=grok job=k3f9k3f9k3f9k3f9 thread=?");
-  assert.equal(startLine({ ...base, verb: "review", target: "working tree (staged,\nunstaged)" }), "[council] provider=grok job=k3f9k3f9k3f9k3f9 thread=t-1 target=working tree (staged, unstaged)");
+test("the compact start line retains provider, recovery job and review target; JSON retains the native thread", () => {
+  assert.equal(startLine(base), "[council] provider=grok job=k3f9k3f9k3f9k3f9");
+  assert.equal(startLine({ ...base, threadId: null, requestedThreadId: "req" }), startLine(base));
+  assert.equal(startLine({ ...base, threadId: null }), startLine(base));
+  assert.equal(resultJson(base, "").thread, "t-1");
+  assert.equal(startLine({ ...base, verb: "review", target: "working tree (staged,\nunstaged)" }), "[council] provider=grok job=k3f9k3f9k3f9k3f9 target=working tree (staged, unstaged)");
 });
 
 test("the footer: status, job, model/effort with clamp, duration, and round only on threaded verbs", () => {
@@ -65,13 +66,19 @@ test("the --json object carries every A3.4 field and bounds its lists", () => {
     reviewState: { reviewRef: "r", snapshotId: "s", status: "partial", total: 4, pending: 2, completed: ["u1"], unsupportedCount: 1, synthesisPending: true, blocking: false },
     unreviewed: ["a", "b"], batch: { index: 1, total: 2 }, edited: Array.from({ length: 100 }, (_, i) => `f${i}.js`) }, "answer");
   assert.deepEqual(Object.keys(json), ["provider", "job", "thread", "requestedThread", "session", "status", "exit", "verb", "tier", "model", "modelVerified", "effort", "requestedEffort",
-    "round", "rounds", "verdict", "findings", "coverage", "batch", "edited", "editedCount", "failedCommands", "failedCommandCount", "costUsd", "elapsedMs", "error", "attention", "cleanupPending",
+    "round", "rounds", "verdict", "findings", "coverage", "batch", "edited", "editedCount", "failedCommands", "failedCommandCount", "costUsd", "usage", "elapsedMs", "error", "attention", "cleanupPending",
     "threadLocked", "answer", "clipped", "answerFile"]);
   assert.deepEqual([json.provider, json.job, json.thread, json.session, json.model, json.modelVerified, json.effort, json.requestedEffort, json.tier, json.round, json.rounds, json.verdict, json.exit, json.costUsd],
     ["grok", "k3f9k3f9k3f9k3f9", "t-1", "codex-1", "grok-4.7", true, "high", "high", "consult", 1, 9, "approve", 0, 0.0123]);
   assert.deepEqual(json.coverage, { reviewRef: "r", snapshotId: "s", status: "partial", total: 4, pending: 2, reviewed: 1, unreviewed: ["a", "b"], unsupportedCount: 1, synthesisPending: true, blocking: false });
   assert.deepEqual([json.edited.length, json.editedCount, json.failedCommands, json.failedCommandCount, json.batch], [10, 100, ["make"], 1, { index: 1, total: 2 }]);
   assert.equal(json.answerFile, ANSWER);
+  const usage = { input_tokens: 120, output_tokens: 25, cache_read_input_tokens: 80 };
+  const current = resultJson({ ...base, cost: 0.004, usage }, "answer");
+  assert.equal(current.costUsd, 0.004, "public costUsd reports the lifecycle's stored cost");
+  assert.deepEqual(current.usage, usage, "native usage counters reach the machine-readable result");
+  assert.equal(resultJson({ ...base, cost: 0 }, "").costUsd, 0);
+  assert.equal(resultJson(base, "").usage, null);
   assert.equal(resultJson({ ...base, modelVerified: false, model: "gpt-6.1-sol" }, "").modelVerified, false);
   assert.equal(resultJson({ ...base, model: null }, "").model, "default");
   assert.equal(resultJson(base, "").coverage, null);

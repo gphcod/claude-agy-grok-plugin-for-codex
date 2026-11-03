@@ -143,6 +143,8 @@ export default {
     const exec = (args, extra) => ({ command: launcher?.command ?? "claude", args: [...(launcher?.args ?? []), ...args], ...extra });
     return [
       stateRootDescriptor(ctx.stateRoot), // first for every provider (S1.4): the action line names council's own directory
+      { kind: "process-table", target: (ctx.platform ?? process.platform) === "win32" ? "powershell Win32_Process" : "ps", timeoutMs: 20000, why: "process identity and cleanup",
+        action: "Allow the process-table query before submitting Claude work; cleanup requires fresh process identity evidence." },
       { kind: "dir", target: storage, access: "write", timeoutMs: 1000, why: "Claude session storage",
         action: `Grant write access to ${storage}; Claude Code stores every session there (escalate only if the host allows it).` },
       { kind: "exec", target: exec(["--version"], { expectText: "\\d+\\.\\d+\\.\\d+" }), timeoutMs: 15000, why: "claude --version", action: "Install Claude Code, then run setup." },

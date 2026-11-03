@@ -17,7 +17,7 @@ const timers = { inactivityMs: 30000, deadlineMs: 60000 };
 const finding = (extra = {}) => ({ id: "F1", severity: "high", title: "Off by one", body: "The loop skips item 0.", file: "README.md", line_start: 1, line_end: 1, confidence: 0.9, recommendation: "Start at 0.", ...extra });
 const structured = (value) => ({ COUNCIL_FAKE_STRUCTURED: JSON.stringify(value) });
 const flagged = { verdict: "needs-attention", summary: "Defect.", findings: [finding()], next_steps: [] };
-const threadOf = (stderr) => /thread=([^\s]+)/.exec(stderr)?.[1];
+const threadOf = (world, stderr) => loadJob(world.home, jobIdOf(stderr))?.threadId;
 /** No process query can be answered: cleanup is never confirmed. */
 const blind = { platform: process.platform, self: () => null, snapshot: () => ({ state: "unknown", rows: [] }), inspect: () => ({ state: "unknown", rows: [] }), stop: () => "unknown" };
 /** A process table that holds nothing: the owner companion and every owned row are gone. */
@@ -211,7 +211,7 @@ test("F11: a reply that finds only the thread record keeps round, budget, reques
   const log = path.join(w.dir, "requests.log");
   const first = w.call(["ask", "--to", "null", "--rounds", "3", "--web", "--effort", "max", "--", "q"]);
   assert.equal(first.status, 0, first.stdout + first.stderr);
-  const thread = threadOf(first.stderr);
+  const thread = threadOf(w, first.stderr);
   assert.equal(loadThread(w.home, "null", thread).requestedEffort, "max");
   fs.rmSync(path.join(w.home, "jobs"), { recursive: true, force: true }); // the job history is gone; the thread record stays
   const reply = w.call(["reply", thread, "--", "again"], { env: { COUNCIL_FAKE_REQUEST_LOG: log } });
@@ -281,6 +281,7 @@ test("F19: checkRequest refuses before any job record, freeing the request id; t
   assert.equal(w.call(["ask", "--to", "null", "--web", "--request-id", "rc", "--", "q"]).status, 0, "the id runs once the flag is accepted");
   assert.equal(requestFingerprint("ask", { deadline: "5" }, "q"), requestFingerprint("ask", { deadline: "50", "inactivity-timeout": "9" }, "q"));
   const first = w.call(["ask", "--to", "null", "--request-id", "rt", "--deadline", "100", "--", "q"]);
+  assert.equal(first.status, 0, JSON.stringify({ stdout: first.stdout, stderr: first.stderr, error: first.error?.message, signal: first.signal }));
   const longer = w.call(["ask", "--to", "null", "--request-id", "rt", "--deadline", "200", "--inactivity-timeout", "50", "--", "q"]);
   assert.equal(longer.status, 0, longer.stdout + longer.stderr);
   assert.equal(longer.stdout, first.stdout, "a retry with a longer deadline replays the first call");

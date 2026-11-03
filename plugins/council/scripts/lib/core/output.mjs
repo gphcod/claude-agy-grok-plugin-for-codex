@@ -68,8 +68,8 @@ export function capAnswer(text) {
   return { text: utf8Prefix(text, ANSWER_CAP), clipped: Buffer.byteLength(text, "utf8") > ANSWER_CAP };
 }
 
-/** `[council] provider=<p> job=<id> thread=<native id|?>[ target=<t>]`, stderr. */
-export const startLine = (job) => `[council] provider=${job.provider} job=${job.id} thread=${job.threadId ?? job.requestedThreadId ?? "?"}${job.target ? ` target=${oneLine(job.target)}` : ""}`;
+/** Compact recovery handle on stderr; native thread identity stays in the job record and --json. */
+export const startLine = (job) => `[council] provider=${job.provider} job=${job.id}${job.target ? ` target=${oneLine(job.target)}` : ""}`;
 
 const THREADED = new Set(["ask", "reply", "task"]);
 /** The `<model>/<effort>[<=requested]` token; `model unverified` is a separate token. */
@@ -124,7 +124,7 @@ export function resultJson(job, answer) {
     verdict: job.verdict ?? null, findings: job.findings ?? null, coverage, batch: job.batch ?? null,
     edited: (job.edited ?? []).slice(0, 10).map((p) => collapsed(p, 200)), editedCount: (job.edited ?? []).length,
     failedCommands: (job.failedCommands ?? []).slice(0, 10).map((c) => collapsed(c, 200)), failedCommandCount: (job.failedCommands ?? []).length,
-    costUsd: job.cost ?? null, elapsedMs: elapsedOf(job), error: job.error ? oneLine(job.error, 2000) : null, attention: attentionOf(job),
+    costUsd: job.cost ?? null, usage: job.usage ?? null, elapsedMs: elapsedOf(job), error: job.error ? oneLine(job.error, 2000) : null, attention: attentionOf(job),
     cleanupPending: pendingCleanup(job), threadLocked: Boolean(job.threadLocked), answer: text, clipped: clipped || Boolean(job.answerClipped),
     answerFile: path.join(job.dir, "answer.md"),
   };

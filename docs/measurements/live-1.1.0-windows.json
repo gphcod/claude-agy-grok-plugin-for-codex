@@ -1,0 +1,688 @@
+{
+  "date": "2026-11-02T22:27:41.719Z",
+  "payloadCommit": "1007307",
+  "method": "Live defaults; three functional calls and one exploratory native input pair per provider. See qualification record for normalization and limits.",
+  "providers": {
+    "claude": [
+      {
+        "name": "review",
+        "arm": "candidate",
+        "provider": "claude",
+        "code": 10,
+        "job": "db4da9c2a222a777",
+        "thread": "a613528f-d702-4b54-aa3d-68566a23262e",
+        "model": "claude-opus-5-5",
+        "effort": "high",
+        "elapsedMs": 12231,
+        "costUsd": 0.10430820000000002,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 10891,
+          "cache_read_input_tokens": 10521,
+          "output_tokens": 753,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 10891,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "global",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 522,
+              "cache_read_input_tokens": 10521,
+              "cache_creation_input_tokens": 370,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 370
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard",
+          "fallback_credit": null,
+          "turns": 4,
+          "retries": 0
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": "needs-attention",
+        "coverage": {
+          "reviewRef": "db4da9c2a222a777",
+          "snapshotId": "f600938ebb9741ab59c74d7d141e6500dc989cead587e266f85aed9756778c74",
+          "status": "complete",
+          "total": 1,
+          "pending": 0,
+          "reviewed": 1,
+          "unreviewed": [],
+          "unsupportedCount": 0,
+          "synthesisPending": false,
+          "blocking": true
+        },
+        "findings": [
+          {
+            "id": "u1-F1",
+            "severity": "BLOCKER",
+            "file": "calc.js",
+            "line": 3,
+            "title": "sum skips the first array element",
+            "text": "The loop initializer changed from `let i = 0` to `let i = 1`, so `xs[0]` is never added to `total`. Every non-empty input returns the wrong result: `sum([5])` returns 0 instead of 5, and `sum([1, 2, 3])` returns 5 instead of 6. No error is raised, so callers of this exported function would get wrong totals silently. Verified from calc.js:3; the numeric results come from tracing the code by hand, not from running it.",
+            "recommendation": "Restore the initializer to `let i = 0` so that every element is summed, and add a regression test covering single-element and multi-element arrays."
+          }
+        ],
+        "attention": null
+      },
+      {
+        "name": "task",
+        "arm": "candidate",
+        "provider": "claude",
+        "code": 0,
+        "job": "286a149c26afb5b4",
+        "thread": "29cc5e89-7876-42a6-b57a-98affadd3291",
+        "model": "claude-opus-5-5",
+        "effort": "high",
+        "elapsedMs": 6687,
+        "costUsd": 0.1016312,
+        "usage": {
+          "input_tokens": 4,
+          "cache_creation_input_tokens": 11785,
+          "cache_read_input_tokens": 11576,
+          "output_tokens": 251,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 11785,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "global",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 122,
+              "cache_read_input_tokens": 11576,
+              "cache_creation_input_tokens": 209,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 209
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard",
+          "fallback_credit": null,
+          "turns": 2,
+          "retries": 0
+        },
+        "readOnly": false,
+        "cleanupPending": false,
+        "edited": [
+          "smoke.txt"
+        ],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      },
+      {
+        "name": "read-only-reply",
+        "arm": "candidate",
+        "provider": "claude",
+        "code": 10,
+        "job": "9017cdac034243c4",
+        "thread": "29cc5e89-7876-42a6-b57a-98affadd3291",
+        "model": "claude-opus-5-5",
+        "effort": "high",
+        "elapsedMs": 12050,
+        "costUsd": 0.13434120000000002,
+        "usage": {
+          "input_tokens": 8,
+          "cache_creation_input_tokens": 996,
+          "cache_read_input_tokens": 36450,
+          "output_tokens": 871,
+          "output_tokens_details": {
+            "thinking_tokens": 340
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 996,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "global",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 272,
+              "cache_read_input_tokens": 12563,
+              "cache_creation_input_tokens": 218,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 218
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard",
+          "fallback_credit": null,
+          "turns": 3,
+          "retries": 0
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": "denied Edit(C:\\Users\\kkao\\.codex\\tmp\\codex-plugin-1.1.0-20261102\\live-tests\\claude\\work\\smoke.txt)"
+      },
+      {
+        "name": "tokens-baseline",
+        "arm": "baseline",
+        "provider": "claude",
+        "code": 0,
+        "job": "92548ac7f15f7266",
+        "thread": "5a4e8bf9-cef6-472b-81a4-e02e671a20ba",
+        "model": "claude-opus-5-5",
+        "effort": "high",
+        "elapsedMs": 4506,
+        "costUsd": 0.0447944,
+        "usage": {
+          "input_tokens": 2,
+          "cache_creation_input_tokens": 5460,
+          "cache_read_input_tokens": 3232,
+          "output_tokens": 23,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 5460,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "global",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 23,
+              "cache_read_input_tokens": 3232,
+              "cache_creation_input_tokens": 5460,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 5460
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard",
+          "fallback_credit": null,
+          "turns": 1,
+          "retries": 0
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      },
+      {
+        "name": "tokens-candidate",
+        "arm": "candidate",
+        "provider": "claude",
+        "code": 0,
+        "job": "95055cd642af6cd9",
+        "thread": "73f4f7d3-81d9-4300-b7b2-6ea8285f4404",
+        "model": "claude-opus-5-5",
+        "effort": "high",
+        "elapsedMs": 3701,
+        "costUsd": 0.0280944,
+        "usage": {
+          "input_tokens": 2,
+          "cache_creation_input_tokens": 3322,
+          "cache_read_input_tokens": 5252,
+          "output_tokens": 23,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 3322,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "global",
+          "iterations": [
+            {
+              "input_tokens": 2,
+              "output_tokens": 23,
+              "cache_read_input_tokens": 5252,
+              "cache_creation_input_tokens": 3322,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 3322
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard",
+          "fallback_credit": null,
+          "turns": 1,
+          "retries": 0
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      }
+    ],
+    "gemini": [
+      {
+        "name": "review",
+        "arm": "candidate",
+        "provider": "gemini",
+        "code": 10,
+        "job": "5899f618eefdbd06",
+        "thread": "d37d1f96-3ced-45a9-97fb-53056c34778b",
+        "model": "gemini-4-argon",
+        "effort": "medium",
+        "elapsedMs": 21479,
+        "costUsd": null,
+        "usage": {
+          "input_tokens": 15698,
+          "output_tokens": 662,
+          "thinking_tokens": 252,
+          "cache_read_tokens": 11371,
+          "total_tokens": 16360,
+          "conversation": {
+            "input_tokens": 15698,
+            "output_tokens": 662,
+            "thinking_tokens": 252,
+            "cache_read_tokens": 11371,
+            "total_tokens": 16360
+          }
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": "needs-attention",
+        "coverage": {
+          "reviewRef": "5899f618eefdbd06",
+          "snapshotId": "f600938ebb9741ab59c74d7d141e6500dc989cead587e266f85aed9756778c74",
+          "status": "complete",
+          "total": 1,
+          "pending": 0,
+          "reviewed": 1,
+          "unreviewed": [],
+          "unsupportedCount": 0,
+          "synthesisPending": false,
+          "blocking": true
+        },
+        "findings": [
+          {
+            "id": "u1-F1",
+            "severity": "BLOCKER",
+            "file": "calc.js",
+            "line": 3,
+            "title": "Off-by-one loop initialization skips the first element in `sum`",
+            "text": "Verified in `calc.js` line 3: the loop counter `i` is initialized to `1` instead of `0` (`for (let i = 1; i < xs.length; i++)`). Because JavaScript arrays are 0-indexed, `xs[0]` is never added to `total`. Any non-empty array with a non-zero first element will return an incorrect sum (for example, `sum([5])` returns `0`, and `sum([1, 2, 3])` returns `5`).",
+            "recommendation": "Initialize the loop index `i` at `0`: `for (let i = 0; i < xs.length; i++) total += xs[i];`."
+          }
+        ],
+        "attention": null
+      },
+      {
+        "name": "task",
+        "arm": "candidate",
+        "provider": "gemini",
+        "code": 0,
+        "job": "fa3ebc43c8945e32",
+        "thread": "1468d31f-6c49-4bff-a834-949a394ad264",
+        "model": "gemini-4-argon",
+        "effort": "medium",
+        "elapsedMs": 21578,
+        "costUsd": null,
+        "usage": {
+          "input_tokens": 14472,
+          "output_tokens": 488,
+          "thinking_tokens": 182,
+          "cache_read_tokens": 10068,
+          "total_tokens": 14960,
+          "conversation": {
+            "input_tokens": 14472,
+            "output_tokens": 488,
+            "thinking_tokens": 182,
+            "cache_read_tokens": 10068,
+            "total_tokens": 14960
+          }
+        },
+        "readOnly": false,
+        "cleanupPending": false,
+        "edited": [
+          "smoke.txt"
+        ],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      },
+      {
+        "name": "read-only-reply",
+        "arm": "candidate",
+        "provider": "gemini",
+        "code": 10,
+        "job": "ee7386fca7cd26d8",
+        "thread": "1468d31f-6c49-4bff-a834-949a394ad264",
+        "model": "gemini-4-argon",
+        "effort": "medium",
+        "elapsedMs": 22043,
+        "costUsd": null,
+        "usage": {
+          "input_tokens": 7445,
+          "output_tokens": 854,
+          "thinking_tokens": 283,
+          "cache_read_tokens": 33425,
+          "total_tokens": 8299,
+          "conversation": {
+            "input_tokens": 21917,
+            "output_tokens": 1342,
+            "thinking_tokens": 465,
+            "cache_read_tokens": 43493,
+            "total_tokens": 23259
+          }
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": "denied edit_file(C:\\Users\\kkao\\.codex\\tmp\\codex-plugin-1.1.0-20261102\\live-tests\\gemini\\work\\smoke.txt)"
+      },
+      {
+        "name": "tokens-candidate",
+        "arm": "candidate",
+        "provider": "gemini",
+        "code": 0,
+        "job": "fd5607b19e0d1151",
+        "thread": "4aabf89c-9770-4dd6-a6cb-a45ea207434e",
+        "model": "gemini-4-argon",
+        "effort": "medium",
+        "elapsedMs": 10182,
+        "costUsd": null,
+        "usage": {
+          "input_tokens": 12035,
+          "output_tokens": 169,
+          "thinking_tokens": 123,
+          "cache_read_tokens": 0,
+          "total_tokens": 12204,
+          "conversation": {
+            "input_tokens": 12035,
+            "output_tokens": 169,
+            "thinking_tokens": 123,
+            "cache_read_tokens": 0,
+            "total_tokens": 12204
+          }
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      },
+      {
+        "name": "tokens-baseline",
+        "arm": "baseline",
+        "provider": "gemini",
+        "code": 0,
+        "job": "70ec9819705ca1e2",
+        "thread": "e932b0f3-94a1-48e1-8280-bdd394a1672b",
+        "model": "gemini-4-argon",
+        "effort": "medium",
+        "elapsedMs": 10566,
+        "costUsd": null,
+        "usage": {
+          "input_tokens": 12119,
+          "output_tokens": 184,
+          "thinking_tokens": 138,
+          "cache_read_tokens": 0,
+          "total_tokens": 12303,
+          "conversation": {
+            "input_tokens": 12119,
+            "output_tokens": 184,
+            "thinking_tokens": 138,
+            "cache_read_tokens": 0,
+            "total_tokens": 12303
+          }
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      }
+    ],
+    "grok": [
+      {
+        "name": "review",
+        "arm": "candidate",
+        "provider": "grok",
+        "code": 10,
+        "job": "6a4eab0c2673b0fe",
+        "thread": "9a2902de-2797-426b-967e-f85aa424c743",
+        "model": "grok-4.7",
+        "effort": "high",
+        "elapsedMs": 16926,
+        "costUsd": 0.019104,
+        "usage": {
+          "input_tokens": 7149,
+          "cache_read_input_tokens": 1920,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 641,
+          "reasoning_tokens": 264,
+          "total_tokens": 9710
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": "needs-attention",
+        "coverage": {
+          "reviewRef": "6a4eab0c2673b0fe",
+          "snapshotId": "f600938ebb9741ab59c74d7d141e6500dc989cead587e266f85aed9756778c74",
+          "status": "complete",
+          "total": 1,
+          "pending": 0,
+          "reviewed": 1,
+          "unreviewed": [],
+          "unsupportedCount": 0,
+          "synthesisPending": false,
+          "blocking": true
+        },
+        "findings": [
+          {
+            "id": "u1-F1",
+            "severity": "BLOCKER",
+            "file": "calc.js",
+            "line": 3,
+            "title": "sum skips the first element",
+            "text": "The loop initializer changed from i = 0 to i = 1. sum is a total of every element; index 0 is never added. For a one-element array the result is always 0. For any longer array the result is short by xs[0]. Empty arrays still return 0. Verified from the supplied diff of calc.js; no other call sites or tests are in this batch.",
+            "recommendation": "Restore the loop start to i = 0 so every element is included: for (let i = 0; i < xs.length; i++) total += xs[i];"
+          },
+          {
+            "id": "u1-F2",
+            "severity": "MINOR",
+            "file": "calc.js",
+            "line": 3,
+            "title": "sum does not guard a missing array",
+            "text": "xs.length is read with no check. null, undefined, or a non-array throws TypeError. This behavior is unchanged by the edit and is not introduced here.",
+            "recommendation": "Leave as-is unless callers require a defined result for non-arrays. Do not treat this as part of the index change."
+          }
+        ],
+        "attention": null
+      },
+      {
+        "name": "task",
+        "arm": "candidate",
+        "provider": "grok",
+        "code": 0,
+        "job": "e309477f4fbbbc5c",
+        "thread": "4d42a53f-5da6-4fee-8538-28a55aff5b32",
+        "model": "grok-4.7",
+        "effort": "high",
+        "elapsedMs": 12175,
+        "costUsd": 0.057606,
+        "usage": {
+          "input_tokens": 23319,
+          "cache_read_input_tokens": 16512,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 452,
+          "reasoning_tokens": 242,
+          "total_tokens": 40283
+        },
+        "readOnly": false,
+        "cleanupPending": false,
+        "edited": [
+          "smoke.txt"
+        ],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      },
+      {
+        "name": "read-only-reply",
+        "arm": "candidate",
+        "provider": "grok",
+        "code": 0,
+        "job": "faf95fcc65b0e840",
+        "thread": "4d42a53f-5da6-4fee-8538-28a55aff5b32",
+        "model": "grok-4.7",
+        "effort": "high",
+        "elapsedMs": 78240,
+        "costUsd": 0.134472,
+        "usage": {
+          "input_tokens": 31303,
+          "cache_read_input_tokens": 90368,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 4447,
+          "reasoning_tokens": 3688,
+          "total_tokens": 126118
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      },
+      {
+        "name": "tokens-baseline",
+        "arm": "baseline",
+        "provider": "grok",
+        "code": 0,
+        "job": "08245cbb7dc35153",
+        "thread": "e9bb7b7f-97b9-46fc-b0a8-1129e502686a",
+        "model": "grok-4.7",
+        "effort": "high",
+        "elapsedMs": 6527,
+        "costUsd": 0.014594,
+        "usage": {
+          "input_tokens": 6217,
+          "cache_read_input_tokens": 1920,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 200,
+          "reasoning_tokens": 161,
+          "total_tokens": 8337
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      },
+      {
+        "name": "tokens-candidate",
+        "arm": "candidate",
+        "provider": "grok",
+        "code": 0,
+        "job": "ef436dd57203bab3",
+        "thread": "70bd8cf7-d526-4ef5-93e5-ec7b95ca7cc6",
+        "model": "grok-4.7",
+        "effort": "high",
+        "elapsedMs": 6710,
+        "costUsd": 0.01408,
+        "usage": {
+          "input_tokens": 6143,
+          "cache_read_input_tokens": 1920,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 139,
+          "reasoning_tokens": 110,
+          "total_tokens": 8202
+        },
+        "readOnly": true,
+        "cleanupPending": false,
+        "edited": [],
+        "verdict": null,
+        "coverage": null,
+        "findings": null,
+        "attention": null
+      }
+    ]
+  },
+  "control": {
+    "wait": {
+      "code": 0,
+      "providersLoaded": []
+    },
+    "cancel": {
+      "code": 0,
+      "providersLoaded": [
+        "claude"
+      ],
+      "result": {
+        "provider": "claude",
+        "job": "59g4gywn56hu0bmk",
+        "status": "finished",
+        "exit": 0,
+        "thread": null,
+        "cleanupPending": false,
+        "released": false,
+        "error": null
+      }
+    }
+  }
+}

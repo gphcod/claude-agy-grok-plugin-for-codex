@@ -42,7 +42,7 @@ test("ask: the explicit Opus 5.5 default, CLI-default override, cold then warm p
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.equal(r.stdout.split("\n")[0], "pong");
   assert.match(footerOf(r.stdout), /^council claude ok · job [a-z0-9]{16} · claude-opus-5-5\/low · \d+s · round 1\/9$/);
-  assert.match(r.stderr, /^\[council\] provider=claude job=[a-z0-9]{16} thread=[0-9a-f-]{36}$/m);
+  assert.match(r.stderr, /^\[council\] provider=claude job=[a-z0-9]{16}$/m);
   assert.deepEqual(w.probes().map((p) => p.probe), ["version", "auth", "help", "capability"], "cold: CLAUDEX's four probes");
   const [call] = w.launches();
   assert.deepEqual(subset(flags(call), READ_ONLY), READ_ONLY);

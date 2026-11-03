@@ -60,7 +60,7 @@ S5.7. Donor: gemini-plugin-for-codex 0.1.2 (AGYX), `skills/agy/scripts/agy.mjs` 
 
 | AGYX | Council | Status | Notes |
 |---|---|---|---|
-| start line `agy run=<id>` | `[council] provider=gemini job=<id> thread=<conversation>` on stderr | renamed | Printed when agy names the conversation (its `init` event) |
+| start line `agy run=<id>` | `[council] provider=gemini job=<id>` on stderr | renamed | Since 1.1.0, printed at spawn before agy's first event; native conversation stays in state/JSON/`wait` |
 | status prefix `agy <state> denied=N coverage=… changed=N run=… conv=…`, denial lines, `changed:` list, `evidence=` | footer (A3.4) and `--json`; denials, mutation coverage and changed paths in the job record (`meta.json`) | intentionally different | One footer grammar for every provider; `edited N` on tasks |
 | answer: `result.response`, else the streamed partial | `result.response`; `structured_output` on reviews | intentionally different | A print-timeout partial is not returned as an answer (exit 1) |
 | `usageDelta` against the previous run's cumulative usage | `usage`: this turn's step sums, with `usage.conversation` from `result.usage` | intentionally different | No cross-run lookup needed |

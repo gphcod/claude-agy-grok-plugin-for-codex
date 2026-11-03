@@ -73,10 +73,12 @@ test("cold preflight runs every probe and caches; a warm call probes nothing; a 
   const cold = await runPreflight({ home, provider: "null", launcher, descriptors, env });
   assert.deepEqual([cold.cached, cold.probes, count()], [false, 2, 2]);
   assert.ok(fs.existsSync(path.join(home, "preflight", `null-${cold.key}.json`)));
+  const savedCache = fs.readFileSync(path.join(home, "preflight", `null-${cold.key}.json`), "utf8");
   const warm = await runPreflight({ home, provider: "null", launcher, descriptors, env });
   assert.deepEqual([warm.cached, warm.probes, count()], [true, 0, 2], "a warm call spawns no probe");
   assert.ok(warm.results.filter((r) => r.kind === "exec").every((r) => r.cached));
   assert.equal(warm.results.find((r) => r.kind === "dir").cached, false, "cheap sandbox checks are re-run");
+  assert.equal(fs.readFileSync(path.join(home, "preflight", `null-${cold.key}.json`), "utf8"), savedCache, "warm sandbox checks do not rewrite the unchanged probe cache");
   const refreshed = await runPreflight({ home, provider: "null", launcher, descriptors, env, refresh: true });
   assert.deepEqual([refreshed.cached, count()], [false, 4]);
   fs.appendFileSync(bin, "\n// changed");

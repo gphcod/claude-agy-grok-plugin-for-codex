@@ -40,7 +40,7 @@ test("verification: ask --to gemini --effort low prints the answer and the foote
   const r = w.gemini(["ask", "--to", "gemini", "--effort", "low", "--", "Reply with pong"]);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^pong\ncouncil gemini ok · job [a-z0-9]{16} · gemini-4-argon\/low · \d+s · round 1\/9\n$/);
-  assert.match(r.stderr, /^\[council\] provider=gemini job=[a-z0-9]{16} thread=[0-9a-f-]{36}\n$/);
+  assert.match(r.stderr, /^\[council\] provider=gemini job=[a-z0-9]{16}\n$/);
   const job = w.job(jobIdOf(r.stderr));
   assert.equal(job.threadId, w.fakeCalls()[0].conversation ?? job.threadId);
   assert.deepEqual([job.mutationCoverage, job.readOnly], ["complete", true]);

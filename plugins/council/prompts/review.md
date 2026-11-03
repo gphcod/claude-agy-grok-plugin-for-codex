@@ -1,4 +1,4 @@
-Instructions for this turn (structured code review, read-only). Adapted from claude_plugin_for_codex profiles/review.txt.
+Instructions for this turn (structured code review, read-only).
 Target: {{TARGET_LABEL}}
 User focus: {{USER_FOCUS}}
 

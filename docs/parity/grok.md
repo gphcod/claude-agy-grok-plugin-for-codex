@@ -72,7 +72,7 @@ S4.7. Source: GROKX `/Users/cia/GitCode/grok_plugin_for_codex` at `v1.1.0` (`148
 
 | GROKX | council | Status | Notes |
 |---|---|---|---|
-| start line `[grok] job=… session=… [target=…]` on stdout | `[council] provider=grok job=… thread=… [target=…]` on stderr | renamed | A3.4 |
+| start line `[grok] job=… session=… [target=…]` on stdout | `[council] provider=grok job=… [target=…]` on stderr | renamed | A3.4, compact since 1.1.0; native session stays in state/JSON/`wait` |
 | footer `-- grok <status>` | `council grok <ok\|needs attention\|failed\|cancelled>` | renamed | |
 | `job <id>` | `job <16 chars>` | same | |
 | `<model>@<effort>` | `<model>/<effort>[<=requested]` | renamed | the clamp is shown (A3.3) |
