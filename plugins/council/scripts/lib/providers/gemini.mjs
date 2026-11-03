@@ -4,6 +4,7 @@
 // lib/snapshot.mjs (the bounded before/after Git snapshots, now core/snapshot.mjs). Process supervision, the run store
 // and `result`/`release`/`prune` are council's core. Changes from the donor are listed in docs/parity/gemini.md.
 import fs from "node:fs";
+import { geminiServiceFailure } from "../core/gemini-service.mjs";
 import os from "node:os";
 import path from "node:path";
 import { resolveLauncher as findLauncher, runSync } from "../core/launcher.mjs";
@@ -130,6 +131,7 @@ const addUsage = (sum, usage) => {
 };
 
 function stepEvent(su, scratch) {
+  if (su.step_type === "tool" || su.tool_name || su.tool_info) scratch.toolActivity = true;
   const out = { threadId: typeof su.conversation_id === "string" && su.conversation_id ? su.conversation_id : undefined };
   const denied = denial(su);
   if (denied) return { ...out, denied, toolStep: denied.tool, describe: `denied ${denied.tool}` };
@@ -172,6 +174,16 @@ function resultEvent(r, scratch, state) {
   const threadId = typeof r.conversation_id === "string" && r.conversation_id ? r.conversation_id : undefined;
   const usage = { ...(scratch.usage ?? {}), ...(r.usage ? { conversation: r.usage } : {}) };
   const response = typeof r.response === "string" ? r.response : "";
+  const kept = response.trim() ? response : scratch.partial?.trim() ? scratch.partial : null;
+  const transientFailure = r.status !== "SUCCESS" && r.finished_reason !== "print_timeout"
+    ? geminiServiceFailure(r.error, {
+      partial: Boolean(kept), toolActivity: Boolean(scratch.toolActivity || (state.denials ?? []).length || r.denied_actions?.length),
+    }) : null;
+  // A real service outage must not become a completed denial when earlier tools were refused.
+  if (transientFailure) return {
+    fatal: `agy status ${r.status}: ${clip(r.error, 500)}`, usage, transientFailure,
+    ...(kept ? { partialText: kept } : {}),
+  };
   // A prompt-style denial (request-review, a tool headless mode cannot prompt for) empties the response; it is a denial
   // (exit 10), checked before the empty-response rule because the reader latches the first fatal (A5.1, S1.9 F1).
   if (Array.isArray(r.denied_actions) && r.denied_actions.length) {
@@ -180,7 +192,6 @@ function resultEvent(r, scratch, state) {
       : `agy denied ${actions.map((a) => `${a.action}${a.display ? ` (${a.display})` : ""}`).join(", ")}: headless mode cannot prompt for this permission.\n`;
     return { threadId, completed: true, denied: { tool: actions.map((a) => a.action).join(","), actions, prompt: true }, textDelta: text, usage, describe: "result (denied)" };
   }
-  const kept = response.trim() ? response : scratch.partial?.trim() ? scratch.partial : null;
   // print_timeout (status SUCCESS, exit 0) fails the turn (exit 1) but keeps what agy answered: the event carries the
   // text and an `incomplete` marker without `completed`, so the lifecycle's not-completed path fails it (a fatal would
   // drop the text, and `incomplete` on a completed turn means exit 10). agy's stderr line names the timeout.
@@ -192,7 +203,7 @@ function resultEvent(r, scratch, state) {
   if (denials.length && (r.status !== "SUCCESS" || !response.trim())) {
     return { threadId, completed: true, textDelta: kept ?? denialText(denials), usage, describe: "result (denied)" };
   }
-  if (r.status !== "SUCCESS") return { fatal: `agy status ${r.status}${r.error ? `: ${clip(r.error, 500)}` : ""}` };
+  if (r.status !== "SUCCESS") return { fatal: `agy status ${r.status}${r.error ? `: ${clip(r.error, 500)}` : ""}`, usage };
   const structured = r.structured_output && typeof r.structured_output === "object" ? r.structured_output : undefined;
   if (!response.trim() && !structured) return { fatal: "agy returned an empty response" };
   return { threadId, completed: true, textDelta: response.trim() ? response : `${JSON.stringify(structured)}\n`, ...(structured ? { structured } : {}), usage, describe: "result" };

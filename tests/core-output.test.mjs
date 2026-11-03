@@ -61,13 +61,25 @@ test("renderResult prints the answer then the footer; an empty answer prints the
   assert.equal(renderResult(base, ""), "council grok ok · job k3f9k3f9k3f9k3f9 · grok-4.7/high · 38s · round 1/9\n");
 });
 
+test('503 retry advice cannot hide native-confirmation or mutation-coverage warnings', () => {
+  const job = { ...base, provider: 'gemini', verb: 'reply', outcome: 'failed', code: 1, readOnly: true,
+    admitted: true, cleanupPending: false, transientFailure: { status: 503, noVisibleWork: true } };
+  const native = { ...job, threadId: null, requestedThreadId: 'native' };
+  assert.match(footer(native, false), /thread not confirmed; temporary 503; next: report failure; no automatic repeat/);
+  assert.equal(resultJson(native, '').retry.eligible, false);
+  const mutation = { ...job, threadId: 'native', mutationCoverage: 'unknown' };
+  assert.match(footer(mutation, false), /coverage unknown/);
+  assert.doesNotMatch(footer(mutation, false), /next: repeat once/);
+  assert.equal(resultJson(mutation, '').retry.eligible, false);
+});
+
 test("the --json object carries every A3.4 field and bounds its lists", () => {
   const json = resultJson({ ...base, session: "codex-1", tier: "consult", cost: 0.0123, verdict: "approve", findings: [{ id: "F1" }], failedCommands: ["make"],
     reviewState: { reviewRef: "r", snapshotId: "s", status: "partial", total: 4, pending: 2, completed: ["u1"], unsupportedCount: 1, synthesisPending: true, blocking: false },
     unreviewed: ["a", "b"], batch: { index: 1, total: 2 }, edited: Array.from({ length: 100 }, (_, i) => `f${i}.js`) }, "answer");
   assert.deepEqual(Object.keys(json), ["provider", "job", "thread", "requestedThread", "session", "status", "exit", "verb", "tier", "model", "modelVerified", "effort", "requestedEffort",
     "round", "rounds", "verdict", "findings", "coverage", "batch", "edited", "editedCount", "failedCommands", "failedCommandCount", "costUsd", "usage", "elapsedMs", "error", "attention", "cleanupPending",
-    "threadLocked", "answer", "clipped", "answerFile"]);
+    "threadLocked", "answer", "clipped", "answerFile", "retry"]);
   assert.deepEqual([json.provider, json.job, json.thread, json.session, json.model, json.modelVerified, json.effort, json.requestedEffort, json.tier, json.round, json.rounds, json.verdict, json.exit, json.costUsd],
     ["grok", "k3f9k3f9k3f9k3f9", "t-1", "codex-1", "grok-4.7", true, "high", "high", "consult", 1, 9, "approve", 0, 0.0123]);
   assert.deepEqual(json.coverage, { reviewRef: "r", snapshotId: "s", status: "partial", total: 4, pending: 2, reviewed: 1, unreviewed: ["a", "b"], unsupportedCount: 1, synthesisPending: true, blocking: false });
@@ -130,4 +142,17 @@ test("the answer scan sees content and questions beyond the preview without unbo
   assert.ok(r.answerClipped); assert.ok(text.startsWith(r.answer)); assert.equal(r.questions, false);
   fs.writeFileSync(file, "x".repeat(1024 * 1024 + 1));
   assert.throws(() => readAnswer(file), /exceeds 1 MiB/);
+});
+
+test("an ineligible service hint retains the saved review continuation", () => {
+  const job = { ...base, provider: "gemini", verb: "review", outcome: "failed", code: 1, readOnly: true, partial: true, transientFailure: { status: 503, noVisibleWork: false }, reviewState: { pending: true } };
+  const text = footer(job, false);
+  assert.match(text, /no automatic repeat/);
+  assert.match(text, /manual continuation: reply .* --next-input/);
+  assert.doesNotMatch(text, /next: reply/);
+  for (const extra of [{ mutationCoverage: "unknown" }, { unconfirmed: "thread not confirmed; start a new ask" }, { admitted: true, requestedThreadId: "old", threadId: null }]) {
+    const warned = footer({ ...job, ...extra }, false);
+    assert.match(warned, /no automatic repeat/);
+    assert.doesNotMatch(warned, /next: reply|start a new ask/);
+  }
 });

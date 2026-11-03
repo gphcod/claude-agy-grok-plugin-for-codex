@@ -8,7 +8,7 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 |---|---|---|---|
 | `claims.mjs` | 0917dd4ebae389fc62091ad6d4cadde02f3aca0f87d09929aea5efa2df64983f | tests/core-claims.test.mjs, tests/core-release-recovery.test.mjs | claims/<provider>/<threadId>; GROKX claims + CODEXCC claimHeld; busy release recovery |
 | `heartbeat.mjs` | 9cd21526c25398ddd24580590819aa4dda6d1b908d01ff1313652912bf00a374 | tests/core-locks.test.mjs (heartbeat helpers), tests/core-jobs.test.mjs | extracted from GROKX jobs/lifecycle |
-| `reader.mjs` | 47212cfb45ec94fa8e6d6ad51c6bd0d0ff47bf76e2cc43f4e41183acee81ecfa | tests/core-reader.test.mjs, tests/core-review-fixes.test.mjs | generic line reader over adapter.parseEvent |
+| `reader.mjs` | 9b1f8675cdb5d1b212aa8e47f950d2b1a04c350959da576524b1ccbd36248dad | tests/core-reader.test.mjs, tests/core-review-fixes.test.mjs | generic line reader over adapter.parseEvent |
 | `tiers.mjs` | 3a3749fcfc0c8fbea3a58dc0411f036d9725a06ba7efa2a06241bd9d9057ab90 | tests/core-catalog.test.mjs | tier table per host lives in tiers.json, not in the module |
 | `fs.mjs` | defe8d47430cb9c324ac86f464ca7e5b39c34fe8f38ded230c098d6b799ef6e2 | tests/core-jobs.test.mjs, tests/core-release-recovery.test.mjs | derived from grok_plugin_for_codex 1.1.0 lib/fs.mjs; strict state reads and bounded lock retries |
 | `review-input.mjs` | 2a6be74ac43f554bcb9b9a3345f137db41e1262cc6c39449a12595b2403a3128 | tests/core-review-input.test.mjs, tests/core-review.test.mjs | byte-identical to grok_plugin_for_codex 1.1.0 and claude_plugin_for_codex 0.5.0 |
@@ -41,3 +41,5 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 At S2.7 and again at S2.8: `local pins: 9 host-neutral modules match docs/shared-core.md` and `comparison deferred` (the twin's core is not implemented and pinned at a commit this repository may read). S6.5 records the result again.
 
 S6.5 (2026-11-01, branch `s6`): `npm run core:check` printed `local pins: 9 host-neutral modules match docs/shared-core.md` and `comparison deferred`, exit 0. `COUNCIL_CC_ROOT` was not set: the twin's core is not pinned for comparison at a commit this repository may read, so no byte comparison was made and none is claimed.
+
+1.1.1 updates the local reader pin for additive transient-failure metadata on fatal events. This is a local integrity pin, not a new claim that the twin reader is byte-identical. The Gemini service classifier is compared directly in recovery qualification.

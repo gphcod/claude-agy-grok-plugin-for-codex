@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1 (2026-11-02 Pacific)
+
+- Classify native Gemini `UNAVAILABLE (code 503)` as a temporary service failure, retaining usage and the original failed job.
+- Add structured `retry` metadata and a clear footer hint. Host guidance permits one fresh read-only call after 2 seconds only without visible partial output/tool activity, recorded edits or uncertain cleanup. No automatic task retry or internal provider relaunch; same-id replay still returns the original failure.
+- Save partial Gemini streams as a separate unfinished draft with a recovery pointer; never approve a failed turn or let a preceding denial mask a 503. A draft-save error keeps the native failure.
+- Test the recorded failure, ask/reply/review replay and fresh-id recovery, permanent errors, partial/STARTED-tool gates, cleanup, thread/mutation uncertainty, task exclusions and draft persistence. The service classifier is shared byte-for-byte with the Claude-hosted plugin.
+
 ## 1.1.0 (2026-11-02)
 
 - Explicit bounded yield guidance covers nested exec/wait wrappers as well as shell collection. Fifteen host probes compare collection counts and cached host input with both the prior guidance and claude_plugin_for_codex 0.4.2; all calls are collected without resubmission. The final skill is 2,963 B.

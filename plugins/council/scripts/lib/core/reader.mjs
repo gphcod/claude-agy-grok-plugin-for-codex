@@ -32,6 +32,8 @@ export function createReader(adapter, { cwd = process.cwd(), expectedThreadId = 
   function apply(result) {
     if (!result) return;
     if (result.fatal) {
+      if (result.transientFailure) state.transientFailure = result.transientFailure;
+      if (typeof result.partialText === "string") state.partialText = result.partialText;
       // A fatal event may carry the turn's cost, usage, structured output and an unconfirmed thread: they are kept with the failure.
       if (typeof result.costUsd === "number") state.costUsd = result.costUsd;
       if (result.usage) state.usage = result.usage;
