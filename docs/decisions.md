@@ -432,3 +432,9 @@ Codex 6.1 Sol/xhigh and Grok 4.7/high reviewed the plan and the diff. No Gemini 
 - **The post-spawn save stays.** It runs under the claim, its full snapshot is safe there, and it keeps the record right in the ordinary lost case. A read or write failure there still stops the started provider through the launch catch. That fails closed, already existed and is outside this window; both reviewers accepted leaving it.
 
 A job already recovered under 1.1.3 or earlier keeps its stale record, because reconciliation happens at recovery. A later reply there still requests `--agent explore`. That stays a read-only turn; what Grok does with it was not run. A live Grok `task` was not run, because `task` needs the owner's separate go-ahead.
+
+## 2026-11-03 Pacific: real Grok default-agent sessions
+
+The owner approved real sessions at grok-4.6/low to save tokens. Real Grok 1.0.70 accepted `--agent explore` on a session that ran the default agent and offered the same three read-only tools as the deny recipe, so the adapter's note does not hold for that CLI and model. The marker stays: it caused no problem in these runs, and other versions were not run. `grok.mjs` keeps its note until the next release, because correcting it changes plugin bytes.
+
+The same run found a new limit. After a lost companion, a command the default agent started keeps running while `cancel` reports `cancelled`. A normal `cancel` stops it. This is not fixed. The record is in the qualification.
