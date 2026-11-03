@@ -120,7 +120,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     save(job);
     // Preparation complete (every prompt and review-input write done): the reservation becomes a tombstone, and only
     // then is the job admitted; a failure before this point leaves it unadmitted, so the entry frees the request id.
-    if (options.requestKey) markRequestPrepared(ctx.home, options.requestKey);
+    if (options.requestKey) markRequestPrepared(ctx.home, options.requestKey, options.requestToken);
     Object.assign(job, { admitted: true, admittedAt: new Date().toISOString() });
     save(job);
     // Every task counts working-tree changes, so an edit made through a shell is counted (S7.1); read-only turns have no such check here.

@@ -5,7 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { makeWorld, jobIdOf, footerOf, until } from "./helpers.mjs";
-import { createJob, lookupRequest, markDone, requestJobId, requestKey, saveJob } from "../plugins/council/scripts/lib/core/jobs.mjs";
+import { claimRequest, createJob, lookupRequest, markDone, requestJobId, requestKey, saveJob } from "../plugins/council/scripts/lib/core/jobs.mjs";
+import { reservationRecord } from "../plugins/council/scripts/lib/core/request-publication.mjs";
 
 const ask = (w, id, text = "q", extra = {}) => w.call(["ask", "--to", "null", "--request-id", id, "--", text], extra);
 
@@ -132,7 +133,7 @@ test("a replay of reply --last recovers the original provider and job after anot
   assert.equal(w.fakeCalls().length, calls, "a replay spawns nothing");
 });
 
-test("a pruned request reports `result expired` (exit 1) and runs nothing; an abandoned reservation is released and may run again", () => {
+test("a pruned request reports `result expired` (exit 1) and runs nothing; an owned new-format abandoned reservation is released and may run again", () => {
   const w = makeWorld();
   const first = ask(w, "r13");
   fs.rmSync(path.join(w.home, "jobs", jobIdOf(first.stderr)), { recursive: true, force: true });
@@ -144,13 +145,13 @@ test("a pruned request reports `result expired` (exit 1) and runs nothing; an ab
   const key = requestKey(null, cwd, "r14");
   const jobId = requestJobId("null", null, cwd, "r14");
   fs.mkdirSync(path.join(w.home, "requests"), { recursive: true });
-  fs.writeFileSync(path.join(w.home, "requests", `${key}.json`), JSON.stringify({ state: "reserved", id: "r14", key, provider: "null", job: jobId, session: null, cwd,
-    fingerprint: JSON.parse(fs.readFileSync(path.join(w.home, "requests", `${requestKey(null, cwd, "r13")}.json`), "utf8")).fingerprint.replace(/./, "x"), companionPid: 999999, companionIdentity: { pid: 999999, stamp: "1" } }));
+  claimRequest(w.home, { key, requestId: "r14", provider: "null", jobId, session: null, cwd,
+    fingerprint: JSON.parse(fs.readFileSync(path.join(w.home, "requests", `${requestKey(null, cwd, "r13")}.json`), "utf8")).fingerprint.replace(/./, "x"), companionPid: 999999, companionIdentity: { pid: 999999, stamp: "1" } });
   const mismatch = ask(w, "r14");
   assert.equal(mismatch.status, 2, "a different fingerprint is refused even for an abandoned reservation");
-  const record = JSON.parse(fs.readFileSync(path.join(w.home, "requests", `${key}.json`), "utf8"));
+  const record = lookupRequest(w.home, key);
   const fp = (() => { const tmp = ask(w, "probe-fp"); assert.equal(tmp.status, 0); return JSON.parse(fs.readFileSync(path.join(w.home, "requests", `${requestKey(null, cwd, "probe-fp")}.json`), "utf8")).fingerprint; })();
-  fs.writeFileSync(path.join(w.home, "requests", `${key}.json`), JSON.stringify({ ...record, fingerprint: fp }));
+  fs.writeFileSync(path.join(w.home, "requests", `${key}.json`), JSON.stringify(reservationRecord({ ...record, fingerprint: fp })));
   const abandoned = ask(w, "r14");
   assert.equal(abandoned.status, 2);
   assert.match(abandoned.stderr, /names job [a-z0-9]{16} that ended before it prepared; nothing ran, so the same request id can run again/);
