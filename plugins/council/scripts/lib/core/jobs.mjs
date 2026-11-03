@@ -266,10 +266,11 @@ export function prune(home) {
   const trash = path.join(home, "trash");
   for (const job of expired.values()) {
     try {
-      if (claimHeld(home, job)) continue; // Recheck after dependency collection: another companion may have resumed it.
+      // Newest first: a newly retained dependent must keep its older snapshot owners too.
+      if (claimHeld(home, job)) return;
       fs.mkdirSync(trash, { recursive: true });
       fs.renameSync(job.dir, path.join(trash, `${job.id}-${randomBytes(4).toString("hex")}`));
-    } catch { /* Unreadable claims, another companion or a failed rename: a later turn tries again. */ }
+    } catch { return; /* Keep this dependent and all remaining older input owners until a later pass. */ }
   }
   let left;
   try { left = fs.readdirSync(trash); } catch { return; }

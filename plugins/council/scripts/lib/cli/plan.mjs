@@ -114,6 +114,7 @@ export function resolveThread(ctx, verb, o) {
 }
 /** A thread whose last turn finished unconfirmed is not resumable (its record says so, or its latest job does): exit 2 with the hint. */
 function resumable(found) {
+  if (!found.prev && !found.record) throw new UsageError(`${found.provider} thread ${found.threadId} has no started history or retained record; start a new ask`);
   const why = found.prev?.unconfirmed ?? (found.record?.resumable === false ? found.record.unconfirmed ?? "not resumable" : null);
   if (why) throw new UsageError(`${found.provider} thread ${found.threadId}: ${why}`);
   return found;

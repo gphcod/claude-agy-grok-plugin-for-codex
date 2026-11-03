@@ -224,3 +224,30 @@ test("Claude F1: an explicit unstarted job id cannot replace pruned thread histo
   next.build(path.join(w.home, "planned-job"));
   assert.equal(request.agent, "explore");
 });
+
+test("Claude F3: unstarted job and native ids without started history or a record cannot move a thread", () => {
+  const w = makeWorld();
+  const failed = createJob(w.home, { ...fields(w, Date.now()), provider: "null", verb: "task", threadId: OLD,
+    providerStarted: false, round: 2, rounds: 9, cwd: w.workspace, agent: "default" });
+  failed.code = 1; saveJob(failed); markDone(failed);
+  const other = path.join(w.dir, "other-workspace"); fs.mkdirSync(other);
+  for (const ref of [failed.id, OLD]) assert.throws(() => resolveThread(ctxFor(w, { cwd: other }), "reply", { thread: ref }), /no started history or retained record.*new ask/);
+});
+
+test("a late unreadable dependent keeps its older review snapshot during pruning", t => {
+  const w = makeWorld(); let owner, dependent;
+  for (let i = 0; i < 102; i++) {
+    const extra = i === 1 ? { reviewState: { inputRoot: path.join(owner.dir, "review-input"), pending: 0, synthesisPending: false } } : {};
+    const job = createJob(w.home, fields(w, Date.now() - 200000 + i * 1000, { threadId: `t-${i}`, ...extra }));
+    job.code = 0; saveJob(job); markDone(job); owner ??= job;
+    if (i === 1) dependent = job;
+  }
+  const read = fs.readdirSync, directory = path.join(w.home, "claims", "grok"); let checks = 0;
+  t.mock.method(fs, "readdirSync", function (file, ...rest) {
+    if (String(file) === directory && ++checks === 3) throw Object.assign(new Error("dependent claim unreadable"), { code: "EACCES" });
+    return read.call(this, file, ...rest);
+  });
+  assert.doesNotThrow(() => prune(w.home));
+  assert.ok(loadJob(w.home, dependent.id), "dependent kept on its final claim-read failure");
+  assert.ok(loadJob(w.home, owner.id), "the still-kept dependent must not lose its older snapshot owner");
+});
