@@ -4,6 +4,8 @@ One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), G
 
 Status: `1.1.3`. This release checks the eight Claude-hosted rc.9 findings against the Codex-hosted paths; see `CHANGELOG.md`. Gemini 503 recovery is recorded in `docs/qualification/gemini-service-recovery.md`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The final 1.1.3 payload is not yet qualified on macOS.
 
+[1.1.3 shared-issue qualification](docs/qualification/shared-issues-1.1.3-windows.md) records all eight dispositions, Claude Opus 5.5/high and Grok 4.7/high review limits, 22 new regressions, 571 passing tests and the live newest-thread Grok check. No native Gemini/Argon was called in that audit.
+
 ## Install
 
 ```bash
