@@ -8,7 +8,7 @@ Only **Codex 6.1 Sol/xhigh** and **Grok 4.7/high** were called for review, on th
 
 A companion that dies between the durable job save and the post-spawn agent save leaves the thread record on `explore`. While the job is retained, its own `agent` field hides this. Once the recovered job is pruned, a read-only reply by native id builds `--agent explore` for a session that ran the default agent, which the adapter's notes say a session cannot accept.
 
-Reproduced on v1.1.3 before any change: through `cancelManaged`, pruning and `resolveThread`, the result was `{ prev: null, record: "explore" }`. The kill was simulated at that boundary and the provider was a fake. A real `task` was not used.
+Reproduced on v1.1.3 before any change: through `cancelManaged`, pruning and `resolveThread`, the result was `{ prev: null, record: "explore" }`. The state a kill there leaves was built directly and the provider was a fake. A real `task` was not used.
 
 ## The fix
 
@@ -39,7 +39,8 @@ Reproduced on v1.1.3 before any change: through `cancelManaged`, pruning and `re
 
 ## Not verified
 
-- A live Grok `task` was not run, because `task` needs the owner's separate go-ahead. So the real provider's handling of a session that truly ran the default agent, and the kill at the exact spawn boundary with a real CLI, remain untested. The second is covered only by a fake provider through the real entry.
+- A live Grok `task` was not run, because `task` needs the owner's separate go-ahead. So the real provider's handling of a session that truly ran the default agent remains untested.
+- No test kills a companion inside the window, which is one synchronous stretch of file writes. The window cases build the state it leaves. The end-to-end test kills a real companion through the real entry with fake Grok after that save, then rewrites the record to `explore`. Corrected on main after the tag, on Grok's review of the handbook; no plugin file changed.
 - A job already recovered under 1.1.3 or earlier is not corrected, because reconciliation happens at recovery. A later reply there still requests `--agent explore`. That stays a read-only turn; what Grok does with it was not run.
 - One unexplained event: the first scripted live attempt got no job id and left an empty state root. Its output was not captured, because the script threw before printing it. It did not recur in three later starts: the full rerun, a direct call and a background probe. The cause is unknown. The failed call happened before any job existed, so it did not reach the changed recovery code.
 - Exact-payload macOS, desktop discovery/wake and the Windows npm Grok shim remain unqualified; Linux is optional.
