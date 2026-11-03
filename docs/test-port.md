@@ -442,3 +442,7 @@ Of the dropped rows, 25 read `dropped: not ported` and are genuine gaps: no coun
 ## 2026-11-03: Claude-hosted rc.9 finding comparison
 
 The eight supplied findings were checked against this host rather than counted as eight required ports. New Codex-side cases in tests/core-shared-fixes.test.mjs and tests/core-lifecycle-integration.test.mjs cover 22 regressions, including wrong --last selection, closed stderr, strict lock behavior/native-id validation, already-canonical Git/submodule coverage, unstarted inheritance, early 503 replay, pruning, pruned context and an actual companion killed before spawn. tests/core-release-recovery.test.mjs now requires the Grok agent record to remain unchanged before spawn and become durable after start, before finalization. The source hosts have different collectors, state readers and provider sets; the absent Codex finding parser was not copied. [Qualification and limits](qualification/shared-issues-1.1.3-windows.md).
+
+## 2026-11-03: 1.1.4 default-agent window
+
+tests/core-agent-recovery.test.mjs adds 15 cases: the reproduced window by job id and native id, a recovery landing between resolution and admission, the record outranking an older job, which jobs mark, --confirm-ended, a first turn with no threads/ yet, an uppercase id, marker creation and lookup failures, a delayed second canceller, a healthy explore thread, and an end-to-end case through the real entry and fake Grok.

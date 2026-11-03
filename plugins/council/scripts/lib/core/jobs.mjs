@@ -346,9 +346,37 @@ export function saveThread(home, record) {
   fs.mkdirSync(threadsRoot(home), { recursive: true });
   writeFileAtomic(threadFile(home, record.provider, record.threadId), `${JSON.stringify({ ...record, updatedAt: new Date().toISOString() }, null, 2)}\n`);
 }
+/**
+ * Beside a thread's record: its session ran Grok's default agent, which a session cannot leave. Recovery sets it
+ * for a lost turn, which may have died before saving the agent. It never writes the record itself: concurrent
+ * cancels could overwrite newer fields, while this file can only state again what is already true. Its existence
+ * is the whole record; it is never removed.
+ */
+const defaultAgentFile = (home, provider, threadId) => threadFile(home, provider, threadId).replace(/\.json$/, ".default-agent");
+export function markDefaultAgent(home, provider, threadId) {
+  claimPath(home, provider, threadId); // Validate ids before any path is written.
+  fs.mkdirSync(threadsRoot(home), { recursive: true }); // A first turn lost before finalization leaves no threads/ yet.
+  try { fs.writeFileSync(defaultAgentFile(home, provider, threadId), "", { flag: "wx" }); }
+  catch (error) { if (error.code !== "EEXIST") throw error; }
+}
+function hasDefaultAgentMark(home, provider, threadId) {
+  const file = defaultAgentFile(home, provider, threadId);
+  // statSync, never existsSync: existsSync reads a locked marker as absent, and the session would be told to use the agent it left.
+  for (const deadline = Date.now() + 5000; ; sleepSync(20)) {
+    try { fs.statSync(file); return true; }
+    catch (error) {
+      if (error?.code === "ENOENT") return false;
+      if (!["EPERM", "EBUSY", "EACCES"].includes(error?.code) || Date.now() >= deadline) {
+        error.message = `cannot read state record ${file}: ${error.message}; leave it intact and restore it from backup, or use a separate COUNCIL_CODEX_HOME for new work`;
+        throw error;
+      }
+    }
+  }
+}
 export function loadThread(home, provider, threadId) {
   try { claimPath(home, provider, threadId); } catch { return null; }
-  return readJson(threadFile(home, provider, threadId), { strict: true });
+  const record = readJson(threadFile(home, provider, threadId), { strict: true });
+  return record && hasDefaultAgentMark(home, provider, threadId) ? { ...record, agent: "default" } : record;
 }
 /** The providers that hold a thread record for this native id. */
 export function threadProviders(home, threadId) {

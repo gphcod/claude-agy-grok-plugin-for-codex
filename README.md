@@ -2,14 +2,14 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It replaces three single-provider Codex plugins (claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0, gemini-plugin-for-codex 0.1.2) and is the Codex-hosted twin of [Council for Claude Code](https://github.com/gphcod/codex-agy-grok-plugin-for-claude).
 
-Status: `1.1.3`. This release checks the eight Claude-hosted rc.9 findings against the Codex-hosted paths; see `CHANGELOG.md`. Gemini 503 recovery is recorded in `docs/qualification/gemini-service-recovery.md`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The final 1.1.3 payload is not yet qualified on macOS.
+Status: `1.1.4`. This release closes the last audited thread-state window, and 1.1.3 checks the eight Claude-hosted rc.9 findings against the Codex-hosted paths; see `CHANGELOG.md`. Gemini 503 recovery is recorded in `docs/qualification/gemini-service-recovery.md`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The final 1.1.4 payload is not yet qualified on macOS.
 
-[1.1.3 shared-issue qualification](docs/qualification/shared-issues-1.1.3-windows.md) records all eight dispositions, Claude Opus 5.5/high and Grok 4.7/high review limits, 22 new regressions, 571 passing tests and the live newest-thread Grok check. No native Gemini/Argon was called in that audit.
+[1.1.4 qualification](docs/qualification/agent-recovery-1.1.4-windows.md). [1.1.3 shared-issue qualification](docs/qualification/shared-issues-1.1.3-windows.md) records all eight dispositions, Claude Opus 5.5/high and Grok 4.7/high review limits, 22 new regressions, 571 passing tests and the live newest-thread Grok check. No native Gemini/Argon was called in that audit.
 
 ## Install
 
 ```bash
-codex plugin marketplace add gphcod/claude-agy-grok-plugin-for-codex --ref v1.1.3
+codex plugin marketplace add gphcod/claude-agy-grok-plugin-for-codex --ref v1.1.4
 codex plugin add council@council-for-codex
 ```
 
@@ -19,7 +19,7 @@ A Git marketplace follows its `ref` in `~/.codex/config.toml` and refreshes in t
 [marketplaces.council-for-codex]
 source_type = "git"
 source = "https://github.com/gphcod/claude-agy-grok-plugin-for-codex.git"
-ref = "v1.1.3"
+ref = "v1.1.4"
 
 [plugins."council@council-for-codex"]
 enabled = true

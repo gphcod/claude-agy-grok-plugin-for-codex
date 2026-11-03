@@ -1,0 +1,111 @@
+{
+  "date": "2026-11-03T22:27:12.895Z",
+  "repo": "C:/Users/kkao/AppData/Local/Temp/tw114/cand",
+  "checks": {
+    "healthy": {
+      "ask": {
+        "code": 0,
+        "seconds": 13.921,
+        "job": "eruc8ad4cn2oce86",
+        "footer": "council grok ok · job eruc8ad4cn2oce86 · grok-4.7/high · 12s · round 1/9",
+        "err": "[council] provider=grok job=eruc8ad4cn2oce86\n"
+      },
+      "byJob": {
+        "code": 0,
+        "seconds": 6.212,
+        "job": "yjewrbd34e5qav6g",
+        "footer": "council grok ok · job yjewrbd34e5qav6g · grok-4.7/high · 5s · round 2/9",
+        "err": "[council] provider=grok job=yjewrbd34e5qav6g\n"
+      },
+      "byNative": {
+        "code": 0,
+        "seconds": 5.12,
+        "job": "lnh45ad7oo8wmn69",
+        "footer": "council grok ok · job lnh45ad7oo8wmn69 · grok-4.7/high · 4s · round 3/9",
+        "err": "[council] provider=grok job=lnh45ad7oo8wmn69\n"
+      },
+      "first": {
+        "threadId": "f89d59a6-5491-4c74-93e1-5c4e1d40c3a1",
+        "round": 1,
+        "agent": "explore",
+        "agentFlag": "explore",
+        "outcome": "ok",
+        "model": "grok-4.7",
+        "effort": "high"
+      },
+      "second": {
+        "threadId": "f89d59a6-5491-4c74-93e1-5c4e1d40c3a1",
+        "round": 2,
+        "agent": "explore",
+        "agentFlag": "explore",
+        "outcome": "ok",
+        "model": "grok-4.7",
+        "effort": "high"
+      },
+      "third": {
+        "threadId": "f89d59a6-5491-4c74-93e1-5c4e1d40c3a1",
+        "round": 3,
+        "agent": "explore",
+        "agentFlag": "explore",
+        "outcome": "ok",
+        "model": "grok-4.7",
+        "effort": "high"
+      },
+      "marker": false
+    },
+    "lostReadOnly": {
+      "job": "hmad2rx0gixqp2rb",
+      "thread": "793b6f6e-88f7-458e-9fc4-cace2dd00b6e",
+      "pid": 41336,
+      "blocked": {
+        "code": 1,
+        "seconds": 0.866,
+        "job": "w4uoqdi6pl8ju7zz",
+        "footer": "council grok failed · job w4uoqdi6pl8ju7zz · grok-4.7/high · 0s · round 0/9 · error: thread 793b6f6e-88f7-458e-9fc4-cace2dd00b6e is busy as job hmad2rx0gixqp2rb; wait or cancel hmad2rx0gixqp2rb",
+        "err": "[council] provider=grok job=w4uoqdi6pl8ju7zz\n"
+      },
+      "cancelled": {
+        "code": 0,
+        "seconds": 0.801,
+        "job": "hmad2rx0gixqp2rb",
+        "footer": "cancelled · grok · job hmad2rx0gixqp2rb · the thread stays resumable",
+        "err": ""
+      },
+      "resumed": {
+        "code": 0,
+        "seconds": 20.368,
+        "job": "omq63es0ppgsqp8j",
+        "footer": "council grok ok · job omq63es0ppgsqp8j · grok-4.7/high · 20s · round 2/9",
+        "err": "[council] provider=grok job=omq63es0ppgsqp8j\n"
+      },
+      "marker": false,
+      "reply": {
+        "threadId": "793b6f6e-88f7-458e-9fc4-cace2dd00b6e",
+        "round": 2,
+        "agent": "explore",
+        "agentFlag": "explore",
+        "outcome": "ok",
+        "model": "grok-4.7",
+        "effort": "high"
+      }
+    },
+    "handPlacedMarker": {
+      "marked": {
+        "code": 0,
+        "seconds": 5.673,
+        "job": "qhm7fsby5ho2f8uu",
+        "footer": "council grok ok · job qhm7fsby5ho2f8uu · grok-4.7/high · 5s · round 4/9",
+        "err": "[council] provider=grok job=qhm7fsby5ho2f8uu\n"
+      },
+      "reply": {
+        "threadId": "f89d59a6-5491-4c74-93e1-5c4e1d40c3a1",
+        "round": 4,
+        "agent": "default",
+        "agentFlag": null,
+        "outcome": "ok",
+        "model": "grok-4.7",
+        "effort": "high"
+      }
+    }
+  }
+}

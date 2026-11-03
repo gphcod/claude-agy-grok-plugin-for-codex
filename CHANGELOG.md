@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.1.4 (2026-11-03 Pacific)
 
+- Close the window between a spawn and the post-spawn save of Grok's default agent. A companion that died there left the thread record on `explore`, and once the recovered job was pruned, a read-only reply by native id passed `--agent explore` to a session that ran the default agent, which the adapter's notes say a session cannot accept. Recovery by `cancel`, including `--confirm-ended`, now sets a one-way marker beside the record, `threads/<provider>-<id>.default-agent`, before the job stops blocking its thread. A job whose start is unknown counts too. If the marker cannot be written, `cancel` exits 1 and keeps the claim, and running it again retries. A marker that cannot be read stops the reply with the strict state-read error. Recovery never writes the record, so concurrent cancels cannot regress it. A job already recovered under 1.1.3 or earlier is not corrected.
+- A reply now reads the thread record fresh under the claim for its agent, settings and refusals, instead of only rechecking it, so a recovery that lands between resolution and admission is seen. The record's `default` outranks an older retained job.
 - Tests only: the process-query test in `tests/core-efficiency.test.mjs` now passes from Git Bash too. It overrode `SystemRoot`, but Git Bash passes `SYSTEMROOT`, whose real value won in the child. No plugin file changes.
 
 ## 1.1.3 (2026-11-03 Pacific)

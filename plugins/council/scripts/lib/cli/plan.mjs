@@ -150,10 +150,11 @@ export function planTurn(ctx, adapter, verb, o, text, memo) {
   const prepare = (jobId) => {
     // The speculative validation reuses the resolved snapshot; admission always reads fresh history under the claim.
     const prev = thread ? (jobId ? latestOnThread(ctx.home, adapter.id, thread.threadId, jobId) ?? thread.prev : thread.prev) : null;
-    // Rechecked under the claim: another turn may have made the thread non-resumable since it was resolved.
-    if (thread && jobId) resumable({ provider: adapter.id, threadId: thread.threadId, prev, record: loadThread(ctx.home, adapter.id, thread.threadId) });
+    // Rechecked under the claim: another turn may have made the thread non-resumable since it was resolved, or a recovery set its agent.
+    const record = thread ? (jobId ? loadThread(ctx.home, adapter.id, thread.threadId) : thread.record) : null;
+    if (thread && jobId) resumable({ provider: adapter.id, threadId: thread.threadId, prev, record });
     // The thread record stands in for pruned job history (A7.6): round, budget, effort request and web persist there.
-    const base = prev ?? thread?.record ?? null;
+    const base = prev ?? record ?? null;
     const cwd = base?.cwd ?? ctx.cwd;
     if (!fs.existsSync(cwd)) throw new UsageError(`the thread's recorded workspace ${cwd} no longer exists; it cannot move to another directory`);
     const settings = resolveSettings(adapter, ctx.home, verb, o, base);
@@ -206,7 +207,8 @@ export function planTurn(ctx, adapter, verb, o, text, memo) {
       threadId: thread?.threadId ?? null, cwd, env: ctx.env, reviewInputRoot: structuredReview ? reviewState?.inputRoot || null : null,
       reviewRoot: structuredReview ? reviewState?.workspaceRoot || null : null, schemaPath: structuredReview ? SCHEMA_PATH : null, structured: structuredReview, readOnly: verb !== "task",
       web: Boolean(o.web ?? base?.web), allowCommands: o["allow-command"] ?? [], maxTurns: o["max-turns"] !== undefined ? Number(o["max-turns"]) : null,
-      maxBudgetUsd: o["max-budget-usd"] !== undefined ? Number(o["max-budget-usd"]) : null, policy, agent: prev?.agent ?? thread?.record?.agent ?? null, launcher,
+      // A session cannot leave Grok's default agent, so the record's "default" outranks an older retained job.
+      maxBudgetUsd: o["max-budget-usd"] !== undefined ? Number(o["max-budget-usd"]) : null, policy, agent: record?.agent === "default" ? "default" : prev?.agent ?? record?.agent ?? null, launcher,
       deadlineMs: seconds(o.deadline, DEADLINE_S, "deadline") * 1000, // agy's --print-timeout is set from it (A3.3)
     };
     // The adapter's own refusals (A5 checkRequest): exit 2 before any job record and before the request id is tombstoned.
