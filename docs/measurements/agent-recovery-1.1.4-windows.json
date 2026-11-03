@@ -101,7 +101,7 @@
   "notVerified": [
     "a live Grok task, which needs the owner's separate go-ahead",
     "the real provider's handling of a session that truly ran the default agent",
-    "the kill at the exact spawn boundary with a real CLI",
+    "a kill inside the window, with any provider: the tests build or rewrite the state it leaves",
     "a job recovered under 1.1.3 or earlier, which is not corrected",
     "exact-payload macOS, desktop discovery/wake and the Windows npm Grok shim"
   ]
