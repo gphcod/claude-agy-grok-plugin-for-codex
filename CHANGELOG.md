@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.3 (2026-11-03 Pacific)
+
+- Refuse `reply --last` while the newest job is open or lost without a confirmed native thread, including its admission window. Never silently continue an older conversation.
+- Handle closed stderr alongside stdout so a departed caller cannot kill the companion before durable finalization.
+- Validate provider/native thread ids before reading or writing thread records. Persistent read locks already fail closed on this host; that behavior is retained.
+- Preserve the thread record when a resumed provider never started. Record proven start state separately from request admission and exclude unstarted jobs from future model/effort/agent/round inheritance. A started failure still counts; Grok's default-agent transition remains durable after spawn.
+- Preserve pruned thread context when an unstarted job id is named; refuse either id path when no started history or retained record remains, instead of resuming in a new workspace with defaults.
+- Refuse automatic Gemini 503 recovery when a resumed stream never confirmed its requested native thread. The shared service helper is unchanged.
+- Keep jobs whose claims become unreadable during either pruning check, without failing the next turn.
+- Abort the remaining deletion pass on a late claim/rename obstruction so a kept dependent cannot lose its older review snapshot; housekeeping retries later. Admission already caught prune-helper errors before this release.
+- Add regressions for these findings and the existing canonical Git diff headers, including real submodules. The Git collector already fixes prefixes and submodule format; the Claude-hosted Codex finding parser is not shipped here.
+
+Qualification: [shared-issues-1.1.3-windows.md](docs/qualification/shared-issues-1.1.3-windows.md). Final Windows suite: 607 total, 571 pass, 36 platform skips, zero failures. Live Grok 4.7/high refuses a premature newest-thread reply and follows that thread after it completes. The closing Claude/Grok reviews cover embedded fixes; broader Grok review deadlines are recorded separately, without claiming blanket approval.
+
 ## 1.1.2 (2026-11-02 Pacific)
 
 - Publish request binding and preparation as complete immutable stage files instead of overwriting an opened Windows reservation. Keep the provider-neutral claim, job IDs, fingerprints and exactly-once replay.

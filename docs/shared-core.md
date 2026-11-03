@@ -13,10 +13,12 @@ Pinned at S2.7 (2026-10-31); `reader.mjs`, `jobs.mjs` and `execution.mjs` re-pin
 | `fs.mjs` | defe8d47430cb9c324ac86f464ca7e5b39c34fe8f38ded230c098d6b799ef6e2 | tests/core-jobs.test.mjs, tests/core-release-recovery.test.mjs | derived from grok_plugin_for_codex 1.1.0 lib/fs.mjs; strict state reads and bounded lock retries |
 | `review-input.mjs` | 2a6be74ac43f554bcb9b9a3345f137db41e1262cc6c39449a12595b2403a3128 | tests/core-review-input.test.mjs, tests/core-review.test.mjs | byte-identical to grok_plugin_for_codex 1.1.0 and claude_plugin_for_codex 0.5.0 |
 | `findings.mjs` | 65a8c78a1e56127161c195bae4243445535230dc8f89d305bef5d7ce4d70e288 | tests/core-findings.test.mjs, tests/core-review.test.mjs | identified ledger, critical/high blockers; single-batch short-id decisions |
-| `jobs.mjs` | 5618775308b171206269fcbb2a0a4d6146226686bde3b13e418f21c77c861147 | tests/core-jobs.test.mjs, tests/core-requests.test.mjs, tests/core-review-fixes.test.mjs, tests/core-release-recovery.test.mjs | reads its state-root variable from host.mjs; snapshot dependencies retained during pruning |
+| `jobs.mjs` | 50adb70be40481d7b6ee328f0f41d27c7a7336ef44ef98fb4ae987def72ee8a2 | tests/core-jobs.test.mjs, tests/core-requests.test.mjs, tests/core-review-fixes.test.mjs, tests/core-release-recovery.test.mjs | reads its state-root variable from host.mjs; snapshot dependencies retained during pruning |
 | `execution.mjs` | 3320d713d18e44d9cc248da1bdca3d53d97560c07254b4644eda0044987ba41c | tests/core-execution.test.mjs, tests/core-windows.test.mjs, tests/core-cancel.test.mjs, tests/core-review-fixes.test.mjs, tests/core-snapshot-tz.test.mjs | reads its guard variables and binary names from host.mjs |
 
 `jobs.mjs` and `execution.mjs` are host-neutral because every host constant they use comes from `host.mjs`; they stay in this table only while the twin's copies do the same.
+
+The `jobs.mjs` pin was updated for 1.1.3 (2026-11-03 Pacific): native-id validation, fail-safe pruning and explicit unstarted-turn inheritance. The Claude-hosted rc.9 implementation has separate host semantics; full byte parity is not asserted.
 
 ## Host-adapted modules
 

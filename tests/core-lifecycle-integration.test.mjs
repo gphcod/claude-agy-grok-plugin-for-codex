@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { makeWorld, ctxFor, alive, until, jobIdOf, footerOf } from "./helpers.mjs";
 import adapter from "./fixtures/null-adapter.mjs";
-import { createJob, loadJob, markDone, saveJob } from "../plugins/council/scripts/lib/core/jobs.mjs";
+import { createJob, findJob, latestOnThread, loadJob, loadThread, markDone, saveJob } from "../plugins/council/scripts/lib/core/jobs.mjs";
 import { claimThread, inspectClaim } from "../plugins/council/scripts/lib/core/claims.mjs";
 import { currentIdentity, executionController, processSnapshot } from "../plugins/council/scripts/lib/core/execution.mjs";
 import { cancelManaged } from "../plugins/council/scripts/lib/core/lifecycle.mjs";
@@ -18,6 +18,28 @@ import { cancelManaged } from "../plugins/council/scripts/lib/core/lifecycle.mjs
 const workerPath = fileURLToPath(new URL("./fixtures/lifecycle-worker.mjs", import.meta.url));
 const metaPath = (w, id) => path.join(w.home, "jobs", id, "meta.json");
 const donePath = (w, id) => path.join(w.home, "jobs", id, "done");
+
+test("Claude F2: a companion lost before spawn stays unstarted after cancel and cannot change inheritance", async t => {
+  const w = makeWorld(), original = seed(w);
+  const before = loadThread(w.home, "null", original.threadId);
+  const worker = startWorker(t, w, { barrier: "beforeSpawn", verb: "task", thread: original.threadId, round: 2 });
+  const { id } = await worker.barrier();
+  const preparing = loadJob(w.home, id);
+  assert.equal(preparing.providerStarted, false, "admission persists known no-spawn evidence");
+  assert.equal(preparing.spawnAttempted, undefined);
+  assert.equal(findJob(w.home, original.threadId).id, id, "control lookup still names the active preparation");
+  worker.child.kill("SIGKILL"); await worker.closed;
+  const cancelled = w.call(["cancel", id, "--timeout", "10", "--json"]);
+  assert.equal(cancelled.status, 0, cancelled.stdout + cancelled.stderr);
+  assert.equal(loadJob(w.home, id).stopped, true);
+  assert.equal(w.fakeCalls().length, 1, "the killed companion started no provider");
+  assert.deepEqual(loadThread(w.home, "null", original.threadId), before);
+  assert.equal(latestOnThread(w.home, "null", original.threadId).id, original.id);
+  const reply = w.call(["reply", id, "--json", "--", "delta"]);
+  assert.equal(reply.status, 0, reply.stdout + reply.stderr);
+  const result = JSON.parse(reply.stdout);
+  assert.deepEqual([result.round, result.effort], [2, before.effort]);
+});
 function startWorker(t, w, cfg = {}) {
   const child = fork(workerPath, [JSON.stringify({ home: w.home, cwd: fs.realpathSync(w.workspace), env: w.env, ...cfg })], { stdio: ["ignore", "pipe", "pipe", "ipc"], windowsHide: true });
   let stdout = "", stderr = "";

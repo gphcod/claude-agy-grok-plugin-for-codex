@@ -16,7 +16,7 @@ if (config.failFinalize) hooks.markDone = () => { throw new Error("fixture marke
 for (const key of ["drainMs", "retryMs", "shutdownMs", "pipeWaitMs", "graceMs"]) if (config[key] !== undefined) hooks[key] = config[key];
 const env = { ...process.env, ...config.env };
 const turn = { verb: config.verb ?? "reply", cwd: config.cwd, tier: "consult", model: "null-model", effort: "low", requestedEffort: "low", modelVerified: true, thread: config.thread ?? null,
-  confirmed: Boolean(config.thread), round: 1, rounds: 9, prompt: config.text ?? "more", launcher: adapter.resolveLauncher(env),
+  confirmed: Boolean(config.thread), round: config.round ?? 1, rounds: 9, prompt: config.text ?? "more", launcher: adapter.resolveLauncher(env),
   build: (jobDir) => adapter.buildTurn({ verb: config.verb ?? "reply", prompt: config.text ?? "more", model: "null-model", effort: "low", env, resume: Boolean(config.thread), threadId: config.thread ?? null, jobDir }) };
 try {
   const result = await runManagedTurn({ home: config.home, env, cwd: config.cwd, session: null }, adapter, turn, () => turn,

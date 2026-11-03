@@ -1,0 +1,241 @@
+{
+  "ownerDate": "2026-11-03 Pacific",
+  "repository": "claude-agy-grok-plugin-for-codex",
+  "version": "1.1.3",
+  "baseline": {
+    "version": "1.1.2",
+    "commit": "f177f224524b05395b577fcf48edd769dc10f29f"
+  },
+  "claudeHostedReference": {
+    "commit": "6d407a6a5001403430aeb999ccd388135f229622",
+    "status": "rc.9 fix commit inspected read-only; no claim about its release/installation"
+  },
+  "frozenCommit": "567e62508523b4b5103e985a15aa06dfb7e230c3",
+  "payloadSha256": "85e391f1d5427786158a14225a958b1afcc0a3e44a7f95a00dee697c5d3bf7fc",
+  "payloadFiles": 42,
+  "skillBytes": 2987,
+  "descriptionBytes": 128,
+  "runtime": {
+    "files": 31,
+    "bytes": 346088,
+    "lines": 5301,
+    "long120": 709,
+    "long160": 204,
+    "maxLine": 313,
+    "largest": {
+      "file": "plugins/council/scripts/lib/core/lifecycle.mjs",
+      "lines": 560
+    },
+    "entry": 267
+  },
+  "tests": {
+    "total": 607,
+    "pass": 571,
+    "fail": 0,
+    "skipped": 36,
+    "durationMs": 305976.7258
+  },
+  "helpers": {
+    "gemini-service.mjs": "7b21bee1dc4af7a2e9e66c632b2b9fad6718ab502677f4f6e6ba9dca3f29af37",
+    "request-publication.mjs": "bb64388a0bb9bdda457c504db8c0fd1a0cc1a69ca2fffe505b9f8325ed1065e8",
+    "jobs.mjs": "50adb70be40481d7b6ee328f0f41d27c7a7336ef44ef98fb4ae987def72ee8a2"
+  },
+  "newRegressions": 22,
+  "issues": [
+    {
+      "id": 1,
+      "status": "matching bug fixed",
+      "finding": "reply --last skipped a newer open/lost native-id-less job",
+      "fix": "Select open jobs including admission; refuse unconfirmed identity with wait/cancel guidance; completed unstarted jobs do not become settings history",
+      "verification": "baseline assertion failed; unit cases pass; real Grok high refuses in 207 ms and then follows the newest completed thread at round 2/9"
+    },
+    {
+      "id": 2,
+      "status": "matching bug fixed",
+      "finding": "closed stderr killed the real entry before durable finalization",
+      "fix": "Handle stderr write errors alongside stdout",
+      "verification": "real entry with closed pipe: baseline exit 1, corrected exit 0 with done marker/footer"
+    },
+    {
+      "id": 3,
+      "status": "persistent locks already protected; id-validation gap fixed",
+      "finding": "loadThread already uses readJson(strict:true), retries locks for five seconds and throws; invalid references were still passed to the file reader",
+      "fix": "Reuse claimPath validation before thread reads/writes; preserve strict missing-versus-unreadable behavior",
+      "verification": "mocked persistent EBUSY refuses; invalid native/provider references perform zero file reads; no actual Windows thread-record lock was produced"
+    },
+    {
+      "id": 4,
+      "status": "already protected; regression coverage added",
+      "finding": "PATCH_FLAGS already fixes src/dst prefixes, short submodule format and ignore-submodules=none for every collected target",
+      "fix": "No Git collector change",
+      "verification": "four baseline and final tests: noprefix/mnemonicPrefix across working tree/commit/base, and real submodule log/diff modes"
+    },
+    {
+      "id": 5,
+      "status": "matching bug and three review gaps fixed",
+      "finding": "unstarted resumed turns rewrote thread state and could still influence later history",
+      "fix": "Persist proven no-start at admission, clear evidence at the spawn boundary, prove start from child pid; gate thread writes and Grok agent transition; exclude unstarted settings; use retained context after pruning and refuse missing context",
+      "verification": "sync/async spawn failure, throwing beforeTurn and pre-spawn cancel; started failure counts; actual companion kill/cancel; failed-job id with pruned history; both missing-history paths refuse a different workspace"
+    },
+    {
+      "id": 6,
+      "status": "matching bug fixed",
+      "finding": "preset requested thread id granted early resumed Gemini 503 recovery without stream confirmation",
+      "fix": "Finalization sets noVisibleWork=false for an unconfirmed resumed failure; shared gemini-service.mjs unchanged",
+      "verification": "synthetic lifecycle and real entry with native-shaped fake agy; retry eligible=false, budget=0; same-id replay submits nothing"
+    },
+    {
+      "id": 7,
+      "status": "not applicable",
+      "finding": "Codex-native finding-body parser is absent; this host ships only Claude, Gemini and Grok providers",
+      "fix": "No parser port",
+      "verification": "provider inventory and source inspection"
+    },
+    {
+      "id": 8,
+      "status": "admission already protected; prune helper hardened",
+      "finding": "claimHeld could throw in the prune helper, but createJob already caught prune failures at admission",
+      "fix": "Keep unreadable candidates and abort deletion on a late obstruction, preserving older review snapshot owners and retrying housekeeping later",
+      "verification": "first and second claim-check failures; late-retained dependent with older snapshot owner; no escaped prune error"
+    }
+  ],
+  "reviews": [
+    {
+      "provider": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "job": "4e7a7782d20a296a",
+      "exit": 0,
+      "elapsedMs": 197354,
+      "cleanupPending": false,
+      "error": null,
+      "attention": null,
+      "scope": "source read, three initial dispositions checked; found F1 MAJOR and F2 MINOR; both accepted and fixed"
+    },
+    {
+      "provider": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "job": "4b6dcf0e527b2b08",
+      "exit": 0,
+      "elapsedMs": 76248,
+      "cleanupPending": false,
+      "error": null,
+      "attention": null,
+      "scope": "embedded closing review accepted F1/F2 and found F3 MINOR; accepted and fixed, with late-pruning dependency hardening"
+    },
+    {
+      "provider": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "job": "640879cc074b3a6d",
+      "exit": 0,
+      "elapsedMs": 26078,
+      "cleanupPending": false,
+      "error": null,
+      "attention": null,
+      "scope": "focused final snippets: F3 and late-pruning retention closed; no actionable findings"
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.7",
+      "effort": "high",
+      "job": "96ff6b871762b266",
+      "exit": 1,
+      "elapsedMs": 307974,
+      "cleanupPending": false,
+      "error": "wall-clock deadline passed",
+      "attention": null,
+      "scope": "file-based review reached 300-second deadline; not approval"
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.7",
+      "effort": "high",
+      "job": "c368a5badc7c42a7",
+      "exit": 1,
+      "elapsedMs": 244349,
+      "cleanupPending": false,
+      "error": "wall-clock deadline passed",
+      "attention": null,
+      "scope": "embedded broad review reached 240-second deadline; not approval"
+    },
+    {
+      "provider": "grok",
+      "model": "grok-4.7",
+      "effort": "high",
+      "job": "03a69ae88f0c8dc1",
+      "exit": 0,
+      "elapsedMs": 212479,
+      "cleanupPending": false,
+      "error": null,
+      "attention": null,
+      "scope": "focused final snippets: missing-history refusal and late-pruning retention closed; no actionable findings"
+    }
+  ],
+  "liveGrok": {
+    "provider": "grok",
+    "model": "grok-4.7",
+    "effort": "high",
+    "observedOpenJob": "ebae995e94709ce9",
+    "old": "8c8dcfa021939840",
+    "new": "ebae995e94709ce9",
+    "earlyReply": {
+      "exit": 2,
+      "elapsedMs": 207,
+      "error": "job ebae995e94709ce9 has not confirmed a thread; wait ebae995e94709ce9 or cancel ebae995e94709ce9"
+    },
+    "confirmedReply": {
+      "exit": 0,
+      "job": "607e5cc4f434e3a4",
+      "thread": "16184427-6673-4d55-8e22-b1a86b09f12a",
+      "round": 2,
+      "rounds": 9,
+      "cleanupPending": false
+    },
+    "oldRound": 1,
+    "pass": true
+  },
+  "framing": {
+    "skillBytes": 2987,
+    "descriptionBytes": 128,
+    "rows": [
+      {
+        "provider": "claude",
+        "startLineBytes": 47,
+        "footerBytes": 85,
+        "framingBytes": 132,
+        "answerBytes": 5,
+        "footer": "council claude ok · job hs8or7aprc83gvn5 · claude-opus-5-5/high · 1s · round 1/9"
+      },
+      {
+        "provider": "gemini",
+        "startLineBytes": 47,
+        "footerBytes": 86,
+        "framingBytes": 133,
+        "answerBytes": 5,
+        "footer": "council gemini ok · job 125yddq9ux2bedrg · gemini-4-argon/medium · 2s · round 1/9"
+      },
+      {
+        "provider": "grok",
+        "startLineBytes": 45,
+        "footerBytes": 76,
+        "framingBytes": 121,
+        "answerBytes": 5,
+        "footer": "council grok ok · job u8ijrba7gya365ho · grok-4.7/high · 1s · round 1/9"
+      }
+    ]
+  },
+  "modelPolicy": {
+    "claude": "claude-opus-5-5/high",
+    "grok": "grok-4.7/high",
+    "nativeGeminiOrArgonCalls": 0
+  },
+  "limits": [
+    "Final Claude/Grok closing reviews cover embedded snippets, not a blanket full-repository approval.",
+    "Two broader Grok reviews reached deadlines and remain failures with confirmed cleanup.",
+    "Exact payload macOS, desktop discovery/wake, Windows npm Grok shim and optional Linux are unqualified.",
+    "Gemini early-503 and persistent thread-lock evidence uses fakes/mocks; no native Gemini call or actual Windows thread-record read lock was produced.",
+    "No new matched latency/native-token/cost benchmark; healthy framing is remeasured, old efficiency studies remain separately pinned."
+  ]
+}
