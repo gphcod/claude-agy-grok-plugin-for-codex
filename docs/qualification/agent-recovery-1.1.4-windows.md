@@ -39,8 +39,26 @@ Reproduced on v1.1.3 before any change: through `cancelManaged`, pruning and `re
 
 ## Not verified
 
-- A live Grok `task` was not run, because `task` needs the owner's separate go-ahead. So the real provider's handling of a session that truly ran the default agent remains untested.
+- A live Grok `task` was not run for this release. It ran later the same day; see [Later real Grok sessions](#later-real-grok-sessions).
 - No test kills a companion inside the window, which is one synchronous stretch of file writes. The window cases build the state it leaves. The end-to-end test kills a real companion through the real entry with fake Grok after that save, then rewrites the record to `explore`. Corrected on main after the tag, on Grok's review of the handbook; no plugin file changed.
-- A job already recovered under 1.1.3 or earlier is not corrected, because reconciliation happens at recovery. A later reply there still requests `--agent explore`. That stays a read-only turn; what Grok does with it was not run.
+- A job already recovered under 1.1.3 or earlier is not corrected, because reconciliation happens at recovery. A later reply there still requests `--agent explore`. That stays a read-only turn, and real Grok accepted it in the later sessions.
 - One unexplained event: the first scripted live attempt got no job id and left an empty state root. Its output was not captured, because the script threw before printing it. It did not recur in three later starts: the full rerun, a direct call and a background probe. The cause is unknown. The failed call happened before any job existed, so it did not reach the changed recovery code.
 - Exact-payload macOS, desktop discovery/wake and the Windows npm Grok shim remain unqualified; Linux is optional.
+
+## Later real Grok sessions
+
+Run on 2026-11-03 Pacific, after the owner approved real default-agent sessions, at Grok 1.0.70 and grok-4.6/low to save tokens, in a throwaway repository with a scratch state root. Ten submitted turns on this plugin; the other combined plugin ran the same checks. [Raw record](../measurements/live-default-agent-1.1.4-windows.json). The plugin files equal the v1.1.4 tag's.
+
+| Check | Result |
+|---|---|
+| Task, then read-only replies by native id | The task wrote its file. Replies sent no `--agent`, kept the thread and created no file when asked to write |
+| Companion killed after a real edit | A reply was refused as busy until `cancel`. The post-spawn save had already stored `default`, and `cancel` added the marker. With the job removed by hand to stand in for pruning, a reply by native id kept the thread without `--agent`, offering only `read_file`, `list_dir` and `grep` |
+| Record forced back to `explore` on a session that really ran the default agent | The reply sent `--agent explore`. Grok accepted it and exited 0, with the same three tools and no file created |
+| `cancel` with a live companion during a long command | Grok, its PowerShell wrapper and the command all stopped |
+| `cancel` after a lost companion during a long command | Grok and its wrapper were gone, **but the command kept running**. `cancel` still exited 0 with `cancelled`, `wait` reported `recovered after the companion stopped`, and no cleanup was pending |
+
+The last two rows come from separate runs that waited until the command was running. The earlier killed-companion run here also left the command running.
+
+- **Grok accepts the switch.** The adapter's note that a session on the default agent cannot switch to explore does not hold for Grok 1.0.70 with grok-4.6. The reply this fix protects against would not have failed in this check, and both recipes gave the same read-only tools. The fix caused no problem in these runs and stays, because other CLI versions and models were not run. The note in `grok.mjs` is unchanged, since correcting it changes plugin bytes.
+- **A lost task's command can outlive `cancel`.** This is a new limit and is not fixed. The evidence record is empty and the command has no living parent, so recovery has nothing that links it to the job; that cause is inferred. The test command only slept, so edits by a surviving command are also inferred.
+- **Not run:** a kill inside the window itself, grok-4.7, and any platform but Windows. No read-only turn tried a write tool, so the advertised tools are the evidence, not a blocked attempt.
