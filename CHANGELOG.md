@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2 (2026-11-02 Pacific)
+
+- Publish request binding and preparation as complete immutable stage files instead of overwriting an opened Windows reservation. Keep the provider-neutral claim, job IDs, fingerprints and exactly-once replay.
+- Read legacy inline requests; mark new-format roots as unsupported tombstones for older clients so a downgrade cannot mistake completed work for abandoned preparation. Reject damaged stage records without launching a provider.
+- Add real Windows held-file tests and generation/immutability regressions. Stage files increase metadata file count; healthy framing and provider prompts are unchanged.
+
 ## 1.1.1 (2026-11-02 Pacific)
 
 - Classify native Gemini `UNAVAILABLE (code 503)` as a temporary service failure, retaining usage and the original failed job.

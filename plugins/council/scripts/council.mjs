@@ -63,6 +63,7 @@ async function replay(ctx, o, record, fingerprint, out, deps) {
     if (record.state === "tombstone") break; // prepared, then pruned: the result has expired
     const current = lookupRequest(ctx.home, record.key);
     if (!current) throw new UsageError(`request id ${o["request-id"]}: its first call failed before preparing and freed the id; retry with the same id to run it`);
+    if (current.fingerprint !== fingerprint) throw new UsageError(`request id ${o["request-id"]} was already used with different input; use a new request id`);
     record = current;
     if (current.state === "tombstone") continue;
     if (Date.now() - checkedAt >= 1000) {
@@ -71,7 +72,7 @@ async function replay(ctx, o, record, fingerprint, out, deps) {
       try { snapshot = (deps.snapshot ?? processSnapshot)({ platform: deps.platform ?? process.platform, pid: current.companionPid }); } catch { snapshot = { state: "unknown", rows: [] }; }
       if (companionState(current, snapshot) === "gone" && !(current.job && loadJob(ctx.home, current.job))) {
         await requireWritableRoot(ctx); // the release removes the record: a read-only root is the state-root line, not EACCES
-        releaseRequest(ctx.home, current.key, current.job);
+        if (releaseRequest(ctx.home, current.key, current.job, current.recordToken) === false) { record = lookupRequest(ctx.home, current.key) ?? current; continue; }
         throw new UsageError(`request id ${o["request-id"]} names ${current.job ? `job ${current.job}` : "a call"} that ended before it prepared; nothing ran, so the same request id can run again`);
       }
     }
@@ -132,15 +133,17 @@ async function runTurnVerb(ctx, parsed, text, io, deps) {
     } catch (error) { if (error instanceof UsageError) throw error; }
     throw new PreflightBlocked(root, writable.detail);
   }
+  let requestToken = null;
   if (key) {
     const claimed = claimRequest(ctx.home, { key, requestId: o["request-id"], session: ctx.session, cwd: ctx.cwd, fingerprint,
       companionIdentity: executionController({ platform: deps.platform }).self() });
     if (!claimed.fresh) return replay(ctx, o, claimed.record, fingerprint, writer(io.stdout), deps);
+    requestToken = claimed.record.recordToken;
   }
   let jobId = null;
   const unprepared = () => {
     if (!key) return;
-    try { if (lookupRequest(ctx.home, key)?.state !== "tombstone") releaseRequest(ctx.home, key, jobId); } catch { /* an unreadable record stays: never reused */ }
+    try { if (lookupRequest(ctx.home, key)?.state !== "tombstone") releaseRequest(ctx.home, key, jobId, requestToken); } catch { /* an unreadable record stays: never reused */ }
   };
   const out = writer(io.stdout), err = writer(io.stderr);
   let result;
@@ -149,7 +152,7 @@ async function runTurnVerb(ctx, parsed, text, io, deps) {
     const memo = {};
     const provider = resolveProvider(ctx, verb, o, memo);
     const adapter = await requireAdapter(provider, ctx.env);
-    if (key) { jobId = requestJobId(provider, ctx.session, ctx.cwd, o["request-id"]); bindRequest(ctx.home, key, { provider, jobId }); }
+    if (key) { jobId = requestJobId(provider, ctx.session, ctx.cwd, o["request-id"]); bindRequest(ctx.home, key, { provider, jobId, recordToken: requestToken }); }
     // (5) Preflight through the cached runner: a blocked resource exits 1 with zero submissions.
     const plan = planTurn(ctx, adapter, verb, o, text, memo);
     const descriptors = adapter.preflight ? adapter.preflight({ stateRoot: ctx.home, env: ctx.env, platform: deps.platform ?? process.platform, verb, cwd: plan.cwd }) : [];
@@ -158,7 +161,7 @@ async function runTurnVerb(ctx, parsed, text, io, deps) {
     // admission, writes the prompt and review input, tombstones the request id and runs.
     const initial = plan.prepare(null);
     result = await runManagedTurn(ctx, adapter, { ...initial, thread: initial.thread }, (id) => plan.prepare(id),
-      { jobId: jobId ?? undefined, requestKey: key, requestId: o["request-id"] ?? null, json: o.json, ...timers }, { announce: (job) => err(`${startLine(job)}\n`), ...(deps.hooks ?? {}) });
+      { jobId: jobId ?? undefined, requestKey: key, requestToken, requestId: o["request-id"] ?? null, json: o.json, ...timers }, { announce: (job) => err(`${startLine(job)}\n`), ...(deps.hooks ?? {}) });
   } catch (error) {
     unprepared(); // nothing prepared: a retry may run
     throw error;
