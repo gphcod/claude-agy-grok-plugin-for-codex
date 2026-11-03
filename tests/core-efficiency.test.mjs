@@ -24,8 +24,10 @@ test("reused speculative reply history is refreshed under admission before inher
 test("Claude refuses an unavailable process query before starting even a non-billable CLI probe", { skip: process.platform === "linux" ? "Linux reads /proc directly; hiding the ps/PowerShell executable does not block it" : false }, () => {
   const world = makeWorld();
   const fake = fileURLToPath(new URL("./fixtures/fake-claude.mjs", import.meta.url));
+  // Windows variable names ignore case and Git Bash passes SYSTEMROOT, whose real value would win over the override below.
+  const env = Object.fromEntries(Object.entries(world.env).filter(([key]) => key.toLowerCase() !== "systemroot"));
   const result = spawnSync(process.execPath, [ENTRY, "ask", "--to", "claude", "--json", "--", "q"], {
-    cwd: world.workspace, env: { ...world.env, COUNCIL_CLAUDE_BIN: fake, PATH: "", SystemRoot: world.dir }, input: "", encoding: "utf8", windowsHide: true, timeout: 30000,
+    cwd: world.workspace, env: { ...env, COUNCIL_CLAUDE_BIN: fake, PATH: "", SystemRoot: world.dir }, input: "", encoding: "utf8", windowsHide: true, timeout: 30000,
   });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   const report = JSON.parse(result.stdout);

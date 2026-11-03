@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Tests only: the process-query test in `tests/core-efficiency.test.mjs` now passes from Git Bash too. It overrode `SystemRoot`, but Git Bash passes `SYSTEMROOT`, whose real value won in the child. No plugin file changes.
+
 ## 1.1.3 (2026-11-03 Pacific)
 
 - Refuse `reply --last` while the newest job is open or lost without a confirmed native thread, including its admission window. Never silently continue an older conversation.
