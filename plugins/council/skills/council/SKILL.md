@@ -33,6 +33,6 @@ Fan-out: one `ask` per provider as parallel shell calls, same brief, own `--requ
 F1, F2 findings: BLOCKER/MAJOR/MINOR with file:line. Replies send only `F1 AGREE`, `F2 CHANGE: ...`, `F3 REJECT: ...` and new facts. Stop when nothing changes or at `round N/N`. Unresolved REJECT is disagreement. Rule each finding accepted, rejected or needs-user-waiver.
 
 ## Results
-If the shell yields, keep collecting the same shell with the longest wait allowed; `wait <job>` only after losing it; never resubmit.
+Use maximum `yield_time_ms` (up to 60000) for shell/collection calls and outer `exec`/`wait` wrappers. Collect the same shell until exit; `wait <job>` only after losing it; never resubmit.
 Exit 0 done, 10 needs attention (findings; else the footer's `attention:`: denial, incomplete turn, open questions), 20 still running, 1 failed/cancelled/busy/preflight_blocked, 2 bad arguments.
 Summarize or act; never repeat it verbatim. Follow the footer's `next:`/`new ask`. `unreviewed N`: not approved. Denials need the user, not a retry. `preflight_blocked` grants no escalation.

@@ -120,7 +120,7 @@ council <provider> <ok|needs attention|failed|cancelled> · job <16 chars> · <m
 | 1 | failed, cancelled, busy, or `preflight_blocked` |
 | 2 | invalid input |
 
-Blocking and collection: a call blocks until the model answers, since Codex delivers no completion for a yielded command. If the shell yields, keep collecting the same shell session with the longest wait allowed; use `wait <job>` only after losing the handle; never resubmit (a resubmission with the same `--request-id` would only replay).
+Blocking and collection: a call blocks until the model answers. The recorded Codex CLI probe did not deliver a yielded command's completion; desktop wake behavior remains unqualified. Use the maximum permitted `yield_time_ms` (up to 60000) for shell collection and any outer exec/wait wrapper. Collect the same shell until exit; use `wait <job>` only after losing it; never resubmit (the same `--request-id` only replays). The 1.1.0 Windows host probes measure this guidance separately from CLI overhead.
 
 Recovery hints in the footer: `next: reply <job> --next-input` (review batches pending), `cleanup pending; next: cancel <job>; do not resume`, `thread locked; next: cancel <job> --confirm-ended after checking the process table; do not resume`, `session not confirmed: start a new ask`, `thread not confirmed; start a new ask`, `coverage unknown`.
 

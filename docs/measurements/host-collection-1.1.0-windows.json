@@ -1,0 +1,1322 @@
+{
+  "date": "2026-11-02T23:54:57.275Z",
+  "host": "Windows 11 x64; Codex CLI 0.166.0; gpt-6.1-sol/medium",
+  "method": "Three isolated arms run concurrently within each of five samples; launch order rotates. Every arm uses the exact same bounded Claude fixture, recorded success stream and 120s delay, pinned by SHA-256. Each host reads its exact skill and submits one read-only ask; current/final companions are identical and legacy is v0.4.2. No real Claude model call. Collection counts include nested exec/wait wrappers, excluding skill reading. Codex rollouts supply counts/usage; paths and raw prompts omitted. Ordinary OS/API activity is uncontrolled; n=5 is local evidence, not a quality or universal latency benchmark.",
+  "sharedFixture": {
+    "file": "tests/fixtures/fake-claude-collection.mjs",
+    "sha256": "eb2c51aacbbec01200b92c5a829fd6d9608286a636d7c68b9c7a0e80f0244fbf",
+    "streamFile": "tests/fixtures/streams/claude.json",
+    "streamSha256": "e93c8692dbe553f4ac0c456118581ceb41bc5f8d0c102d0a964a6908bc60d58a",
+    "delayMs": 120000,
+    "provider": "claude",
+    "identicalForAllArms": true
+  },
+  "rows": [
+    {
+      "arm": "current",
+      "sample": 1,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 137041,
+      "exchangeMs": 123928,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 3,
+      "collectionCalls": 5,
+      "workloadToolCalls": 6,
+      "collected": true,
+      "skillBytes": 2908,
+      "usage": {
+        "input_tokens": 133743,
+        "cached_input_tokens": 123776,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 456,
+        "reasoning_output_tokens": 17
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:41:01.548Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:41:12.591Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:41:13.978Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:41:45.012Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:41:46.706Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:42:07.734Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:42:09.999Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:42:14.013Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:42:15.931Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:42:46.953Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:42:48.889Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:43:05.476Z"
+        }
+      ]
+    },
+    {
+      "arm": "explicit2",
+      "sample": 1,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 163899,
+      "exchangeMs": 123689,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 0,
+      "collectionCalls": 2,
+      "workloadToolCalls": 3,
+      "collected": true,
+      "skillBytes": 2963,
+      "usage": {
+        "input_tokens": 94607,
+        "cached_input_tokens": 75264,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 433,
+        "reasoning_output_tokens": 15
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:41:26.615Z",
+          "yields": [
+            60000,
+            30000
+          ],
+          "returnedAt": "2026-11-02T23:41:57.644Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:42:01.946Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:43:01.979Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:43:05.745Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:43:30.304Z"
+        }
+      ]
+    },
+    {
+      "arm": "legacy",
+      "sample": 1,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 137180,
+      "exchangeMs": 123637,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 6,
+      "collectionCalls": 8,
+      "workloadToolCalls": 9,
+      "collected": true,
+      "skillBytes": 2980,
+      "usage": {
+        "input_tokens": 210120,
+        "cached_input_tokens": 194816,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 702,
+        "reasoning_output_tokens": 126
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:41:01.676Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:41:12.701Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:41:14.265Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:41:45.295Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:41:48.155Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:41:49.178Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:41:51.090Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:42:02.119Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:42:04.306Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:42:14.296Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:42:15.822Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:42:46.858Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:42:48.226Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:42:59.250Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:43:00.591Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:43:01.614Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:43:04.866Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:43:05.313Z"
+        }
+      ]
+    },
+    {
+      "arm": "current",
+      "sample": 2,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 137486,
+      "exchangeMs": 123830,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 6,
+      "collectionCalls": 8,
+      "workloadToolCalls": 9,
+      "collected": true,
+      "skillBytes": 2908,
+      "usage": {
+        "input_tokens": 185997,
+        "cached_input_tokens": 179712,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 589,
+        "reasoning_output_tokens": 49
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:43:47.855Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:43:58.918Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:44:01.669Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:44:32.692Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:44:33.925Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:44:34.943Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:44:36.924Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:44:37.941Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:44:39.693Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:44:50.711Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:44:53.115Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:45:01.694Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:45:03.144Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:45:34.176Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:45:36.943Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:45:47.959Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:45:49.503Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:45:51.685Z"
+        }
+      ]
+    },
+    {
+      "arm": "explicit2",
+      "sample": 2,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 137309,
+      "exchangeMs": 123804,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 0,
+      "collectionCalls": 2,
+      "workloadToolCalls": 3,
+      "collected": true,
+      "skillBytes": 2963,
+      "usage": {
+        "input_tokens": 94698,
+        "cached_input_tokens": 86912,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 393,
+        "reasoning_output_tokens": 8
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:43:47.888Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:44:18.945Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:44:21.530Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:45:21.570Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:45:23.740Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:45:51.692Z"
+        }
+      ]
+    },
+    {
+      "arm": "legacy",
+      "sample": 2,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 136516,
+      "exchangeMs": 123149,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 3,
+      "outerCollections": 4,
+      "collectionCalls": 7,
+      "workloadToolCalls": 8,
+      "collected": true,
+      "skillBytes": 2980,
+      "usage": {
+        "input_tokens": 191017,
+        "cached_input_tokens": 168832,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 560,
+        "reasoning_output_tokens": 32
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:43:47.452Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:43:58.492Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:44:00.064Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:44:05.092Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:44:06.684Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:44:37.706Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:44:39.624Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:44:40.638Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:44:42.274Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:44:53.293Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:44:55.968Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:45:06.718Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:45:08.176Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:45:39.205Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:45:41.275Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:45:50.601Z"
+        }
+      ]
+    },
+    {
+      "arm": "current",
+      "sample": 3,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 136686,
+      "exchangeMs": 123819,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 1,
+      "outerCollections": 5,
+      "collectionCalls": 6,
+      "workloadToolCalls": 7,
+      "collected": true,
+      "skillBytes": 2908,
+      "usage": {
+        "input_tokens": 150480,
+        "cached_input_tokens": 144128,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 560,
+        "reasoning_output_tokens": 83
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:46:04.522Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:46:15.563Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:46:17.117Z",
+          "yields": [
+            300000
+          ],
+          "returnedAt": "2026-11-02T23:46:48.147Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:46:50.393Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:46:51.406Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:46:53.471Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:46:54.495Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:46:56.687Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:47:07.704Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:47:10.884Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:47:11.899Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:47:14.490Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:48:08.341Z"
+        }
+      ]
+    },
+    {
+      "arm": "explicit2",
+      "sample": 3,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 136636,
+      "exchangeMs": 123839,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 0,
+      "collectionCalls": 2,
+      "workloadToolCalls": 3,
+      "collected": true,
+      "skillBytes": 2963,
+      "usage": {
+        "input_tokens": 82625,
+        "cached_input_tokens": 77824,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 439,
+        "reasoning_output_tokens": 20
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:46:04.882Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:46:35.910Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:46:38.170Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:47:38.196Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:47:40.540Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:48:08.721Z"
+        }
+      ]
+    },
+    {
+      "arm": "legacy",
+      "sample": 3,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 134841,
+      "exchangeMs": 123106,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 3,
+      "collectionCalls": 5,
+      "workloadToolCalls": 6,
+      "collected": true,
+      "skillBytes": 2980,
+      "usage": {
+        "input_tokens": 133132,
+        "cached_input_tokens": 127232,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 473,
+        "reasoning_output_tokens": 20
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:46:03.881Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:46:14.931Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:46:17.847Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:46:48.886Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:46:50.631Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:47:11.645Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:47:14.020Z",
+          "yields": [
+            10000
+          ],
+          "returnedAt": "2026-11-02T23:47:17.873Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:47:19.267Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:47:50.296Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:47:54.174Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:48:06.987Z"
+        }
+      ]
+    },
+    {
+      "arm": "current",
+      "sample": 4,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 135613,
+      "exchangeMs": 123838,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 5,
+      "collectionCalls": 7,
+      "workloadToolCalls": 8,
+      "collected": true,
+      "skillBytes": 2908,
+      "usage": {
+        "input_tokens": 191685,
+        "cached_input_tokens": 176512,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 546,
+        "reasoning_output_tokens": 35
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:48:21.085Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:48:32.128Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:48:33.951Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:49:04.977Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:49:06.827Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:49:07.852Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:49:09.582Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:49:30.603Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:49:32.520Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:49:33.546Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:49:35.310Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:49:35.374Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:49:37.937Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:50:08.972Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:50:11.791Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:50:24.923Z"
+        }
+      ]
+    },
+    {
+      "arm": "explicit2",
+      "sample": 4,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 137059,
+      "exchangeMs": 123731,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 0,
+      "collectionCalls": 2,
+      "workloadToolCalls": 3,
+      "collected": true,
+      "skillBytes": 2963,
+      "usage": {
+        "input_tokens": 82615,
+        "cached_input_tokens": 70528,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 428,
+        "reasoning_output_tokens": 10
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:48:22.191Z",
+          "yields": [
+            60000,
+            30000
+          ],
+          "returnedAt": "2026-11-02T23:48:53.221Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:48:54.871Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:49:54.897Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:49:57.709Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:50:25.922Z"
+        }
+      ]
+    },
+    {
+      "arm": "legacy",
+      "sample": 4,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 135836,
+      "exchangeMs": 123157,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 5,
+      "collectionCalls": 7,
+      "workloadToolCalls": 8,
+      "collected": true,
+      "skillBytes": 2980,
+      "usage": {
+        "input_tokens": 190803,
+        "cached_input_tokens": 175616,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 552,
+        "reasoning_output_tokens": 27
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:48:21.614Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:48:32.647Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:48:34.341Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:49:05.372Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:49:06.979Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:49:07.995Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:49:10.028Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:49:11.049Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:49:12.871Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:49:33.894Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:49:36.839Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:49:36.864Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:49:39.039Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:50:10.060Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:50:11.374Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:50:24.771Z"
+        }
+      ]
+    },
+    {
+      "arm": "current",
+      "sample": 5,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 134521,
+      "exchangeMs": 123796,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 4,
+      "collectionCalls": 6,
+      "workloadToolCalls": 7,
+      "collected": true,
+      "skillBytes": 2908,
+      "usage": {
+        "input_tokens": 150987,
+        "cached_input_tokens": 140544,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 513,
+        "reasoning_output_tokens": 41
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:50:37.960Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:50:49.003Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:50:50.430Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:51:21.466Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:51:24.514Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:51:25.542Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:51:27.789Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:51:48.807Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:51:51.229Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:51:51.333Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:51:53.192Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:52:24.215Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:52:25.899Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:52:41.756Z"
+        }
+      ]
+    },
+    {
+      "arm": "explicit2",
+      "sample": 5,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 140204,
+      "exchangeMs": 123709,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 0,
+      "collectionCalls": 2,
+      "workloadToolCalls": 3,
+      "collected": true,
+      "skillBytes": 2963,
+      "usage": {
+        "input_tokens": 82899,
+        "cached_input_tokens": 73472,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 423,
+        "reasoning_output_tokens": 8
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:50:43.429Z",
+          "yields": [
+            60000,
+            30000
+          ],
+          "returnedAt": "2026-11-02T23:51:14.463Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:51:17.182Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:52:17.224Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:52:25.953Z",
+          "yields": [
+            60000,
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:52:47.138Z"
+        }
+      ]
+    },
+    {
+      "arm": "legacy",
+      "sample": 5,
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fakeDelayMs": 120000,
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 134844,
+      "exchangeMs": 123131,
+      "submissions": 1,
+      "fakeSubmissions": 1,
+      "shellCollections": 2,
+      "outerCollections": 4,
+      "collectionCalls": 6,
+      "workloadToolCalls": 7,
+      "collected": true,
+      "skillBytes": 2980,
+      "usage": {
+        "input_tokens": 150175,
+        "cached_input_tokens": 135552,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 507,
+        "reasoning_output_tokens": 23
+      },
+      "calls": [
+        {
+          "kind": "submit",
+          "tool": "exec",
+          "at": "2026-11-02T23:50:38.492Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:50:49.524Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:50:52.038Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:51:23.070Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:51:25.538Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:51:26.564Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:51:29.512Z",
+          "yields": [
+            1000
+          ],
+          "returnedAt": "2026-11-02T23:51:30.531Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:51:32.786Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:51:52.069Z"
+        },
+        {
+          "kind": "shell-collection",
+          "tool": "exec",
+          "at": "2026-11-02T23:51:54.178Z",
+          "yields": [
+            60000
+          ],
+          "returnedAt": "2026-11-02T23:52:25.206Z"
+        },
+        {
+          "kind": "outer-collection",
+          "tool": "wait",
+          "at": "2026-11-02T23:52:26.518Z",
+          "yields": [
+            20000
+          ],
+          "returnedAt": "2026-11-02T23:52:41.623Z"
+        }
+      ]
+    }
+  ],
+  "summary": [
+    {
+      "arm": "current",
+      "samples": 5,
+      "medianCollectionCalls": 6,
+      "medianWorkloadToolCalls": 7,
+      "medianElapsedMs": 136686,
+      "p95ElapsedMs": 137486,
+      "medianExchangeMs": 123830,
+      "medianInputTokens": 150987
+    },
+    {
+      "arm": "explicit2",
+      "samples": 5,
+      "medianCollectionCalls": 2,
+      "medianWorkloadToolCalls": 3,
+      "medianElapsedMs": 137309,
+      "p95ElapsedMs": 163899,
+      "medianExchangeMs": 123731,
+      "medianInputTokens": 82899
+    },
+    {
+      "arm": "legacy",
+      "samples": 5,
+      "medianCollectionCalls": 7,
+      "medianWorkloadToolCalls": 8,
+      "medianElapsedMs": 135836,
+      "p95ElapsedMs": 137180,
+      "medianExchangeMs": 123149,
+      "medianInputTokens": 190803
+    }
+  ],
+  "payloadVerification": {
+    "benchmarkCommit": "10073072244b84342326fd6069c0784078268831",
+    "benchmarkPayloadSha256": "5e01a74cf5c661a86ff2495cf383f9ae128b7e0135cd41b9faad94c778b66fec",
+    "finalPayloadSha256": "30ae9c682a6a0a42907ca5bd3a7cde5dd5b7f580bb92ce4848cde113856905cf",
+    "pluginFiles": 40,
+    "unchangedOtherPluginFiles": 39,
+    "changedOnly": [
+      "plugins/council/skills/council/SKILL.md"
+    ],
+    "skillBytes": {
+      "v1_0_0": 2965,
+      "offlineBenchmark": 2908,
+      "final": 2963
+    },
+    "descriptionBytes": {
+      "v1_0_0": 168,
+      "final": 128
+    },
+    "method": "Compare every plugin file with Git objects at the measured implementation commit; only SKILL.md collection guidance differs. CLI, prompts, permissions, models and all other payload files are byte-identical. Final payload hash uses the offline benchmark's normalized relative path+file-byte SHA-256 method."
+  },
+  "gates": {
+    "completed": true,
+    "identicalSharedFixtureAndStream": true,
+    "oneSubmissionAndCollectedEveryResult": true,
+    "atLeast50PercentFewerMedianCollectionCallsThanBothControls": true,
+    "medianTotalAndExchangeWithinTwoPercentOfBothControls": true,
+    "caveat": "The 2% median non-inferiority tolerance was fixed before this shared-fixture study; it is not statistical proof. The revised guidance has a worse maximum/p95 total sample, disclosed separately."
+  },
+  "initialStudy": "An earlier exploratory study used a separate legacy fixture. It prompted a matched-control review condition, so it was rerun with this single shared fixture; earlier numbers are excluded from the ranking evidence."
+}

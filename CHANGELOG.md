@@ -2,11 +2,13 @@
 
 ## 1.1.0 (2026-11-02)
 
+- Explicit bounded yield guidance covers nested exec/wait wrappers as well as shell collection. Fifteen host probes compare collection counts and cached host input with both the prior guidance and claude_plugin_for_codex 0.4.2; all calls are collected without resubmission. The final skill is 2,963 B.
+
 - Compact startup metadata retains provider and recovery job, omits the repeated native thread UUID and announces Gemini jobs before their first event. The stdout footer and native ids in state/JSON remain available.
 - Shorter advice/review/task templates remove provenance and repeated instructions. Advice and task turns retain the standing contract; Grok structured turns retain their existing schema-based recipe. Per-launch permissions are unchanged. The skill description is 128 B, down from 168 B; Gemini now follows the same ask-before-higher-effort rule as its medium consultation default.
 - Split the companion into CLI dispatch, planning, shared configuration and catalog/setup modules. Reuse speculative reply resolution while always refreshing history under admission.
 - Warm sandbox checks no longer rewrite unchanged probe caches. Replay waiters query the reservation owner's pid; cleanup and process preflight still enumerate the full table.
-- Claude now refuses unavailable process-table access before starting billable work. JSON results add provider-native usage alongside the existing `costUsd`; the benchmark reads that cost from the durable `cost` field.
+- Claude now refuses unavailable process-table access before starting billable work. Its added Windows query costs about 0.7 s per fake call in the matched run; no general latency improvement is claimed. JSON results add provider-native usage alongside the existing `costUsd`; the benchmark reads that cost from the durable `cost` field.
 - Add an interleaved offline benchmark with identical pinned fakes, default models, 100 retained jobs, provider-input/framing bytes, first-handle timing, wall-time quantiles and process/fsync counts.
 
 ## 1.0.0 (2026-11-02)

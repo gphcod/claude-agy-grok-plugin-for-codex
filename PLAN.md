@@ -134,7 +134,7 @@ Exit 0 done, 10 needs attention (review findings, pending or unreviewed coverage
 
 ### A3.5 Skill policy
 
-When the user did not name a model: `ask`/`reply`/`review` only, `--tier consult` passed explicitly, ask once before higher effort, never `task` and never `cancel --confirm-ended`. When the user named a model or family: tier by complexity. Discussion protocol: F1/F2 findings tagged BLOCKER/MAJOR/MINOR with file:line; replies carry only `AGREE`, `CHANGE: …`, `REJECT: …` and new facts; 9-reply budget per thread in the footer (`COUNCIL_CODEX_ROUNDS` or `--rounds` change it); unresolved REJECT is reported as disagreement. Codex adjudicates every finding as accepted, rejected or needs-user-waiver. Blocking rule: keep collecting a yielded shell with the longest wait allowed; `wait <job>` only after losing it; never resubmit. Fan-out recipe per A6.
+When the user did not name a model: `ask`/`reply`/`review` only, `--tier consult` passed explicitly, ask once before higher effort, never `task` and never `cancel --confirm-ended`. When the user named a model or family: tier by complexity. Discussion protocol: F1/F2 findings tagged BLOCKER/MAJOR/MINOR with file:line; replies carry only `AGREE`, `CHANGE: …`, `REJECT: …` and new facts; 9-reply budget per thread in the footer (`COUNCIL_CODEX_ROUNDS` or `--rounds` change it); unresolved REJECT is reported as disagreement. Codex adjudicates every finding as accepted, rejected or needs-user-waiver. Blocking rule: collect the same shell until exit with maximum permitted `yield_time_ms` (up to 60000) on shell/collection calls and outer exec/wait wrappers; `wait <job>` only after losing it; never resubmit. Fan-out recipe per A6.
 
 ## A4. Repository layout
 

@@ -39,5 +39,10 @@ test("an early Gemini recovery handle explains that the native thread is not con
   const world = makeWorld();
   const job = createJob(world.home, { provider: "gemini", verb: "ask", status: "running", admitted: true, cwd: world.workspace, session: null, threadId: null, requestedThreadId: null });
   assert.throws(() => resolveThread(ctxFor(world), "reply", { thread: job.id }), new RegExp(`has not confirmed a thread; wait ${job.id} or cancel ${job.id}`));
+  const fake = fileURLToPath(new URL("./fixtures/fake-agy.mjs", import.meta.url));
+  const result = world.call(["reply", job.id, "--", "delta"], { env: { COUNCIL_AGY_BIN: fake } });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stderr, new RegExp(`has not confirmed a thread; wait ${job.id} or cancel ${job.id}`));
   assert.equal(world.fakeCalls().length, 0);
+  assert.equal(world.probes().length, 0);
 });
