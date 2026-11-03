@@ -9,7 +9,7 @@ import path from "node:path";
 import { canonical, readJson, sleepSync, writeFileAtomic } from "./fs.mjs";
 import { UsageError } from "./args.mjs";
 import { STATE_ROOT_ENV, defaultStateRoot } from "./host.mjs";
-import { inspectClaim, ownedThreads, claimHeld as claimHeldIn } from "./claims.mjs";
+import { claimPath, inspectClaim, ownedThreads, claimHeld as claimHeldIn } from "./claims.mjs";
 import { touchBeat, BEAT_STALE_MS } from "./heartbeat.mjs";
 
 export const KEEP_FINISHED = 100;
@@ -246,7 +246,11 @@ export function prune(home) {
     if (key && job.admitted !== false && !latestReviews.has(key)) latestReviews.set(key, job);
   }
   const finished = jobs.filter((j) => (j.done || j.stopped) && !cleanupNeeded(j) && !reviewInputPending(latestReviews.get(reviewKey(j)) ?? j));
-  const expired = new Map(finished.slice(KEEP_FINISHED).filter((job) => !claimHeld(home, job)).map((job) => [job.id, job]));
+  const expired = new Map();
+  for (const job of finished.slice(KEEP_FINISHED)) {
+    try { if (!claimHeld(home, job)) expired.set(job.id, job); }
+    catch { /* Unreadable ownership evidence keeps this job and its review dependencies. */ }
+  }
   // Retained discussion and continuation jobs still need the root job's immutable snapshot. Keep dependencies too,
   // even when that root's old metadata says complete; conversely, an old pending state is retired by newer coverage.
   const retained = jobs.filter((job) => !expired.has(job.id));
@@ -261,11 +265,11 @@ export function prune(home) {
   }
   const trash = path.join(home, "trash");
   for (const job of expired.values()) {
-    if (claimHeld(home, job)) continue; // Recheck after dependency collection: another companion may have resumed it.
     try {
+      if (claimHeld(home, job)) continue; // Recheck after dependency collection: another companion may have resumed it.
       fs.mkdirSync(trash, { recursive: true });
       fs.renameSync(job.dir, path.join(trash, `${job.id}-${randomBytes(4).toString("hex")}`));
-    } catch { /* Another companion took it, or the rename failed: a later turn tries again. */ }
+    } catch { /* Unreadable claims, another companion or a failed rename: a later turn tries again. */ }
   }
   let left;
   try { left = fs.readdirSync(trash); } catch { return; }
@@ -282,7 +286,7 @@ export function onThread(job, provider, ref) {
 }
 /** A rejected/unadmitted attempt must not change reply inheritance or round counts. */
 export function latestOnThread(home, provider, threadId, excludeId = null) {
-  return listJobs(home).find((job) => job.id !== excludeId && job.admitted !== false && onThread(job, provider, threadId)) ?? null;
+  return listJobs(home).find((job) => job.id !== excludeId && job.admitted !== false && job.providerStarted !== false && onThread(job, provider, threadId)) ?? null;
 }
 /** The providers whose jobs name this native thread id. */
 export function providersOf(home, threadId) {
@@ -336,10 +340,14 @@ export function lastEvent(job) {
 const threadFile = (home, provider, threadId) => path.join(threadsRoot(home), `${provider}-${String(threadId).toLowerCase()}.json`);
 export function saveThread(home, record) {
   if (!record.provider || !record.threadId) throw new Error("a thread record needs provider and threadId");
+  claimPath(home, record.provider, record.threadId); // Validate ids before any path is read or written.
   fs.mkdirSync(threadsRoot(home), { recursive: true });
   writeFileAtomic(threadFile(home, record.provider, record.threadId), `${JSON.stringify({ ...record, updatedAt: new Date().toISOString() }, null, 2)}\n`);
 }
-export const loadThread = (home, provider, threadId) => readJson(threadFile(home, provider, threadId), { strict: true });
+export function loadThread(home, provider, threadId) {
+  try { claimPath(home, provider, threadId); } catch { return null; }
+  return readJson(threadFile(home, provider, threadId), { strict: true });
+}
 /** The providers that hold a thread record for this native id. */
 export function threadProviders(home, threadId) {
   let names;

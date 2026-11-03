@@ -126,10 +126,6 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     // Every task counts working-tree changes, so an edit made through a shell is counted (S7.1); read-only turns have no such check here.
     if (job.verb === "task") snapshotBefore(job, job.cwd, ctx.env);
     if (adapter.beforeTurn) await adapter.beforeTurn({ job, request: turn, cwd: job.cwd, env: ctx.env });
-    if (job.threadId && job.agent === "default") {
-      const record = loadThread(ctx.home, provider, job.threadId);
-      if (record && record.agent !== "default") (hooks.saveThread ?? saveThread)(ctx.home, { ...record, agent: "default" });
-    }
     await hooks.beforeSpawn?.(job);
     if (cancelled()) {
       reason = "cancelled";
@@ -214,6 +210,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
         try {
           child = (hooks.spawn ?? spawnChild)(turn.launcher, built.args, { cwd: turn.cwd, env: built.env ?? ctx.env, stdin: built.stdin !== undefined ? "pipe" : "ignore", platform });
         } catch (error) { spawnError = error; cleanupConfirmed = true; finish(); return; }
+        job.providerStarted = Number.isInteger(child.pid) && child.pid > 0;
         child.on("error", (error) => { spawnError = error; finish(); });
         child.on("exit", () => {
           exitedAt = Date.now();
@@ -256,6 +253,11 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
         }
         try {
           save(job); // Recovery finds the child by its recorded operands; no per-turn process query.
+          // Grok can retain the default task agent even if this companion is later lost. Persist it only after spawn.
+          if (job.providerStarted && job.threadId && job.agent === "default") {
+            const record = loadThread(ctx.home, provider, job.threadId);
+            if (record && record.agent !== "default") (hooks.saveThread ?? saveThread)(ctx.home, { ...record, agent: "default" });
+          }
           if (cancelled()) stop("cancelled"); // Covers the cancellation-before/while-spawning race.
           else announce(); // The recovery job is durable even before a provider discovers its native thread id.
           if (built.stdin !== undefined && child.stdin) child.stdin.end(built.stdin);
@@ -407,10 +409,13 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     // A failed review keeps the structured output it received as its answer (no coverage is granted for it).
     try { io.writeFileSync(answerFile, `${JSON.stringify(seen.structured, null, 2)}\n`); parsed = readAnswer(answerFile); answer = parsed.answer; } catch { /* the job record keeps it */ }
   }
+  const transient = outcome === "failed" && error === seen?.failed ? seen?.transientFailure ?? null : null;
   Object.assign(job, {
     status: ["ok", "attention"].includes(outcome) ? "done" : outcome, outcome, code: outcome === "ok" ? 0 : outcome === "attention" ? 10 : 1,
     error, cleanupPending: !cleanupConfirmed, endedAt: new Date().toISOString(),
-    transientFailure: outcome === "failed" && error === seen?.failed ? seen?.transientFailure ?? null : null,
+    providerStarted: Number.isInteger(child?.pid) && child.pid > 0,
+    // A requested resume id is not evidence that this stream actually confirmed its thread.
+    transientFailure: transient && initial.thread && !seen?.threadId ? { ...transient, noVisibleWork: false } : transient,
     edited: [...(seen?.edited ?? [])], failedCommands: [...(seen?.failedCommands ?? []), ...(hookOutcome?.failedCommands ?? [])], cost: seen?.costUsd ?? null, usage: seen?.usage ?? null,
     answerClipped: parsed?.answerClipped ?? false, denied: denied.length ? denied : undefined,
     attention: outcome === "attention" ? attentionReason({ denied, incomplete: job.incomplete ?? reviewIncomplete, questions: openQuestions }) : null,
@@ -422,8 +427,8 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
     beat();
     await hooks.beforeFinalize?.(job);
     if (["ok", "attention"].includes(job.outcome) && !io.existsSync(answerFile)) io.writeFileSync(answerFile, ""); // a replay finds the body
-    // The thread record is written while the claim is held, before completion is published (A7.6).
-    if (job.threadId && job.admitted) {
+    // The thread record follows only a started turn, while the claim is held (A7.6).
+    if (job.threadId && job.admitted && job.providerStarted) {
       (hooks.saveThread ?? saveThread)(ctx.home, { provider, threadId: job.threadId, cwd: job.cwd, session: job.session, model: job.model, modelInput: job.modelInput ?? null, effort: job.effort,
         requestedEffort: job.requestedEffort ?? null, tier: job.tier, round: job.round, rounds: job.rounds, roundsSet: job.roundsSet, agent: job.agent ?? null, web: job.web, readOnly: job.readOnly,
         policyVersion: turn.policyVersion ?? null, lastJob: job.id, ...(job.unconfirmed ? { resumable: false, unconfirmed: job.unconfirmed } : {}) });

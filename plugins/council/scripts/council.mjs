@@ -259,6 +259,7 @@ export async function main(argv, env = process.env, io = { stdout: process.stdou
 const real = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
 if (process.argv[1] && real(process.argv[1]) === real(fileURLToPath(import.meta.url))) {
   process.stdout.on("error", () => {}); // A departed caller must not bypass durable finalization.
+  process.stderr.on("error", () => {});
   main(process.argv.slice(2), process.env).then((code) => { process.exitCode = code; }, (error) => {
     process.stderr.write(`council: ${error.stack ?? error.message}\n`);
     process.exitCode = 1;

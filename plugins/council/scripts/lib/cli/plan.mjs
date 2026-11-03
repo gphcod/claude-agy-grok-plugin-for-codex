@@ -78,7 +78,9 @@ export function checkFlags(verb, o, provider = null) {
 export function resolveThread(ctx, verb, o) {
   let job = null, provider = o.to ?? null;
   if (o.last) {
-    job = latestOf(candidates(ctx.home, ctx).filter((j) => j.admitted !== false && (j.threadId || j.unconfirmed)), "--last is ambiguous");
+    // An open/lost turn must block --last even before its provider discovers a native id.
+    job = latestOf(candidates(ctx.home, ctx).filter((j) => (!j.done && !j.stopped)
+      || (j.admitted !== false && j.providerStarted !== false && (j.threadId || j.unconfirmed))), "--last is ambiguous");
     if (!job) throw new UsageError(`no earlier confirmed thread in this ${ctx.session ? "Codex thread" : "workspace"}; name a job or thread`);
   } else {
     const ref = o.thread;
@@ -99,13 +101,13 @@ export function resolveThread(ctx, verb, o) {
     }
   }
   if (provider && provider !== job.provider) throw new UsageError(`job ${job.id} belongs to ${job.provider}; --to ${provider} conflicts with it`);
-  if (job.admitted === false) throw new UsageError(`job ${job.id} was not admitted; use the original thread`);
+  if (job.admitted === false) throw new UsageError(!job.done && !job.stopped
+    ? `job ${job.id} is not admitted yet; wait ${job.id} or cancel ${job.id}` : `job ${job.id} was not admitted; use the original thread`);
   if (job.unconfirmed) throw new UsageError(`job ${job.id}: ${job.unconfirmed}`);
   let threadId = job.threadId;
   if (!threadId) {
-    if (!job.done && !job.stopped && !job.requestedThreadId) throw new UsageError(`job ${job.id} has not confirmed a thread; wait ${job.id} or cancel ${job.id}`);
-    if (!job.done && !job.stopped && job.requestedThreadId) threadId = job.requestedThreadId; // still in flight: the claim reports it busy
-    else throw new UsageError(job.requestedThreadId ? `job ${job.id} never confirmed thread ${job.requestedThreadId}; to try it anyway, pass it instead of the job id` : `job ${job.id} has no thread`);
+    if (!job.done && !job.stopped) throw new UsageError(`job ${job.id} has not confirmed a thread; wait ${job.id} or cancel ${job.id}`);
+    throw new UsageError(job.requestedThreadId ? `job ${job.id} never confirmed thread ${job.requestedThreadId}; to try it anyway, pass it instead of the job id` : `job ${job.id} has no thread`);
   }
   const prev = latestOnThread(ctx.home, job.provider, threadId) ?? job;
   return resumable({ provider: job.provider, threadId, prev, record: loadThread(ctx.home, job.provider, threadId) });

@@ -12,13 +12,14 @@ if (['--version', 'models'].includes(process.argv[2])) {
   } else {
     const at = process.argv.indexOf('--conversation');
     const id = at >= 0 ? process.argv[at + 1] : '11111111-1111-4111-8111-111111111111';
+    const noId = process.env.COUNCIL_FAKE_TRANSIENT_NO_ID === '1';
     if (process.env.COUNCIL_FAKE_TRANSIENT_PARTIAL === '1') process.stdout.write(JSON.stringify({
       event: 'step_update', step_update: { step_type: 'agent_response', state: 'DONE', text_delta: process.env.COUNCIL_FAKE_TRANSIENT_PARTIAL_TEXT || 'partial answer' },
     }) + '\n');
     for (const event of [
-      { event: 'init', conversation_id: id },
+      ...(!noId ? [{ event: 'init', conversation_id: id }] : []),
       { event: 'result', result: {
-        conversation_id: id, status: 'ERROR', response: '', num_turns: 1, finished_reason: 'error',
+        ...(!noId ? { conversation_id: id } : {}), status: 'ERROR', response: '', num_turns: 1, finished_reason: 'error',
         error: 'API error (attempt 1): UNAVAILABLE (code 503): The service is currently unavailable.',
         usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
       } },
