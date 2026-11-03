@@ -52,6 +52,8 @@
  */
 /**
  * @typedef {object} ParsedEvent
+ * @property {object} [transientFailure] classified native failure with noVisibleWork evidence; never completion
+ * @property {string} [partialText] unfinished service-failure draft, saved separately from answer/review output
  * @property {string} [threadId] @property {string} [textDelta] @property {string} [toolStep] @property {boolean} [completed]
  * @property {string} [fatal] @property {object} [denied] @property {string} [incomplete] @property {object} [structured]
  * @property {string | string[]} [edited] @property {string} [failedCommand] @property {number} [costUsd] @property {object} [usage]

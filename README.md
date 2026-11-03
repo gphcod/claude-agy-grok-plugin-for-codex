@@ -2,12 +2,12 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It replaces three single-provider Codex plugins (claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0, gemini-plugin-for-codex 0.1.2) and is the Codex-hosted twin of [Council for Claude Code](https://github.com/gphcod/codex-agy-grok-plugin-for-claude).
 
-Status: `1.1.0`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The final 1.1.0 payload is not yet qualified on macOS.
+Status: `1.1.1`. Gemini 503 recovery is recorded in `docs/qualification/gemini-service-recovery.md`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The final 1.1.1 payload is not yet qualified on macOS.
 
 ## Install
 
 ```bash
-codex plugin marketplace add gphcod/claude-agy-grok-plugin-for-codex --ref v1.1.0
+codex plugin marketplace add gphcod/claude-agy-grok-plugin-for-codex --ref v1.1.1
 codex plugin add council@council-for-codex
 ```
 
@@ -17,7 +17,7 @@ A Git marketplace follows its `ref` in `~/.codex/config.toml` and refreshes in t
 [marketplaces.council-for-codex]
 source_type = "git"
 source = "https://github.com/gphcod/claude-agy-grok-plugin-for-codex.git"
-ref = "v1.1.0"
+ref = "v1.1.1"
 
 [plugins."council@council-for-codex"]
 enabled = true
@@ -231,3 +231,13 @@ node scripts/validate-plugin.mjs --installed <dir>   # SHA-256 of every plugin f
 ```
 
 `PLAN.md` is the procedure; `docs/decisions.md` records every deviation from it.
+
+## Gemini service outages (503)
+
+A native agy `UNAVAILABLE (code 503)` is a temporary upstream failure, not a permission denial. The companion still exits 1 and keeps that failed job immutable. Text output gives a `temporary 503` recovery hint; JSON adds `retry` with status, eligibility, a 2-second delay and a one-retry budget.
+
+The host may repeat a call **once per user request**, with a fresh request id, only when a footer token starts with `temporary 503; next: repeat once` or JSON says `retry.eligible=true`: read-only, no visible partial answer or tool activity, no recorded edits, known mutation coverage and confirmed thread/cleanup. Keep the same inputs, model and permissions. A second 503 is reported to the user. Tasks, partial/tool-active turns, denials and uncertain cleanup are not automatically retried; inspect them first. Repeating the original request id only replays its original failed job and never starts another provider.
+
+If a 503 follows a partial response, the unfinished text is saved separately to `partial.md`, with a path in the footer and conditional JSON `partialFile`. It is not a completed answer, review or approval, and the turn remains failed and ineligible for automatic retry. A draft-write failure reports `partialError` without masking the native failure. Existing failed jobs stay immutable.
+
+Retries are separate companion calls/jobs, preserving one provider child per call and explicit recovery. This handles a temporary outage; it cannot make an unavailable backend succeed.

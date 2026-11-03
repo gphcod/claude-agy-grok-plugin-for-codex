@@ -4,6 +4,7 @@
 // Footer: `council <provider> <status> · job <id> · <model>/<effort>[<=requested] · <duration>[ · round N/M][ · edited N]
 // [ · unreviewed N][ · batch i/n][ · model unverified][ · full: <file>][ · error: <msg> | · attention: <reason>][ · <recovery hint>]`.
 import fs from "node:fs";
+import { serviceRetry, serviceRetryHint } from "./gemini-service.mjs";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
@@ -82,12 +83,16 @@ export function modelToken(job) {
 export function recoveryHint(job) {
   if (job.threadLocked) return `thread locked; next: cancel ${job.id} --confirm-ended after checking the process table; do not resume`;
   if (pendingCleanup(job)) return `cleanup pending; next: cancel ${job.id}; do not resume`;
-  // The provider finished without confirming its thread (Grok's end without a session id): the thread is not resumable.
-  if (job.unconfirmed) return oneLine(job.unconfirmed);
-  if (job.outcome === "failed" && job.admitted && !job.threadId && job.requestedThreadId) return "thread not confirmed; start a new ask";
+  const service = serviceRetryHint(job, false);
+  const manual = service && !serviceRetry(job, false)?.eligible;
+  // Service failures retain uncertainty warnings without suggesting automatic resubmission.
+  if (job.unconfirmed) return manual ? `thread not confirmed; ${service}` : oneLine(job.unconfirmed);
+  if (job.outcome === "failed" && job.admitted && !job.threadId && job.requestedThreadId) return manual ? `thread not confirmed; ${service}` : "thread not confirmed; start a new ask";
   const pendingReview = job.reviewState?.pending || job.reviewState?.synthesisPending ? `next: reply ${job.id} --next-input` : null;
   // An adapter that checks the workspace around a turn (Gemini's snapshots) could not tell whether it changed.
-  if (job.mutationCoverage === "unknown") return ["coverage unknown", pendingReview].filter(Boolean).join("; ");
+  const continuation = manual ? pendingReview?.replace("next:", "manual continuation:") : pendingReview;
+  if (job.mutationCoverage === "unknown") return ["coverage unknown", service, continuation].filter(Boolean).join("; ");
+  if (service) return [service, manual ? continuation : null].filter(Boolean).join("; ");
   return pendingReview;
 }
 export function footer(job, clipped) {
@@ -99,6 +104,8 @@ export function footer(job, clipped) {
   if (reviewLike && job.batch?.total > 1) parts.push(`batch ${job.batch.index}/${job.batch.total}`);
   if (job.modelVerified === false) parts.push("model unverified");
   if (clipped || job.answerClipped) parts.push(`full: ${path.join(job.dir, "answer.md")}`);
+  if (job.partialFile) parts.push(`partial draft: ${oneLine(job.partialFile, 2000)}`);
+  if (job.partialError) parts.push(`draft not saved: ${oneLine(job.partialError)}`);
   if (job.error) parts.push(`error: ${oneLine(job.error)}`);
   else if (attentionOf(job)) parts.push(`attention: ${oneLine(attentionOf(job))}`);
   const hint = recoveryHint(job);
@@ -126,7 +133,8 @@ export function resultJson(job, answer) {
     failedCommands: (job.failedCommands ?? []).slice(0, 10).map((c) => collapsed(c, 200)), failedCommandCount: (job.failedCommands ?? []).length,
     costUsd: job.cost ?? null, usage: job.usage ?? null, elapsedMs: elapsedOf(job), error: job.error ? oneLine(job.error, 2000) : null, attention: attentionOf(job),
     cleanupPending: pendingCleanup(job), threadLocked: Boolean(job.threadLocked), answer: text, clipped: clipped || Boolean(job.answerClipped),
-    answerFile: path.join(job.dir, "answer.md"),
+    answerFile: path.join(job.dir, "answer.md"), retry: serviceRetry(job, pendingCleanup(job)),
+    ...(job.partial ? { partial: true, partialFile: job.partialFile ?? null, ...(job.partialError ? { partialError: oneLine(job.partialError, 2000) } : {}) } : {}),
   };
 }
 

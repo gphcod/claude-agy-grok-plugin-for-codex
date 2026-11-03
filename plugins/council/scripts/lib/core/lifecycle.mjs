@@ -5,6 +5,7 @@
 // (deferred to the `cancel` that confirms it when the turn ends with cleanup pending).
 // The stop path snapshots owned descendants, SIGTERMs the child's group, then SIGKILLs (taskkill /T /F on Windows).
 import fs from "node:fs";
+import { saveServiceDraft } from "./gemini-service.mjs";
 import path from "node:path";
 import { BusyError, claimThread, claimHeld, releaseClaims } from "./claims.mjs";
 import { createJob, saveJob, markDone, markStopped, loadJob, loadThread, cleanupNeeded, jobView, markRequestPrepared, saveThread } from "./jobs.mjs";
@@ -409,11 +410,13 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
   Object.assign(job, {
     status: ["ok", "attention"].includes(outcome) ? "done" : outcome, outcome, code: outcome === "ok" ? 0 : outcome === "attention" ? 10 : 1,
     error, cleanupPending: !cleanupConfirmed, endedAt: new Date().toISOString(),
+    transientFailure: outcome === "failed" && error === seen?.failed ? seen?.transientFailure ?? null : null,
     edited: [...(seen?.edited ?? [])], failedCommands: [...(seen?.failedCommands ?? []), ...(hookOutcome?.failedCommands ?? [])], cost: seen?.costUsd ?? null, usage: seen?.usage ?? null,
     answerClipped: parsed?.answerClipped ?? false, denied: denied.length ? denied : undefined,
     attention: outcome === "attention" ? attentionReason({ denied, incomplete: job.incomplete ?? reviewIncomplete, questions: openQuestions }) : null,
     unconfirmed: seen?.unconfirmed ?? null, ...(outcome === "failed" && seen?.structured ? { structured: seen.structured } : {}),
   });
+  saveServiceDraft(job, seen?.partialText, io);
   delete job.stderrTail;
   try {
     beat();
