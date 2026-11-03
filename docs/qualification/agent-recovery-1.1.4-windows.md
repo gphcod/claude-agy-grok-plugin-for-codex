@@ -23,7 +23,7 @@ Reproduced on v1.1.3 before any change: through `cancelManaged`, pruning and `re
 
 - **Plan.** Codex required the fresh read under the claim rather than a recheck that kept the old snapshot, which was accepted. Grok agreed with the plan.
 - **Diff.** Codex reported no BLOCKER or MAJOR findings. Its verdict reads `incomplete`, as a clean native review always does, and it exited 10 because its read-only sandbox denied filesystem-backed test runs. Those runs are the ones recorded below. Grok approved with no findings.
-- **Rejected as out of scope.** The post-spawn save is unchanged. A read or write failure there still stops the started provider through the launch catch, which fails closed and already existed.
+- **Left as is.** The post-spawn save is unchanged, and both reviewers accepted that. A read or write failure there still stops the started provider through the launch catch, which fails closed and already existed.
 
 ## Verification
 
@@ -31,7 +31,7 @@ Reproduced on v1.1.3 before any change: through `cancelManaged`, pruning and `re
 - Fault injection: nine deliberate faults against the new tests. One, marking a job whose spawn was never attempted, got through at first because a test case set two fields at once. A separate case was added and all nine are now caught.
 - Nine local neutral-core pins pass. `jobs.mjs` is re-pinned to df9b014cb31ad77971eedec17727cbe87569951dc6612419c3ec07cfa4dc3408. The shared service and request-publication helpers remain byte-identical to the Claude-hosted rc.10.
 - Matched offline benchmark, 240 calls against v1.1.3 with fake CLIs: the 12 median differences range from -3.0% to +2.6%, with no consistent direction. The overall median is 2,034 ms for v1.1.3 and 2,024 ms for 1.1.4. Framing, fsyncs, inventory reads and metadata reads are identical. Review input shows +3 B, and the same +3 B appears when both arms run identical 1.1.4 code, so it comes from the harness and not the plugin. This is a byte and latency check, not a native-token or cost benchmark.
-- Live Grok 4.7/high, seven submitted turns in a scratch state root, with model and effort verified in job metadata:
+- Live Grok 4.7/high, six submitted turns in a scratch state root, with model and effort verified in job metadata:
   - A healthy thread stayed on `--agent explore` through a reply by job id and a reply by native id, at rounds 2 and 3, with no marker.
   - A companion killed during a read-only ask: the reply was refused as busy, `cancel` succeeded, no marker was set, and the reply resumed the same thread on explore at round 2.
   - A marker placed by hand on that healthy thread: the reply dropped `--agent explore`, recorded `default`, and the real CLI accepted the deny recipe at round 4. This shows the marked command line is accepted. **That session really ran explore, so it is not a session that ran the default agent.**

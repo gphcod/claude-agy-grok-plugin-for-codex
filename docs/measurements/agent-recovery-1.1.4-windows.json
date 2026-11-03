@@ -94,7 +94,7 @@
     "provider": "grok",
     "model": "grok-4.7",
     "effort": "high",
-    "submittedTurns": 7,
+    "submittedTurns": 6,
     "handPlacedMarkerNote": "that session really ran explore, so it is not a session that ran the default agent",
     "unexplained": "the first scripted attempt got no job id and left an empty state root; output not captured; not seen again in three later starts"
   },
