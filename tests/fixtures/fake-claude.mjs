@@ -3,7 +3,7 @@
 // and streams.json; the streams come from the S1.1 probes (tests/fixtures/streams/claude.json carries the provenance).
 // It validates the A5.1 launch contract before emitting, answers the four cold preflight probes, and plays
 // COUNCIL_FAKE_SCENARIO: ok, resume, denied, denied-error, tool-absent, effort-error, review-findings, review-malformed, review-reject, large-review,
-// task, task-edit-error, slow, hold-pipes, missing-result, duplicate-result, wrong-session, is-error, turn-limit.
+// task, task-no-shell, task-no-shell-error, task-edit-error, slow, hold-pipes, missing-result, duplicate-result, wrong-session, is-error, turn-limit.
 import fs from "node:fs";
 import { UUID, batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue, holdPipes, log, mismatch, readStdin, repoSchema,
   requireDepth, sameSet, scenario, sleep, spikeText, streams, SLOW_MS } from "./fake-common.mjs";
@@ -111,6 +111,12 @@ switch (which) {
   }
   case "tool-absent": play(fill(fixtures["tool-absent"])); break;
   case "task": play(fill(fixtures.task)); break;
+  // Synthetic (1.1.6): Claude dropped Bash, as it does when it cannot find Git Bash; the second also ends in an error result.
+  case "task-no-shell": case "task-no-shell-error": {
+    const events = fill(fixtures.task).map((e) => (e.type === "system" && e.tools ? { ...e, tools: e.tools.filter((t) => t !== "Bash") } : e));
+    play(which === "task-no-shell" ? events : events.map((e) => (e.type === "result" ? { ...e, is_error: true, subtype: "error_during_execution" } : e)));
+    break;
+  }
   case "task-edit-error": {
     // Synthetic mutation of `task` (S3.4): the Edit's tool result is an error and the Bash command exits 1.
     const events = fill(fixtures.task).map((e) => {

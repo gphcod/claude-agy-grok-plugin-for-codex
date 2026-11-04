@@ -456,3 +456,18 @@ This replaces "This is not fixed" in the previous entry.
 - An extra query after each tool step. It narrows the gap to 2-3 s for one query per step, and still misses a process orphaned between queries.
 - Adopting an orphan by its dead parent's pid. Windows reuses pids, and a wrong match kills an innocent process.
 - A Job Object. Its name goes when the last handle closes, so a helper process must live for every turn, and it needs `Add-Type`.
+
+## 2026-11-03 Pacific: 1.1.6, a Claude task with no shell
+
+**Cause.** A real `task` listed no `Bash` in its init event, although `--tools` and `--allowedTools` carry it, and it ended `ok` having run nothing. With the same flags and settings, only PATH decided it: `Bash` was absent when the first `git` was `D:\Apps\Git\mingw64\bin\git.exe`, the PATH inside a Git Bash shell, and present when it was `D:\Apps\Git\cmd\git.exe`, the real Windows PATH. Why Claude Code misses Git Bash from the mingw copy is inferred; the location of `git` is what the results correlate with.
+
+**Ruled out.** Git Bash is installed. `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` in the owner's settings is not the cause: `Bash` is offered with it set once Git Bash is found. Installing MSYS2 would not help: Git Bash is already built on it, the failure is discovery, and the plugin itself runs no Bash.
+
+**Name Git Bash for the child, narrowly.** `gitBashEnv` sets `CLAUDE_CODE_GIT_BASH_PATH` only on Windows, only for a task, only when the first `git` is a mingw copy and that install's `bash.exe` exists, and never over a value the caller set. A normal launch already works, so it stays byte-identical.
+
+**A task with no shell is attention, not `ok` or a failure.** All three reviewers agreed. `ok` is the bug. A failure would discard a finished edit and print `error:`. It applies to a task that only needed the edit tools too, because the caller asked for a turn that can run commands. A turn that fails still fails, because those checks run first.
+
+**Rejected.**
+- Adding the `PowerShell` tool. A real task ran a command that way, but the deny rules name only `Bash(...)`, so the `git push` and `rm -rf` limits would not cover it.
+- Rewriting PATH for the child. That changes what every command the agent runs resolves.
+- Setting the variable from any `git` location. It would change every normal launch, which works today.

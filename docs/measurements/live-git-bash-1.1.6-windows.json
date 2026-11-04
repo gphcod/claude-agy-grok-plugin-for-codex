@@ -1,0 +1,115 @@
+{
+  "ownerDate": "2026-11-03 Pacific",
+  "approval": "The owner asked for the plugin to be fixed, with low models for testing only",
+  "pluginVersion": "1.1.6",
+  "frozenCommit": "364763e17dfe1c6ad397d52a4b6ac93d02aabb84",
+  "pluginSha256": "75e97b40b1ccf202dfa8b46831cd6b47e57c10bac39a0138be0ad7c928c19e67",
+  "claudeCode": "2.1.316",
+  "gitBash": {
+    "path": "D:\\Apps\\Git\\bin\\bash.exe",
+    "version": "GNU bash, version 5.2.37(1)-release (x86_64-pc-msys)"
+  },
+  "notes": [
+    "Throwaway repositories and scratch state roots; CLAUDE_* variables removed. No model here reviewed anything.",
+    "initProbes read only the init event of the real CLI with the plugin's flags, on the code before the fix, then stopped the process before any model turn.",
+    "The results of an earlier probe of CLAUDE_CODE_GIT_BASH_PATH are left out: that script mangled the path."
+  ],
+  "initProbes": [
+    {
+      "path": "Git Bash shell, first git mingw64\\bin\\git.exe",
+      "settings": "user",
+      "bashOffered": false
+    },
+    {
+      "path": "real Windows PATH, first git cmd\\git.exe",
+      "settings": "user",
+      "bashOffered": true
+    },
+    {
+      "path": "Git Bash shell, Git cmd put first",
+      "settings": "user",
+      "bashOffered": true
+    },
+    {
+      "path": "Git Bash shell",
+      "settings": "user",
+      "gitBashPath": true,
+      "bashOffered": true
+    },
+    {
+      "path": "Git Bash shell",
+      "settings": "none",
+      "powerShellToolEnv": "CLAUDE_CODE_USE_POWERSHELL_TOOL=1",
+      "gitBashPath": true,
+      "bashOffered": true
+    },
+    {
+      "path": "Git Bash shell",
+      "settings": "none, with CLAUDE_CODE_USE_POWERSHELL_TOOL=1 in --settings env",
+      "gitBashPath": true,
+      "bashOffered": true
+    },
+    {
+      "path": "Git Bash shell",
+      "settings": "none",
+      "powerShellToolEnv": "CLAUDE_CODE_USE_POWERSHELL_TOOL=0",
+      "bashOffered": false,
+      "exit": 1,
+      "stderr": "Claude Code on Windows requires a shell tool. Git Bash was not found and the PowerShell tool is disabled"
+    }
+  ],
+  "date": "2026-11-04T05:02:46.388Z",
+  "entry": "E:/_PMOg/claude-agy-grok-plugin-for-codex/plugins/council/scripts/council.mjs",
+  "cases": {
+    "gitBashShellPath": {
+      "firstGit": "D:\\Apps\\Git\\mingw64\\bin\\git.exe",
+      "seconds": 10.012,
+      "exit": 0,
+      "tools": [
+        "Bash",
+        "Edit",
+        "Glob",
+        "Grep",
+        "NotebookEdit",
+        "Read",
+        "Write"
+      ],
+      "bashOffered": true,
+      "commandRan": true,
+      "footer": "council claude ok · job 2c277efcd6639cc9 · haiku/low · 8s · round 1/9 · edited 1"
+    },
+    "realWindowsPath": {
+      "firstGit": "D:\\Apps\\Git\\cmd\\git.exe",
+      "seconds": 10.071,
+      "exit": 0,
+      "tools": [
+        "Bash",
+        "Edit",
+        "Glob",
+        "Grep",
+        "NotebookEdit",
+        "Read",
+        "Write"
+      ],
+      "bashOffered": true,
+      "commandRan": true,
+      "footer": "council claude ok · job a1ffeb2b34db6441 · haiku/low · 8s · round 1/9 · edited 1"
+    },
+    "brokenGitBashPath": {
+      "firstGit": "D:\\Apps\\Git\\mingw64\\bin\\git.exe",
+      "seconds": 7.183,
+      "exit": 10,
+      "tools": [
+        "Edit",
+        "Glob",
+        "Grep",
+        "NotebookEdit",
+        "Read",
+        "Write"
+      ],
+      "bashOffered": false,
+      "commandRan": false,
+      "footer": "council claude needs attention · job a4f082cd80275edb · haiku/low · 5s · round 1/9 · edited 0 · attention: Claude offered no shell tool, so this task cannot run commands; install Git for Windows or set CLAUDE_CODE_GIT_BASH_PATH"
+    }
+  }
+}

@@ -558,3 +558,7 @@ A7.8: recovery marks a thread whose lost turn may have run Grok's default agent,
 ## 1.1.5 unrecorded-command amendment (2026-11-03 Pacific)
 
 A7.5: heartbeats persist owned identities on every platform. A7.5/A7.8: a recovering `cancel` warns that a command no heartbeat recorded may still be running. A recorded process alive after a clean exit gets a bounded wait before it counts as a survivor. The reasons are in `docs/decisions.md`.
+
+## 1.1.6 Claude shell amendment (2026-11-03 Pacific)
+
+A5.1 claude: a task's child gets `CLAUDE_CODE_GIT_BASH_PATH` when the first `git` on a Windows PATH is a mingw copy, and a task whose init event offers no `Bash` ends in attention. The reasons are in `docs/decisions.md`.
