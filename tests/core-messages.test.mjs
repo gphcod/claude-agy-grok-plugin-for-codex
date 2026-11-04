@@ -9,6 +9,7 @@ import { BusyError, claimThread } from "../plugins/council/scripts/lib/core/clai
 import { createJob, resultRecord } from "../plugins/council/scripts/lib/core/jobs.mjs";
 import { UNCONFIRMED, PERMISSION_STOP } from "../plugins/council/scripts/lib/providers/grok.mjs";
 import { hostNotice } from "../plugins/council/scripts/lib/providers/gemini.mjs";
+import { NO_SHELL } from "../plugins/council/scripts/lib/providers/claude.mjs";
 
 const JOB = "k3f9k3f9k3f9k3f9";
 const UUID = "4443bbfb-dab9-4088-9647-a8fc31c98ac2";
@@ -36,6 +37,7 @@ test("every action-bearing footer message with a UUID thread and a 16-character 
     "denied host access": hostNotice("operation not permitted"),
     "permission notice": hostNotice("tool approval requires a prompt"),
     "open questions": attentionReason({ questions: true }),
+    "no shell": attentionReason({ incomplete: NO_SHELL }),
   };
   for (const [name, message] of Object.entries(messages)) {
     assert.ok(message, name);

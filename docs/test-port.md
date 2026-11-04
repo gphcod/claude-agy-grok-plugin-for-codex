@@ -450,3 +450,7 @@ tests/core-agent-recovery.test.mjs adds 15 cases: the reproduced window by job i
 ## 2026-11-03: 1.1.5 unrecorded command
 
 tests/core-unrecorded-command.test.mjs adds 9 cases: a Windows heartbeat recording, a recorded helper exiting by itself, a recorded survivor stopped, a command whose wrapper exits during the wait, macOS without a recorded leader, a failed query during the wait, an unrecorded orphan never signalled with the warning only on the recovering cancel, no warning for a provider that never started, and an end-to-end kill of a real companion and provider with the command stopped by cancel. The heartbeat test in tests/core-review-fixes.test.mjs now also runs on Windows.
+
+## 2026-11-03: 1.1.6 Claude shell
+
+tests/claude-git-bash.test.mjs adds 8 cases: each mingw flavour naming Git Bash, a normal PATH, a set value, a missing bash.exe, no git and other platforms changing nothing, only a task's child getting the variable, the init event's attention with its thread, model and answer kept, no attention with Bash, on a read-only turn or without a tools list, failures staying failures, and two entry-level runs against fake-claude's new task-no-shell scenarios. tests/core-messages.test.mjs covers the new message's size.

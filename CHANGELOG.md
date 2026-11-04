@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.6 (2026-11-03 Pacific)
+
+- A Claude `task` started from a Git Bash shell on Windows keeps its shell. There the first `git` on PATH is Git for Windows' mingw copy, Claude Code misses Git Bash and drops its `Bash` tool without saying so, so the task could run no command and still ended `ok`. The plugin now sets `CLAUDE_CODE_GIT_BASH_PATH` for that task's child, only when the first `git` is a mingw copy, that install's `bash.exe` exists and the caller has not set the variable. A normal Windows PATH and every other verb are unchanged.
+- A task whose init event still offers no `Bash` ends in attention (exit 10) with its answer kept: `Claude offered no shell tool, so this task cannot run commands; install Git for Windows or set CLAUDE_CODE_GIT_BASH_PATH`. A turn that fails still fails.
+
 ## 1.1.5 (2026-11-03 Pacific)
 
 - `cancel` now stops a command that a lost turn left running on Windows, once a heartbeat has recorded it. There a provider can end with its lost companion and leave a command whose parents are gone, and Windows does not reparent, so recovery had nothing linking it to the job and reported `cancelled` with the command still running. Heartbeats now record the turn's processes on Windows too, as they already did on Linux and macOS. A turn shorter than one heartbeat (10 s) makes no extra query; a longer one makes one process query per heartbeat.

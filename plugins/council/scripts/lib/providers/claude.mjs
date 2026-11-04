@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { resolveLauncher as resolveBinary, runSync } from "../core/launcher.mjs";
+import { pathCandidates, resolveLauncher as resolveBinary, runSync } from "../core/launcher.mjs";
 import { depthEnv } from "../core/host.mjs";
 import { stateRootDescriptor } from "../core/preflight.mjs";
 
@@ -29,6 +29,8 @@ export const TASK_ALLOWED = [...EDIT_TOOLS, "Bash"];
 export const TASK_DISALLOWED = ["Bash(git push*)", "Bash(git reset --hard*)", "Bash(rm -rf *)", "Bash(sudo *)"];
 /** Tools a read-only launch must never advertise in its init event. */
 const MUTATING = [...EDIT_TOOLS, "Bash"];
+/** A task whose init event offers no Bash finishes with this attention, so the caller learns no command could run. */
+export const NO_SHELL = "Claude offered no shell tool, so this task cannot run commands; install Git for Windows or set CLAUDE_CODE_GIT_BASH_PATH";
 /** `--max-turns` defaults by verb (A3.3). */
 export const MAX_TURNS = Object.freeze({ review: 20, ask: 20, reply: 20, task: 30 });
 export const EMPTY_MCP = '{"mcpServers":{}}';
@@ -51,6 +53,17 @@ export function requestLine(content, session) {
 /** The turn's input: the per-verb template, then the text; a review or discussion prompt already carries its instructions. */
 export function turnInput(request) {
   return request.instructions ? `${request.instructions.trim()}\n\n${request.prompt}` : request.prompt;
+}
+/**
+ * Inside a Git Bash shell the first git on PATH is Git for Windows' mingw copy, and Claude then misses Git Bash and drops
+ * its Bash tool without saying so. Name it for the child in that one case; a value the caller set always stands.
+ */
+export function gitBashEnv(env, platform = process.platform) {
+  if (platform !== "win32" || env.CLAUDE_CODE_GIT_BASH_PATH) return {};
+  const [git] = pathCandidates("git", env, platform);
+  const root = git && /^(.*)[\\/](?:mingw64|mingw32|clangarm64|ucrt64)[\\/]bin[\\/]git\.exe$/i.exec(git)?.[1];
+  const bash = root && path.join(root, "bin", "bash.exe");
+  return bash && fs.existsSync(bash) ? { CLAUDE_CODE_GIT_BASH_PATH: bash } : {};
 }
 /** The complete argument vector of one launch (CLAUDEX `buildClaudeArgs`, with the S1.1 task launch and council's flags). */
 export function buildArgs(request, session) {
@@ -170,7 +183,7 @@ export default {
   buildTurn(request) {
     const session = request.resume ? String(request.threadId).toLowerCase() : randomUUID();
     const args = buildArgs(request, session);
-    return { args, env: { ...request.env, ...depthEnv(), NO_COLOR: "1" }, stdin: requestLine(turnInput(request), session), answerFile: null, promptFile: null,
+    return { args, env: { ...request.env, ...(request.verb === "task" ? gitBashEnv(request.env ?? {}) : {}), ...depthEnv(), NO_COLOR: "1" }, stdin: requestLine(turnInput(request), session), answerFile: null, promptFile: null,
       readOnly: request.verb !== "task", requestedThreadId: session, agent: null, contractCarrier: "append-system-prompt-file" };
   },
   /**
@@ -194,7 +207,8 @@ export default {
       const advertised = Array.isArray(ev.tools) ? ev.tools.filter((t) => MUTATING.includes(t)) : [];
       if (readOnly && advertised.length) return { fatal: `a read-only Claude turn advertised ${advertised.join(", ")}` };
       s.session = ev.session_id;
-      return { threadId: ev.session_id, ...(typeof ev.model === "string" && ev.model ? { model: ev.model } : {}) };
+      return { threadId: ev.session_id, ...(typeof ev.model === "string" && ev.model ? { model: ev.model } : {}),
+        ...(!readOnly && Array.isArray(ev.tools) && !ev.tools.includes("Bash") ? { incomplete: NO_SHELL } : {}) };
     }
     if (ev.type === "system" && ev.subtype === "api_retry") { s.retries += 1; s.lastRetry = ev.category || ev.error?.type || "unknown"; return null; }
     if (ev.type === "permission_denied") { s.denials.push(denial(ev)); return null; }

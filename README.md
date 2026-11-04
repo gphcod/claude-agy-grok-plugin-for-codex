@@ -2,14 +2,14 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It replaces three single-provider Codex plugins (claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0, gemini-plugin-for-codex 0.1.2) and is the Codex-hosted twin of [Council for Claude Code](https://github.com/gphcod/codex-agy-grok-plugin-for-claude).
 
-Status: `1.1.5`. This release lets `cancel` stop a command a lost turn left running on Windows, 1.1.4 closes the last audited thread-state window, and 1.1.3 checks the eight Claude-hosted rc.9 findings against the Codex-hosted paths; see `CHANGELOG.md`. Gemini 503 recovery is recorded in `docs/qualification/gemini-service-recovery.md`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The final 1.1.5 payload is not yet qualified on macOS.
+Status: `1.1.6`. This release keeps a Claude `task` its shell when started from a Git Bash shell on Windows, 1.1.5 lets `cancel` stop a command a lost turn left running on Windows, 1.1.4 closes the last audited thread-state window, and 1.1.3 checks the eight Claude-hosted rc.9 findings against the Codex-hosted paths; see `CHANGELOG.md`. Gemini 503 recovery is recorded in `docs/qualification/gemini-service-recovery.md`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The final 1.1.6 payload is not yet qualified on macOS.
 
-[1.1.5 qualification](docs/qualification/unrecorded-command-1.1.5-windows.md). [1.1.4 qualification](docs/qualification/agent-recovery-1.1.4-windows.md). [1.1.3 shared-issue qualification](docs/qualification/shared-issues-1.1.3-windows.md) records all eight dispositions, Claude Opus 5.5/high and Grok 4.7/high review limits, 22 new regressions, 571 passing tests and the live newest-thread Grok check. No native Gemini/Argon was called in that audit.
+[1.1.6 qualification](docs/qualification/claude-git-bash-1.1.6-windows.md). [1.1.5 qualification](docs/qualification/unrecorded-command-1.1.5-windows.md). [1.1.4 qualification](docs/qualification/agent-recovery-1.1.4-windows.md). [1.1.3 shared-issue qualification](docs/qualification/shared-issues-1.1.3-windows.md) records all eight dispositions, Claude Opus 5.5/high and Grok 4.7/high review limits, 22 new regressions, 571 passing tests and the live newest-thread Grok check. No native Gemini/Argon was called in that audit.
 
 ## Install
 
 ```bash
-codex plugin marketplace add gphcod/claude-agy-grok-plugin-for-codex --ref v1.1.5
+codex plugin marketplace add gphcod/claude-agy-grok-plugin-for-codex --ref v1.1.6
 codex plugin add council@council-for-codex
 ```
 
@@ -19,7 +19,7 @@ A Git marketplace follows its `ref` in `~/.codex/config.toml` and refreshes in t
 [marketplaces.council-for-codex]
 source_type = "git"
 source = "https://github.com/gphcod/claude-agy-grok-plugin-for-codex.git"
-ref = "v1.1.5"
+ref = "v1.1.6"
 
 [plugins."council@council-for-codex"]
 enabled = true
@@ -189,6 +189,7 @@ Windows launches never go through `cmd.exe`; process identity and cleanup use th
 - **Fresh process preflight.** Every provider now checks process-table access before starting billable work, including Claude. This can add preflight time; the post-exit ownership scan still runs. Successful warm sandbox rechecks do not rewrite an unchanged probe cache.
 - **Gemini read-only turns can search the web.** agy's `search_web(*)` deny rule did not block the search (two probes, S1.2), so council cannot switch it off; `--web` is not offered for Gemini and `setup` prints this line.
 - **Gemini tasks without `--allow-command` run any command** when the global agy `toolPermission` is `always-proceed`; `setup` warns in that case.
+- **A Claude `task` on Windows needs Git Bash.** Claude Code runs `Bash` through it. Started from a Git Bash shell, where it misses Git Bash by itself, the plugin names it for the task. If Claude still offers no `Bash`, the task ends in attention (exit 10) and says to install Git for Windows or set `CLAUDE_CODE_GIT_BASH_PATH`.
 - **A hard-killed companion on Windows** takes its provider child with it, unlike POSIX; `cancel` still recovers the job. A command that child started can outlive both. `cancel` stops it once a heartbeat (every 10 s) has recorded it. One started since the last heartbeat, or orphaned between two of them, keeps running, so `cancel` warns you to check the process table.
 - **A clean exit is not trusted** on any launcher kind until S7 qualifies one: the post-exit scan costs time, and a held pipe locks the thread until `cancel --confirm-ended`.
 - **`edited N` on a task** counts the paths the provider's events name plus the working-tree changes between a Git snapshot before the spawn and one after the turn, so an edit made through a shell counts; a change you make in the same tree during the turn counts too. Outside Git, on a failed git call, past 5,000 dirty paths or with a path that is not valid UTF-8 only the events count, and the turn never fails for it; ignored files are invisible to the snapshot. A submodule counts as one path when its dirty state changes; edits inside an already dirty submodule count only if the events name them.
