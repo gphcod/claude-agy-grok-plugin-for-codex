@@ -33,7 +33,7 @@ S5.7. Donor: gemini-plugin-for-codex 0.1.2 (AGYX), `skills/agy/scripts/agy.mjs` 
 | one NDJSON `{"event":"user","message":{"content"}}` on stdin | same, content = `contract.md`, the turn's instructions, the text | intentionally different | AGYX sent the bare prompt; council prepends its standing contract and the per-turn template (A5.1) |
 | `--settings <private file>` on review turns and on edits with grants; plain edits used the global profile | `--settings <job-dir>/settings.json` on every turn | intentionally different | Every turn: the operand is the ownership evidence (A5.1); a task without `--allow-command` carries the global lists and toolPermission unchanged, so it behaves as the global profile |
 | `configuredPolicy`: only `permissions` lists and `toolPermission` from `~/.gemini/antigravity-cli/settings.json`, 2 MiB cap, invalid JSON stops the call | same | same | Read per call from the call's `HOME`; a broken file fails the turn before any agy call and `setup` warns |
-| review deny list `write_file(*)`, `command(*)`, `unsandboxed(*)`, `mcp(*)`, `execute_url(*)` | the same plus `edit_file(*)` | intentionally different | gemini-plugin-cc's rule, added at the final self-review (PLAN Part C); AGYX observed `edit_file` guarded by `write_file(*)` live, the explicit rule removes the dependence on that alias |
+| review deny list `write_file(*)`, `command(*)`, `unsandboxed(*)`, `mcp(*)`, `execute_url(*)` | `write_file(*)`, `edit_file(*)`, `unsandboxed(*)`, `mcp(*)`, `execute_url(*)`; inspection commands allowed | intentionally different | gemini-plugin-cc's rule, added at the final self-review (PLAN Part C); AGYX observed `edit_file` guarded by `write_file(*)` live, the explicit rule removes the dependence on that alias |
 | review allow filtered to `read_file(...)`/`read_url(...)`, `agentMode: ""`, `toolPermission` strict or request-review | same | same | |
 | global deny/ask arrays merged before rules are added | same | same | Session arrays replace the global ones (S1.2, the twin's scratch-HOME probe) |
 | `--json-schema` not used (review answers were prose) | `--json-schema <path>` on reviews and review discussions | intentionally different | One schema for all providers (A5.2); agy enforces it through `finish` (S1.2) |
@@ -83,3 +83,7 @@ S5.7. Donor: gemini-plugin-for-codex 0.1.2 (AGYX), `skills/agy/scripts/agy.mjs` 
 - Local cleanup covers observed local processes only; remote backend work is not cancelled by stopping agy.
 - agy's language server was not observed on 1.4.12 (S1.2); the group stop covers it when present.
 - Gemini on Windows is checked (`docs/qualification/windows.md`).
+
+## Efficient command defaults (1.1.7)
+
+Read-only calls add the finite `READ_ONLY_COMMANDS` inspection prefixes. Requested tasks add `command(*)`. Both preserve configured ask/deny rules and strict mode. This supersedes earlier blanket command-denial policy; these are good-faith workflow defaults, not shell containment.

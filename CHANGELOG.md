@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.7 — 2026-11-04
+
+- Prioritize efficient, good-faith agent workflows across both combined plugins.
+- Let Gemini inspection turns use common read commands and requested tasks use shell commands, preserving configured ask/deny rules.
+- Add regression coverage for task-to-reply permissions and explicit user rules.
+
 ## 1.1.6 (2026-11-03 Pacific)
 
 - A Claude `task` started from a Git Bash shell on Windows keeps its shell. There the first `git` on PATH is Git for Windows' mingw copy, Claude Code misses Git Bash and drops its `Bash` tool without saying so, so the task could run no command and still ended `ok`. The plugin now sets `CLAUDE_CODE_GIT_BASH_PATH` for that task's child, only when the first `git` is a mingw copy, that install's `bash.exe` exists and the caller has not set the variable. A normal Windows PATH and every other verb are unchanged.

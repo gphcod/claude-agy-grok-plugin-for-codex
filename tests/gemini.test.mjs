@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { makeWorld, jobIdOf, footerOf, alive, until } from "./helpers.mjs";
 import { main } from "../plugins/council/scripts/council.mjs";
-import { READ_ONLY_DENY } from "../plugins/council/scripts/lib/providers/gemini.mjs";
+import { READ_ONLY_DENY, READ_ONLY_COMMANDS } from "../plugins/council/scripts/lib/providers/gemini.mjs";
 
 const FAKE = path.resolve("tests", "fixtures", "fake-agy.mjs");
 const turns = {};
@@ -63,10 +63,10 @@ test("ask → task --thread → reply → task --thread: settings, --sandbox, --
   const calls = w.fakeCalls();
   assert.equal(calls.length, 4);
   assert.deepEqual(calls.map((c) => [c.edit, c.conversation ?? null, c.argv.includes("--sandbox")]), [[false, null, true], [true, thread, true], [false, thread, true], [true, thread, true]]);
-  const readOnly = { permissions: { allow: ["read_file(docs/*)"], ask: [], deny: ["read_file(.env)", ...READ_ONLY_DENY] }, agentMode: "", toolPermission: "request-review" };
+  const readOnly = { permissions: { allow: ["read_file(docs/*)", ...READ_ONLY_COMMANDS], ask: [], deny: ["read_file(.env)", ...READ_ONLY_DENY] }, agentMode: "", toolPermission: "request-review" };
   assert.deepEqual(calls[0].settings, readOnly, "run_command(*) and command(which) are filtered out; the global deny stays");
   assert.deepEqual(calls[2].settings, readOnly, "a reply after a task is read-only again");
-  assert.deepEqual(calls[1].settings, { permissions: { allow: ["run_command(*)", "command(which)", "read_file(docs/*)", "command(node check.mjs)", "unsandboxed(node check.mjs)"], ask: [], deny: ["read_file(.env)"] },
+  assert.deepEqual(calls[1].settings, { permissions: { allow: ["run_command(*)", "command(which)", "read_file(docs/*)", "command(*)", "command(node check.mjs)", "unsandboxed(node check.mjs)"], ask: [], deny: ["read_file(.env)"] },
     toolPermission: "request-review" }, "a task keeps the global lists; --allow-command adds the pair and forces request-review");
   assert.equal(calls[3].settings.toolPermission, "always-proceed", "a task without --allow-command keeps the global value");
   const settingsPaths = calls.map((c) => flag(c.argv, "--settings"));

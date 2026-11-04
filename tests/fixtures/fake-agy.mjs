@@ -17,7 +17,7 @@ import { batchOf, checkArgv, deepEqual, emitJson, expect, fileExists, flagValue,
 
 const argv = process.argv.slice(2);
 const which = scenario();
-const READ_ONLY_DENY = ["write_file(*)", "edit_file(*)", "command(*)", "unsandboxed(*)", "mcp(*)", "execute_url(*)"];
+const READ_ONLY_DENY = ["write_file(*)", "edit_file(*)", "unsandboxed(*)", "mcp(*)", "execute_url(*)"];
 
 if (argv.includes("--version")) { log({ probe: "version", argv }); console.log("1.4.12"); process.exit(0); }
 if (argv[0] === "models") { log({ probe: "models", argv }); process.stdout.write(spikeText("agy-models.txt")); process.exit(process.env.COUNCIL_FAKE_LOGGED_OUT ? 1 : 0); }
@@ -37,7 +37,7 @@ expect(flagValue(argv, "--mode") === undefined || edit, "--mode is accept-edits 
 const deny = settings.permissions?.deny ?? [], allow = settings.permissions?.allow ?? [];
 if (!edit) {
   for (const rule of READ_ONLY_DENY) expect(deny.includes(rule), `read-only settings deny ${rule}`, deny);
-  expect(allow.every((r) => /^(read_file|read_url)\(.*\)$/.test(r)), "read-only allow list holds only read_file/read_url rules", allow);
+  expect(allow.every((r) => /^(read_file|read_url)\(.*\)$/.test(r) || /^command\((git (status|diff|log|show|blame|grep|rev-parse|ls-files)|ls|pwd|cat|head|tail|wc|grep|rg|find)\)$/.test(r)), "read-only allow list holds reads and inspection commands", allow);
   expect(settings.agentMode === "" && ["strict", "request-review"].includes(settings.toolPermission), "read-only settings: agentMode \"\" and toolPermission strict|request-review", settings);
 } else {
   // Tasks keep the user's global lists (a global write_file(*)/edit_file(*) deny stays and the scenario carries the
