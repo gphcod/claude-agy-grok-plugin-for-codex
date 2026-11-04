@@ -54,7 +54,7 @@ test("with the state root writable, each provider names its own next blocked res
   const w = sandboxed(t);
   w.writable(w.home);
   const expected = {
-    claude: [`Claude session storage \\(dir ${escape(path.join(w.dir, ".claude", "projects"))}\\): write access is missing`, /action: Grant write access to .*\.claude\/projects/],
+    claude: ["process identity and cleanup \\(process-table ps\\)", /action: Allow the process-table query/],
     gemini: [`agy backend state \\(~/\\.gemini/antigravity-cli\\) \\(dir ${escape(path.join(w.dir, ".gemini", "antigravity-cli"))}\\): write access is missing`, /action: Grant write access to .*antigravity-cli\. Run Codex with a sandbox that allows it/],
     grok: ["process-table query for cleanup and ownership \\(process-table ps\\)", /action: Allow process inspection/],
   };
@@ -65,6 +65,13 @@ test("with the state root writable, each provider names its own next blocked res
     assert.match(r.stderr, expected[provider][1], provider);
   }
   assert.deepEqual(w.logged(), [], "sandbox checks run before any probe");
+  // Claude now checks process identity before storage. Restore only PATH to exercise the next blocker.
+  w.env.PATH = process.env.PATH;
+  const storage = w.call(["ask", "--to", "claude", "--", "q"]);
+  assert.equal(storage.status, 1, storage.stdout + storage.stderr);
+  assert.match(storage.stderr, /^council: preflight_blocked: Claude session storage .*write access is missing/);
+  assert.match(storage.stderr, /action: Grant write access to .*\.claude\/projects/);
+  assert.deepEqual(w.logged(), [], "storage check still precedes provider probes");
   // Claude with its storage writable and the network still unreachable: the cold probes run, the network check blocks.
   w.writable(path.join(w.dir, ".claude", "projects"));
   const net = w.call(["ask", "--to", "claude", "--", "q"]);

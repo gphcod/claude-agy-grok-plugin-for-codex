@@ -97,7 +97,7 @@ test("the skill documents both call forms with every placeholder the e2e substit
   assert.ok(powershellForm, "PowerShell here-string form");
   for (const form of [posixForm, powershellForm]) for (const p of ["<plugin>", "<verb>", "<provider>", "[flags]", "<text>"]) assert.ok(form.includes(p), `${p} in ${form}`);
   assert.match(powershellForm, /--; exit \$LASTEXITCODE\s*$/);
-  assert.match(skill, /absolute paths/);
+  assert.match(skill, /absolute paths/i);
 });
 
 for (const sh of SHELLS.filter((s) => s.form === "posix")) {
