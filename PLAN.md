@@ -554,3 +554,7 @@ A7’s logical request lifecycle and identifiers are unchanged. New request-form
 ## 1.1.4 default-agent amendment (2026-11-03 Pacific)
 
 A7.8: recovery marks a thread whose lost turn may have run Grok's default agent, in a one-way file beside its record, before the job stops blocking the thread. The reasons are in `docs/decisions.md`.
+
+## 1.1.5 unrecorded-command amendment (2026-11-03 Pacific)
+
+A7.5: heartbeats persist owned identities on every platform. A7.5/A7.8: a recovering `cancel` warns that a command no heartbeat recorded may still be running. A recorded process alive after a clean exit gets a bounded wait before it counts as a survivor. The reasons are in `docs/decisions.md`.

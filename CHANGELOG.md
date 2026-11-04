@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.5 (2026-11-03 Pacific)
+
+- `cancel` now stops a command that a lost turn left running on Windows, once a heartbeat has recorded it. There a provider can end with its lost companion and leave a command whose parents are gone, and Windows does not reparent, so recovery had nothing linking it to the job and reported `cancelled` with the command still running. Heartbeats now record the turn's processes on Windows too, as they already did on Linux and macOS. A turn shorter than one heartbeat (10 s) makes no extra query; a longer one makes one process query per heartbeat.
+- `cancel` of a lost job now warns: `a command the lost turn started may still be running if no heartbeat recorded it; check the process table`. With `--json` this is a `warning` field. A command started and orphaned between two heartbeats stays unseen, so recovery proves only that nothing identified is left. A repeat `cancel`, or a job whose provider never started, prints no warning.
+- A recorded process still alive after a clean exit gets up to 5 s to exit before it counts as a survivor. One that stays is stopped and fails the turn. On Windows that rule is new for this plugin: a process that a task leaves running on purpose, such as a dev server, and that lived across a heartbeat now ends with the turn.
+- Corrected the notes that said a session on Grok's default agent cannot switch to explore. Grok 1.0.70 at grok-4.6 accepted it; the deny recipe and the marker stay, because other versions were not run.
+
 ## 1.1.4 (2026-11-03 Pacific)
 
 - Close the window between a spawn and the post-spawn save of Grok's default agent. A companion that died there left the thread record on `explore`, and once the recovered job was pruned, a read-only reply by native id passed `--agent explore` to a session that ran the default agent, which the adapter's notes say a session cannot accept. Recovery by `cancel`, including `--confirm-ended`, now sets a one-way marker beside the record, `threads/<provider>-<id>.default-agent`, before the job stops blocking its thread. A job whose start is unknown counts too. If the marker cannot be written, `cancel` exits 1 and keeps the claim, and running it again retries. A marker that cannot be read stops the reply with the strict state-read error. Recovery never writes the record, so concurrent cancels cannot regress it. A job already recovered under 1.1.3 or earlier is not corrected.

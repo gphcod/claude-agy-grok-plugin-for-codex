@@ -27,8 +27,9 @@ const PATH_CAP = 10000;
 export const HOSTILE = ["Agent", "ask_user_question", "enter_plan_mode", "exit_plan_mode", "image_gen", "image_edit", "image_to_video", "reference_to_video"];
 // search_tool and use_tool are the default agent's way to MCP and other deferred tools.
 export const FORBIDDEN = ["search_replace", "write", "run_terminal_command", "spawn_subagent", "search_tool", "use_tool"];
-// Fallback for a session that runs the default agent (it has written) and cannot switch to explore: the verified
-// read-only denylist. Grok removes the shell only by its flag id, run_terminal_cmd; its event name is listed too.
+// For a session that has run the default agent (it has written): the verified read-only denylist. Grok 1.0.70 at
+// grok-4.6 also accepted --agent explore there; other versions were not run, so this stays.
+// Grok removes the shell only by its flag id, run_terminal_cmd; its event name is listed too.
 export const RESUME_DENY = [
   "search_replace",
   "write",

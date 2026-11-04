@@ -446,3 +446,7 @@ The eight supplied findings were checked against this host rather than counted a
 ## 2026-11-03: 1.1.4 default-agent window
 
 tests/core-agent-recovery.test.mjs adds 15 cases: the reproduced window by job id and native id, a recovery landing between resolution and admission, the record outranking an older job, which jobs mark, --confirm-ended, a first turn with no threads/ yet, an uppercase id, marker creation and lookup failures, a delayed second canceller, a healthy explore thread, and an end-to-end case through the real entry and fake Grok.
+
+## 2026-11-03: 1.1.5 unrecorded command
+
+tests/core-unrecorded-command.test.mjs adds 9 cases: a Windows heartbeat recording, a recorded helper exiting by itself, a recorded survivor stopped, a command whose wrapper exits during the wait, macOS without a recorded leader, a failed query during the wait, an unrecorded orphan never signalled with the warning only on the recovering cancel, no warning for a provider that never started, and an end-to-end kill of a real companion and provider with the command stopped by cancel. The heartbeat test in tests/core-review-fixes.test.mjs now also runs on Windows.
