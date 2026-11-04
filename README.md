@@ -2,7 +2,7 @@
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It replaces three single-provider Codex plugins (claude_plugin_for_codex 0.5.0, grok_plugin_for_codex 1.1.0, gemini-plugin-for-codex 0.1.2) and is the Codex-hosted twin of [Council for Claude Code](https://github.com/gphcod/codex-agy-grok-plugin-for-claude).
 
-Status: `1.1.7`. This patch enables efficient Gemini inspection and task commands while preserving configured ask/deny rules. This release keeps a Claude `task` its shell when started from a Git Bash shell on Windows, 1.1.5 lets `cancel` stop a command a lost turn left running on Windows, 1.1.4 closes the last audited thread-state window, and 1.1.3 checks the eight Claude-hosted rc.9 findings against the Codex-hosted paths; see `CHANGELOG.md`. Gemini 503 recovery is recorded in `docs/qualification/gemini-service-recovery.md`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The Gemini 1.1.7 command-policy change has live macOS review/task evidence; full installed Codex-host qualification remains open.
+Status: `1.1.8`. Claude deep calls now explicitly select Opus 5.5 at xhigh effort. This patch enables efficient Gemini inspection and task commands while preserving configured ask/deny rules. This release keeps a Claude `task` its shell when started from a Git Bash shell on Windows, 1.1.5 lets `cancel` stop a command a lost turn left running on Windows, 1.1.4 closes the last audited thread-state window, and 1.1.3 checks the eight Claude-hosted rc.9 findings against the Codex-hosted paths; see `CHANGELOG.md`. Gemini 503 recovery is recorded in `docs/qualification/gemini-service-recovery.md`. Windows efficiency measurements and Claude/Gemini/Grok review are recorded in `docs/qualification/efficiency-1.1.0-windows.md`. Earlier macOS qualification is in `docs/qualification/macos-check.md`; 1.0.0 Windows and marketplace records remain in `docs/qualification/review-2026-11-02.md` and `docs/qualification/windows.md`. The Gemini 1.1.7 command-policy change has live macOS review/task evidence; full installed Codex-host qualification remains open.
 
 [1.1.6 qualification](docs/qualification/claude-git-bash-1.1.6-windows.md). [1.1.5 qualification](docs/qualification/unrecorded-command-1.1.5-windows.md). [1.1.4 qualification](docs/qualification/agent-recovery-1.1.4-windows.md). [1.1.3 shared-issue qualification](docs/qualification/shared-issues-1.1.3-windows.md) records all eight dispositions, Claude Opus 5.5/high and Grok 4.7/high review limits, 22 new regressions, 571 passing tests and the live newest-thread Grok check. No native Gemini/Argon was called in that audit.
 
@@ -95,7 +95,7 @@ Bare `review` and `--uncommitted` review the working tree against `HEAD` plus un
 
 | Provider | consult | exec | deep |
 |---|---|---|---|
-| claude | claude-opus-5-5 / high | sonnet / high | default / xhigh |
+| claude | claude-opus-5-5 / high | sonnet / high | claude-opus-5-5 / xhigh |
 | grok | grok-4.7 / high | grok-4.7-build-fast / xhigh | grok-4.7 / xhigh |
 | gemini | gemini-4-argon / medium | gemini-3.8-flash / high | gemini-4-argon / high |
 
