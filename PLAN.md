@@ -563,3 +563,5 @@ A7.5: heartbeats persist owned identities on every platform. A7.5/A7.8: a recove
 ## 1.1.6 Claude shell amendment (2026-11-03 Pacific)
 
 A5.1 claude: a task's child gets `CLAUDE_CODE_GIT_BASH_PATH` when the first `git` on a Windows PATH is a mingw copy, and a task whose init event offers no `Bash` ends in attention. The reasons are in `docs/decisions.md`.
+
+Gemini task execution (1.1.7): the adapter no longer forces agy `--sandbox` on explicitly requested tasks. Inspection turns retain it, including replies after tasks. Configured ask/deny rules are still passed unchanged. This avoids macOS terminal restrictions blocking node/npm and Git index writes during authorized work.

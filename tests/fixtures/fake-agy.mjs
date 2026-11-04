@@ -25,7 +25,7 @@ if (argv[0] === "models") { log({ probe: "models", argv }); process.stdout.write
 expect(flagValue(argv, "--input-format") === "stream-json" && flagValue(argv, "--output-format") === "stream-json", "stream-json in and out");
 expect(argv.includes("--disable-slash-commands"), "--disable-slash-commands");
 expect(/^\d+(\.\d+)?s$/.test(flagValue(argv, "--print-timeout") ?? ""), "--print-timeout <n>s", flagValue(argv, "--print-timeout"));
-expect(argv.includes("--sandbox"), "--sandbox");
+expect(argv.includes("--sandbox") === (flagValue(argv, "--mode") !== "accept-edits"), "--sandbox only on inspection turns");
 expect(!argv.includes("--allow-command"), "--allow-command is a council flag, never forwarded to agy");
 expect(!argv.includes("--dangerously-skip-permissions"), "never --dangerously-skip-permissions");
 const settingsPath = flagValue(argv, "--settings");

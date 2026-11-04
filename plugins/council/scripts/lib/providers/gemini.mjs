@@ -316,7 +316,7 @@ const adapter = {
     settings.permissions.allow = uniq([...settings.permissions.allow, ...inputRules]);
     const settingsPath = path.join(request.jobDir, "settings.json");
     fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
-    const args = ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", printTimeout(request.deadlineMs), "--sandbox",
+    const args = ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", printTimeout(request.deadlineMs), ...(readOnly ? ["--sandbox"] : []),
       "--settings", settingsPath];
     // A suffixed id carries its effort and travels alone; a family id takes --effort (A5.1).
     const suffix = request.model ? SUFFIX.exec(request.model)?.[1] : null;

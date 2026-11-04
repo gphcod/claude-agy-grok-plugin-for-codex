@@ -133,3 +133,5 @@ First release of Council for Codex: one Codex plugin, `council`, that calls Clau
 
 - Gemini read-only turns can search the web (agy's deny rule does not block it); `--web` is refused for Gemini.
 - No launcher kind is trusted to exit cleanly yet; every clean exit is followed by a process-table scan.
+
+Gemini task execution (1.1.7): the adapter no longer forces agy `--sandbox` on explicitly requested tasks. Inspection turns retain it, including replies after tasks. Configured ask/deny rules are still passed unchanged. This avoids macOS terminal restrictions blocking node/npm and Git index writes during authorized work.

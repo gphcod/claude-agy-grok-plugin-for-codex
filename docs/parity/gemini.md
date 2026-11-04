@@ -87,3 +87,5 @@ S5.7. Donor: gemini-plugin-for-codex 0.1.2 (AGYX), `skills/agy/scripts/agy.mjs` 
 ## Efficient command defaults (1.1.7)
 
 Read-only calls add the finite `READ_ONLY_COMMANDS` inspection prefixes. Requested tasks add `command(*)`. Both preserve configured ask/deny rules and strict mode. This supersedes earlier blanket command-denial policy; these are good-faith workflow defaults, not shell containment.
+
+Gemini task execution (1.1.7): the adapter no longer forces agy `--sandbox` on explicitly requested tasks. Inspection turns retain it, including replies after tasks. Configured ask/deny rules are still passed unchanged. This avoids macOS terminal restrictions blocking node/npm and Git index writes during authorized work.

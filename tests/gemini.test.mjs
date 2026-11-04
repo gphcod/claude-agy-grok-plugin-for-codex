@@ -62,7 +62,7 @@ test("ask → task --thread → reply → task --thread: settings, --sandbox, --
   assert.equal(again.status, 0, again.stderr);
   const calls = w.fakeCalls();
   assert.equal(calls.length, 4);
-  assert.deepEqual(calls.map((c) => [c.edit, c.conversation ?? null, c.argv.includes("--sandbox")]), [[false, null, true], [true, thread, true], [false, thread, true], [true, thread, true]]);
+  assert.deepEqual(calls.map((c) => [c.edit, c.conversation ?? null, c.argv.includes("--sandbox")]), [[false, null, true], [true, thread, false], [false, thread, true], [true, thread, false]]);
   const readOnly = { permissions: { allow: ["read_file(docs/*)", ...READ_ONLY_COMMANDS], ask: [], deny: ["read_file(.env)", ...READ_ONLY_DENY] }, agentMode: "", toolPermission: "request-review" };
   assert.deepEqual(calls[0].settings, readOnly, "run_command(*) and command(which) are filtered out; the global deny stays");
   assert.deepEqual(calls[2].settings, readOnly, "a reply after a task is read-only again");

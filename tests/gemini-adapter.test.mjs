@@ -234,7 +234,7 @@ test("S5.2 buildTurn: model and effort rules, --conversation on resumes, --json-
   assert.deepEqual([flag(task.args, "--mode"), task.readOnly], ["accept-edits", false]);
   assert.deepEqual(settingsOf(task).permissions.allow, ["command(*)", "command(node check.mjs)", "unsandboxed(node check.mjs)"]);
   assert.ok(!task.args.includes("--allow-command"), "--allow-command is never forwarded to agy");
-  assert.ok(gemini.buildTurn(request({ verb: "task", readOnly: false })).args.includes("--sandbox"), "--sandbox on every turn");
+  assert.ok(!gemini.buildTurn(request({ verb: "task", readOnly: false })).args.includes("--sandbox"), "authorized tasks can execute workspace tools outside agy terminal sandbox");
 });
 
 test("S5.2 the print timeout follows the deadline less a margin; the review prompt carries no separate instructions", () => {
