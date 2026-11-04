@@ -10,7 +10,7 @@ import path from "node:path";
 import { BusyError, claimThread, claimHeld, releaseClaims } from "./claims.mjs";
 import { createJob, saveJob, markDone, markDefaultAgent, markStopped, loadJob, loadThread, cleanupNeeded, jobView, markRequestPrepared, saveThread } from "./jobs.mjs";
 import { BEAT_MS, refreshBeat } from "./heartbeat.mjs";
-import { executionController, companionState, recordRecoveryEvidence, QUERY_MS } from "./execution.mjs";
+import { executionController, companionState, recordRecoveryEvidence, startTime, QUERY_MS } from "./execution.mjs";
 import { spawnChild } from "./launcher.mjs";
 import { createReader } from "./reader.mjs";
 import { attentionReason, readAnswer } from "./output.mjs";
@@ -37,6 +37,8 @@ const unique = (rows) => [...new Map(rows.map((r) => [`${r.pid}:${r.stamp}:${r.b
 const release = (child) => { if (!child) return; for (const stream of [child.stdin, child.stdout, child.stderr]) stream?.destroy(); child.unref(); };
 
 /** A footer's `error:` is cut at 200 B: the action comes first, and the id, whose length the provider decides, after it. */
+/** Recovery proves only that nothing identified is left: never in a job's error, where "may still be running" reads as cleanup still owed. */
+export const UNRECORDED = "a command the lost turn started may still be running if no heartbeat recorded it; check the process table";
 export const lockedThreadMessage = (thread, job) => `start a new ask, or cancel ${job} --confirm-ended after checking the process table: thread ${thread} is locked; an unidentified process held that job's output`;
 
 export async function runManagedTurn(ctx, adapter, initial, prepare, options = {}, hooks = {}) {
@@ -143,14 +145,17 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
       const pipeWaitMs = hooks.pipeWaitMs ?? PIPE_WAIT_MS;
       const unverifiedWaitMs = hooks.unverifiedWaitMs ?? UNVERIFIED_WAIT_MS;
       const beatMs = hooks.beatMs ?? BEAT_MS;
-      // Every heartbeat persists the identities (pid + creation time) of the owned descendants, so recovery can adopt a
-      // group member reparented after the leader exits only by a recorded identity (A7.5). Not on Windows (no groups;
-      // its query costs most of a second); a failed query changes nothing.
+      // Every heartbeat persists the identities (pid + creation time) of the owned descendants: a process whose parents
+      // are gone is ours only by a recorded identity (A7.5), a group member after the leader exits, or on Windows, which
+      // never reparents, a command whose provider ended with the companion. One orphaned between two heartbeats stays
+      // unseen, and cancel says so. A failed query changes nothing.
       const persistDescendants = () => {
-        if (platform === "win32" || reason) return;
+        if (reason) return;
         try {
           const found = control.inspect(job, control.snapshot(queryMs));
-          if (found.rows.length) { job.execution = unique([...job.execution, ...found.rows]); save(job); }
+          const before = job.execution.length;
+          job.execution = unique([...job.execution, ...found.rows]);
+          if (job.execution.length !== before) save(job);
         } catch { /* the next heartbeat or the stop snapshot records them */ }
       };
       const stopOwned = () => {
@@ -253,7 +258,7 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
           } catch { /* no leader identity: group members stay unverified */ }
         }
         try {
-          save(job); // Recovery finds the child by its recorded operands; no per-turn process query.
+          save(job); // Recovery finds the child by its recorded operands; a turn shorter than a heartbeat makes no process query.
           // Grok can retain the default task agent even if this companion is later lost. Persist it only after spawn.
           if (job.providerStarted && job.threadId && job.agent === "default") {
             const record = loadThread(ctx.home, provider, job.threadId);
@@ -271,6 +276,16 @@ export async function runManagedTurn(ctx, adapter, initial, prepare, options = {
       if (!cleanupConfirmed && !reason && !drainExpired && !running(child) && child.exitCode === 0 && adapter.trustsCleanExit?.(turn.launcher)) cleanupConfirmed = true;
       const scanOwned = async () => {
         let found = controlled.inspect(job, controlled.snapshot(queryMs));
+        // A process recorded at a heartbeat can still be exiting when a clean exit closes the pipes: a survivor outlasts this wait.
+        // Each scan's rows are saved first, so a command known only through a parent that exits meanwhile stays known.
+        // On macOS a saved identity counts only with a recorded leader; without one the first scan is the only proof, so no wait.
+        const saved = platform !== "darwin" || (job.leader?.pid === job.pid && startTime(job.leader.stamp) !== null);
+        for (const end = Date.now() + unverifiedWaitMs; saved && found.rows.length > 0 && !reason && !running(child) && child.exitCode === 0 && Date.now() < end;) {
+          job.execution = unique([...job.execution, ...found.rows]);
+          save(job);
+          await sleep(100);
+          found = controlled.inspect(job, controlled.snapshot(queryMs));
+        }
         const stopped = found.rows.length > 0;
         if (stopped) {
           reason ??= "owned execution survived the launcher";
@@ -535,7 +550,7 @@ export async function cancelManaged(ctx, job, { timeoutMs = 30000, control = exe
         if (hook.blocked) return { status: "unknown", code: 1, job: view(), error: hook.blocked };
         // A lost turn may have moved its session to Grok's default agent and died before saving that. Set before the
         // job stops blocking its thread, so every later selection reads it. A spawn that may not have run counts:
-        // that recipe is valid on a session that never used the agent; explore is not on one that did.
+        // that recipe is valid on a session that never used the agent; explore on one that did is proven only for Grok 1.0.70.
         if (job.threadId && job.spawnAttempted && job.providerStarted !== false && job.agent === "default") {
           try { markDefaultAgent(ctx.home, job.provider, job.threadId); }
           catch (e) { return { status: "unknown", code: 1, job: view(), error: `cannot save the thread's agent: ${e.message}; claim and cancellation request retained` }; }
@@ -543,7 +558,8 @@ export async function cancelManaged(ctx, job, { timeoutMs = 30000, control = exe
         markStopped(job);
         releaseClaims(ctx.home, job);
         const current = view();
-        return { status: current.claimHeld ? "unknown" : label(job), code: current.claimHeld ? 1 : 0, job: current, ...(confirmEnded ? { released: true } : {}), ...(hook.error ? { error: hook.error } : {}) };
+        return { status: current.claimHeld ? "unknown" : label(job), code: current.claimHeld ? 1 : 0, job: current, ...(confirmEnded ? { released: true } : {}), ...(hook.error ? { error: hook.error } : {}),
+          ...(job.spawnAttempted && job.providerStarted !== false && !current.claimHeld ? { warning: UNRECORDED } : {}) };
       } else {
         if (confirmEnded) return { status: "refused", code: 10, job: view(), error: `--confirm-ended refused: ${found.rows.length} owned process${found.rows.length > 1 ? "es are" : " is"} still live (pid ${found.rows.map((r) => r.pid).join(", ")})` };
         try { recordRecoveryEvidence(job, found.rows); }

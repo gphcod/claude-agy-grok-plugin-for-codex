@@ -31,12 +31,12 @@ async function inProcess(w, argv, { env = {}, hooks } = {}) {
   return { code, stdout, stderr };
 }
 
-test("F1: a descendant recorded at a heartbeat is adopted by its identity after its parent exits, and stopped", { skip: process.platform === "win32" }, async () => {
+test("F1: a descendant recorded at a heartbeat is adopted by its identity after its parent exits, and stopped", async () => {
   const w = makeWorld();
   const pidFile = path.join(w.dir, "grandchild.pid");
   const turn = turnFor(w, { env: { COUNCIL_FAKE_SCENARIO: "slow", COUNCIL_FAKE_SLOW_MS: "1200", COUNCIL_FAKE_GRANDCHILD: pidFile, COUNCIL_FAKE_HOLD_MS: "30000" } });
   let jobId = null;
-  const running = runManagedTurn(ctxFor(w), adapter, turn, null, timers, { beatMs: 100, pipeWaitMs: 500, beforeSpawn: (job) => { jobId = job.id; } });
+  const running = runManagedTurn(ctxFor(w), adapter, turn, null, timers, { beatMs: 100, pipeWaitMs: 500, unverifiedWaitMs: 300, beforeSpawn: (job) => { jobId = job.id; } });
   const grandchild = Number(await until(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, "utf8")));
   await until(() => (loadJob(w.home, jobId)?.execution ?? []).some((r) => r.pid === grandchild), 10000);
   const result = await running;

@@ -209,8 +209,8 @@ async function cancelVerb(ctx, { options: o }, io, deps) {
   if (!adapter && result.code !== 0) {
     result.error = `${result.error ?? "cleanup not confirmed"}; provider ${job.provider}'s module ${loadError ? `failed to load (${loadError})` : "is not available in this build"}, so job ${job.id}'s processes cannot be identified and nothing was stopped or released: restore it, then run cancel ${job.id} again`;
   }
-  const data = { provider: job.provider, job: job.id, status: result.status, exit: result.code, thread: result.job?.threadId ?? null, cleanupPending: result.code !== 0, released: Boolean(result.released), error: result.error ?? null };
-  out(o.json ? `${JSON.stringify(data)}\n` : `${result.status} · ${job.provider} · job ${job.id}${result.error ? ` · ${result.error}` : ""}${result.code === 0 && result.job?.threadId ? " · the thread stays resumable" : ""}\n`);
+  const data = { provider: job.provider, job: job.id, status: result.status, exit: result.code, thread: result.job?.threadId ?? null, cleanupPending: result.code !== 0, released: Boolean(result.released), error: result.error ?? null, ...(result.warning ? { warning: result.warning } : {}) };
+  out(o.json ? `${JSON.stringify(data)}\n` : `${result.status} · ${job.provider} · job ${job.id}${result.error ? ` · ${result.error}` : ""}${result.code === 0 && result.job?.threadId ? " · the thread stays resumable" : ""}${result.warning ? ` · ${result.warning}` : ""}\n`);
   return result.code;
 }
 
