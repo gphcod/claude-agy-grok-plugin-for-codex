@@ -228,7 +228,7 @@ test("setup and models: the claude row from the probes, no listing to refresh", 
   const w = world();
   const setup = w.call(["setup", "--to", "claude"]);
   assert.equal(setup.status, 0, setup.stderr);
-  assert.match(setup.stdout, /^claude: .*fake-claude\.mjs \(node-script\) · 2\.1\.314 \(Claude Code\) · logged in · tiers consult=claude-opus-5-5\/high exec=sonnet\/high deep=default\/xhigh · preflight ok/);
+  assert.match(setup.stdout, /^claude: .*fake-claude\.mjs \(node-script\) · 2\.1\.314 \(Claude Code\) · logged in · tiers consult=claude-opus-5-5\/high exec=sonnet\/high deep=claude-opus-5-5\/xhigh · preflight ok/);
   assert.ok(!setup.stdout.includes("firstParty"));
   const models = w.call(["models", "--to", "claude", "--refresh"]);
   assert.equal(models.status, 0);

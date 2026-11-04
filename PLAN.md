@@ -70,7 +70,7 @@ Tiers (`tiers.json`, family and effort stored separately; `default` means the us
 
 | Provider | consult | exec | deep |
 |---|---|---|---|
-| claude | claude-opus-5-5 / high | sonnet / high | default / xhigh |
+| claude | claude-opus-5-5 / high | sonnet / high | claude-opus-5-5 / xhigh |
 | grok | grok-4.7 / high | grok-4.7-build-fast / xhigh | grok-4.7 / xhigh |
 | gemini | gemini-4-argon / medium | gemini-3.8-flash / high | gemini-4-argon / high |
 

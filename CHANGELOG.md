@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.8 — 2026-11-04
+
+- Pin the Claude deep tier to `claude-opus-5-5 / xhigh`, so it does not inherit the CLI default model.
+
 ## 1.1.7 — 2026-11-04
 
 - Prioritize efficient, good-faith agent workflows across both combined plugins.

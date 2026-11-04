@@ -108,7 +108,7 @@ test("refresh honours the state root, skips Claude, and the refreshed list wins 
 
 test("tiers come from tiers.json exactly as A2 states, and explicit model or effort wins", () => {
   const tiers = loadTiers();
-  assert.deepEqual(tiers.claude, { consult: { model: "claude-opus-5-5", effort: "high" }, exec: { model: "sonnet", effort: "high" }, deep: { model: "default", effort: "xhigh" } });
+  assert.deepEqual(tiers.claude, { consult: { model: "claude-opus-5-5", effort: "high" }, exec: { model: "sonnet", effort: "high" }, deep: { model: "claude-opus-5-5", effort: "xhigh" } });
   assert.deepEqual(tiers.grok, { consult: { model: "grok-4.7", effort: "high" }, exec: { model: "grok-4.7-build-fast", effort: "xhigh" }, deep: { model: "grok-4.7", effort: "xhigh" } });
   assert.deepEqual(tiers.gemini.consult, { model: "gemini-4-argon", effort: "medium" });
   assert.deepEqual(tiers.gemini.deep, { model: "gemini-4-argon", effort: "high" });
