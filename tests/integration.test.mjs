@@ -57,7 +57,7 @@ function readOnlyLaunch(provider, argv) {
   if (provider === "claude") return flag(argv, "--permission-mode") === "dontAsk" && flag(argv, "--tools") === "Read,Glob,Grep";
   if (provider === "gemini") {
     const settings = JSON.parse(fs.readFileSync(flag(argv, "--settings"), "utf8"));
-    return flag(argv, "--mode") === undefined && ["write_file(*)", "edit_file(*)", "command(*)"].every((r) => settings.permissions.deny.includes(r));
+    return flag(argv, "--mode") === undefined && ["write_file(*)", "edit_file(*)", "unsandboxed(*)"].every((r) => settings.permissions.deny.includes(r));
   }
   const disallowed = (flag(argv, "--disallowed-tools") ?? "").split(",");
   return (flag(argv, "--agent") === "explore" || RESUME_DENY_MARKERS.every((t) => disallowed.includes(t))) && argv.includes("MCPTool(*)");

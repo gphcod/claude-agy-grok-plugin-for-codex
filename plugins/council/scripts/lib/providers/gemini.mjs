@@ -28,7 +28,11 @@ export const DENIAL = /permission (?:check failed|denied)|approval (?:required|d
 /** Tools that write files (AGYX `denial`'s write list). */
 const WRITE_TOOLS = /^(write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content|notebook_edit)$/;
 /** Rules added on every read-only turn (A5.1: the donor's list plus gemini-plugin-cc's `edit_file(*)`). */
-export const READ_ONLY_DENY = ["write_file(*)", "edit_file(*)", "command(*)", "unsandboxed(*)", "mcp(*)", "execute_url(*)"];
+export const READ_ONLY_DENY = ["write_file(*)", "edit_file(*)", "unsandboxed(*)", "mcp(*)", "execute_url(*)"];
+/** Good-faith inspection, not shell containment: avoid headless approval failures for routine reads. */
+export const READ_ONLY_COMMANDS = ["git status", "git diff", "git log", "git show", "git blame", "git grep", "git rev-parse", "git ls-files", "ls", "pwd", "cat", "head", "tail", "wc", "grep", "rg", "find"].map((c) => `command(${c})`);
+/** Explicitly requested tasks may run shell commands; configured ask/deny rules remain in force. */
+export const TASK_ALLOW = ["command(*)"];
 const READ_ONLY_ALLOW = /^(read_file|read_url)\(.*\)$/;
 const SUFFIX = /-(low|medium|high)$/;
 
@@ -66,7 +70,7 @@ export function configuredPolicy(file) {
   return { permissions: lists(data), toolPermission: data.toolPermission };
 }
 /**
- * The session settings of one turn (A5.1). Read-only: allow filtered to read_file/read_url, the six deny rules added,
+ * The session settings of one turn. Read-only: retain read_file/read_url allows and add inspection commands and deny rules,
  * agentMode "" and toolPermission strict (kept) or request-review. Task: the global lists kept, `command(X)` and
  * `unsandboxed(X)` added per --allow-command, which forces request-review unless the global value is strict; without
  * --allow-command the global toolPermission is preserved.
@@ -77,13 +81,14 @@ export function sessionSettings({ readOnly, allowCommands = [] }, configured = {
   const settings = { permissions };
   const strict = configured.toolPermission === "strict";
   if (readOnly) {
-    permissions.allow = permissions.allow.filter((rule) => READ_ONLY_ALLOW.test(rule));
+    permissions.allow = uniq([...permissions.allow.filter((rule) => READ_ONLY_ALLOW.test(rule)), ...READ_ONLY_COMMANDS]);
     permissions.deny = uniq([...permissions.deny, ...READ_ONLY_DENY]);
     Object.assign(settings, { agentMode: "", toolPermission: strict ? "strict" : "request-review" });
-  } else if (allowCommands.length) {
-    permissions.allow = uniq([...permissions.allow, ...allowCommands.flatMap((value) => [`command(${value})`, `unsandboxed(${value})`])]);
-    settings.toolPermission = strict ? "strict" : "request-review";
-  } else if (configured.toolPermission !== undefined) settings.toolPermission = configured.toolPermission;
+  } else {
+    permissions.allow = uniq([...permissions.allow, ...TASK_ALLOW, ...allowCommands.flatMap((value) => [`command(${value})`, `unsandboxed(${value})`])]);
+    if (allowCommands.length) settings.toolPermission = strict ? "strict" : "request-review";
+    else if (configured.toolPermission !== undefined) settings.toolPermission = configured.toolPermission;
+  }
   return settings;
 }
 /**
@@ -311,7 +316,7 @@ const adapter = {
     settings.permissions.allow = uniq([...settings.permissions.allow, ...inputRules]);
     const settingsPath = path.join(request.jobDir, "settings.json");
     fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
-    const args = ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", printTimeout(request.deadlineMs), "--sandbox",
+    const args = ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", printTimeout(request.deadlineMs), ...(readOnly ? ["--sandbox"] : []),
       "--settings", settingsPath];
     // A suffixed id carries its effort and travels alone; a family id takes --effort (A5.1).
     const suffix = request.model ? SUFFIX.exec(request.model)?.[1] : null;

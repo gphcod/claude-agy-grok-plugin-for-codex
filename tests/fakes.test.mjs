@@ -141,7 +141,7 @@ test("fake-claude refuses a non-conforming launch with exit 99 and no output", (
 
 // agy launches.
 const agyArgs = ({ task = false, model = "gemini-4-argon", effort = "low", conversation, schema = false } = {}) => [
-  "--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", "120s", "--sandbox",
+  "--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", "120s", ...(task ? [] : ["--sandbox"]),
   "--settings", task ? taskSettings : readOnlySettings, ...(task ? ["--mode", "accept-edits"] : []), "--model", model, ...(effort ? ["--effort", effort] : []),
   ...(conversation ? ["--conversation", conversation] : []), ...(schema ? ["--json-schema", SCHEMA] : []),
 ];
