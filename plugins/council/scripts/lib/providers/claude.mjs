@@ -26,9 +26,8 @@ export const EDIT_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 /** The S1.1 task launch (docs/decisions.md S1). */
 export const TASK_TOOLS = [...READ_TOOLS, ...EDIT_TOOLS, "Bash"];
 export const TASK_ALLOWED = [...EDIT_TOOLS, "Bash"];
-export const TASK_DISALLOWED = ["Bash(git push*)", "Bash(git reset --hard*)", "Bash(rm -rf *)", "Bash(sudo *)"];
-/** Tools a read-only launch must never advertise in its init event. */
-const MUTATING = [...EDIT_TOOLS, "Bash"];
+export const TASK_DISALLOWED = [];
+export const PERMISSION_MODE = "bypassPermissions";
 /** A task whose init event offers no Bash finishes with this attention, so the caller learns no command could run. */
 export const NO_SHELL = "Claude offered no shell tool, so this task cannot run commands; install Git for Windows or set CLAUDE_CODE_GIT_BASH_PATH";
 /** `--max-turns` defaults by verb (A3.3). */
@@ -67,26 +66,21 @@ export function gitBashEnv(env, platform = process.platform) {
 }
 /** The complete argument vector of one launch (CLAUDEX `buildClaudeArgs`, with the S1.1 task launch and council's flags). */
 export function buildArgs(request, session) {
-  const readOnly = request.verb !== "task";
   const policy = request.policy ?? {};
-  const web = Boolean(request.web || policy.web);
   const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"];
   args.push(request.resume ? "--resume" : "--session-id", session);
   args.push("--system-prompt-snapshot", "on", "--append-system-prompt-file", request.contractPath, "--max-turns", String(request.maxTurns ?? MAX_TURNS[request.verb] ?? 20));
   if (request.effort) args.push("--effort", request.effort);
   if (request.model) args.push("--model", request.model); // null is `default`: the user's configured model, no flag
   if (request.maxBudgetUsd !== null && request.maxBudgetUsd !== undefined) args.push("--max-budget-usd", String(request.maxBudgetUsd));
-  args.push("--permission-mode", readOnly ? "dontAsk" : "acceptEdits", "--permission-prompts", "none", "--setting-sources", "user");
-  const tools = [...(readOnly ? READ_TOOLS : TASK_TOOLS), ...(web ? WEB_TOOLS : [])];
-  const allowed = [...(readOnly ? [] : TASK_ALLOWED), ...(web ? WEB_TOOLS : [])];
-  args.push("--tools", tools.join(","));
-  if (!policy.allowMcp) args.push("--mcp-config", EMPTY_MCP, "--strict-mcp-config");
-  args.push("--settings", NO_HOOKS, "--no-chrome");
+  // Scope is the turn's instruction, not a tool fence. In particular Read/Glob/Grep
+  // must work on the other repositories explicitly named in an ordinary question.
+  args.push("--permission-mode", PERMISSION_MODE, "--permission-prompts", "none", "--setting-sources", "user,project,local");
+  args.push("--tools", "default");
+  if (policy.allowMcp === false) args.push("--mcp-config", EMPTY_MCP, "--strict-mcp-config");
+  args.push("--settings", NO_HOOKS);
   for (const root of new Set([...(policy.readRoots ?? []), request.reviewRoot, request.reviewInputRoot].filter(Boolean))) args.push("--add-dir", root);
   if (request.structured && request.schemaPath) args.push("--json-schema", JSON.stringify(JSON.parse(fs.readFileSync(request.schemaPath, "utf8"))));
-  // --allowedTools and --disallowedTools are variadic, so they come last (docs/spike/claude.md).
-  if (allowed.length) args.push("--allowedTools", allowed.join(","));
-  if (!readOnly) args.push("--disallowedTools", ...TASK_DISALLOWED);
   return args;
 }
 
@@ -111,7 +105,7 @@ function dedupe(list) {
   return out;
 }
 /** Claude's wording when a permission rule or the mode refuses a tool call (2.1.314: "... has been denied ..."). */
-const DENIAL_TEXT = /\bhas been denied\b|\bpermission to use \S+.*\bdenied\b/i;
+const DENIAL_TEXT = /No such tool available|\bhas been denied\b|\bpermission to use \S+.*\bdenied\b/i;
 const pathOf = (input) => input?.file_path ?? input?.notebook_path ?? null;
 const resultText = (content) => typeof content === "string" ? content : Array.isArray(content) ? content.map((c) => c?.text ?? "").join("") : "";
 const isMap = (v) => v && typeof v === "object" && !Array.isArray(v);
@@ -183,14 +177,13 @@ export default {
   buildTurn(request) {
     const session = request.resume ? String(request.threadId).toLowerCase() : randomUUID();
     const args = buildArgs(request, session);
-    return { args, env: { ...request.env, ...(request.verb === "task" ? gitBashEnv(request.env ?? {}) : {}), ...depthEnv(), NO_COLOR: "1" }, stdin: requestLine(turnInput(request), session), answerFile: null, promptFile: null,
+    return { args, env: { ...request.env, ...gitBashEnv(request.env ?? {}), ...depthEnv(), NO_COLOR: "1" }, stdin: requestLine(turnInput(request), session), answerFile: null, promptFile: null,
       readOnly: request.verb !== "task", requestedThreadId: session, agent: null, contractCarrier: "append-system-prompt-file" };
   },
   /**
    * S3.3. `state.adapter` is this turn's scratch, seeded by the lifecycle with the launch's `readOnly`; it also keeps the
-   * init session, pending tool uses, denials and retries. Init must confirm the launched mode (`dontAsk` read-only,
-   * `acceptEdits` task) and, on a read-only turn, advertise no mutating tool; anything else fails closed. Without the
-   * seed (a direct call) the turn counts as read-only, so no path is counted as edited on unproven evidence.
+   * init session, pending tool uses, denials and retries. Confirm the launched approval mode,
+   * report observed edits and preserve actual provider denials.
    */
   parseEvent(line, state) {
     const s = state.adapter;
@@ -202,13 +195,11 @@ export default {
     if (ev.type === "system" && ev.subtype === "init") {
       if (typeof ev.session_id !== "string" || !ev.session_id) return { fatal: "Claude init event without a session id" };
       if (s.session && s.session !== ev.session_id) return { fatal: "a second Claude init event names another session" };
-      const launched = readOnly ? "dontAsk" : "acceptEdits";
+      const launched = PERMISSION_MODE;
       if (ev.permissionMode !== launched) return { fatal: `Claude reports permission mode ${JSON.stringify(ev.permissionMode)}, not the launched ${launched}` };
-      const advertised = Array.isArray(ev.tools) ? ev.tools.filter((t) => MUTATING.includes(t)) : [];
-      if (readOnly && advertised.length) return { fatal: `a read-only Claude turn advertised ${advertised.join(", ")}` };
       s.session = ev.session_id;
       return { threadId: ev.session_id, ...(typeof ev.model === "string" && ev.model ? { model: ev.model } : {}),
-        ...(!readOnly && Array.isArray(ev.tools) && !ev.tools.includes("Bash") ? { incomplete: NO_SHELL } : {}) };
+        ...(!readOnly && Array.isArray(ev.tools) && !ev.tools.some((tool) => tool === "Bash" || tool === "PowerShell") ? { incomplete: NO_SHELL } : {}) };
     }
     if (ev.type === "system" && ev.subtype === "api_retry") { s.retries += 1; s.lastRetry = ev.category || ev.error?.type || "unknown"; return null; }
     if (ev.type === "permission_denied") { s.denials.push(denial(ev)); return null; }
@@ -227,15 +218,13 @@ export default {
         const failed = block.is_error === true;
         const text = resultText(block.content);
         const call = { tool_name: use.name, tool_use_id: block.tool_use_id, tool_input: use.input };
-        if (readOnly && MUTATING.includes(use.name)) {
-          // Read-only: the edit tools and Bash are absent, so an attempt comes back as an error ("No such tool available", S1.1) → denied.
-          if (failed) s.denials.push(denial(call, text.slice(0, 200) || "tool absent on a read-only turn"));
-          else return { fatal: `a read-only Claude turn ran ${use.name}${pathOf(use.input) ? ` on ${pathOf(use.input)}` : ""}` };
+        if (failed && DENIAL_TEXT.test(text)) {
+          s.denials.push(denial(call, text.slice(0, 200)));
         } else if (EDIT_TOOLS.includes(use.name)) {
           if (!failed && pathOf(use.input)) edited.push(pathOf(use.input)); // a failed edit changed nothing
-        } else if (use.name === "Bash" && failed) {
+        } else if ((use.name === "Bash" || use.name === "PowerShell") && failed) {
           // A call a permission rule refused (--disallowedTools, outside --allowedTools) is a denial only, never also a failed command.
-          const refused = DENIAL_TEXT.test(text) || s.denials.some((d) => (d.id && d.id === block.tool_use_id) || (d.tool === "Bash" && d.input?.command === use.input?.command));
+          const refused = DENIAL_TEXT.test(text) || s.denials.some((d) => (d.id && d.id === block.tool_use_id) || (d.tool === use.name && d.input?.command === use.input?.command));
           if (refused) s.denials.push(denial(call, text.slice(0, 200)));
           else if (!out.failedCommand) out.failedCommand = String(use.input?.command ?? "Bash");
         }
@@ -264,7 +253,7 @@ export default {
       if (answer === null) return { threadId: ev.session_id, fatal: "the Claude result has no answer text" };
       if (!answer.trim()) return { threadId: ev.session_id, fatal: "the Claude result is empty" };
       // An edit whose tool result never arrived may have happened: a task reports it.
-      const unconfirmed = readOnly ? [] : [...s.pending.values()].filter((u) => EDIT_TOOLS.includes(u.name) && pathOf(u.input)).map((u) => pathOf(u.input));
+      const unconfirmed = [...s.pending.values()].filter((u) => EDIT_TOOLS.includes(u.name) && pathOf(u.input)).map((u) => pathOf(u.input));
       return {
         threadId: ev.session_id, textDelta: answer, completed: true,
         ...(structured ? { structured } : {}), ...accounting,

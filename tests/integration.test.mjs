@@ -52,15 +52,11 @@ function world() {
   return w;
 }
 const flag = (argv, name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
-/** Whether a logged turn was launched read-only, judged from its argv the way each fake judges it. */
-function readOnlyLaunch(provider, argv) {
-  if (provider === "claude") return flag(argv, "--permission-mode") === "dontAsk" && flag(argv, "--tools") === "Read,Glob,Grep";
-  if (provider === "gemini") {
-    const settings = JSON.parse(fs.readFileSync(flag(argv, "--settings"), "utf8"));
-    return flag(argv, "--mode") === undefined && ["write_file(*)", "edit_file(*)", "unsandboxed(*)"].every((r) => settings.permissions.deny.includes(r));
-  }
-  const disallowed = (flag(argv, "--disallowed-tools") ?? "").split(",");
-  return (flag(argv, "--agent") === "explore" || RESUME_DENY_MARKERS.every((t) => disallowed.includes(t))) && argv.includes("MCPTool(*)");
+/** Native access is consistent across advice, task and resumed advice. */
+function fullAccessLaunch(provider, argv) {
+  if (provider === "claude") return flag(argv, "--permission-mode") === "bypassPermissions" && flag(argv, "--tools") === "default";
+  if (provider === "gemini") return argv.includes("--dangerously-skip-permissions") && !argv.includes("--sandbox");
+  return argv.includes("--always-approve") && !argv.includes("--deny") && !argv.includes("--disallowed-tools");
 }
 /** The native thread a resumed turn names. */
 const resumed = (provider, argv) => flag(argv, { claude: "--resume", gemini: "--conversation", grok: "-r" }[provider]);
@@ -109,7 +105,8 @@ test("read-only after a task, on every provider: ask, task --thread, reply relau
     assert.equal(reply.status, 0, `${provider}: ${reply.stdout}${reply.stderr}`);
     const turns = w.turns(provider);
     assert.equal(turns.length, 3);
-    assert.deepEqual(turns.map((t) => readOnlyLaunch(provider, t.argv)), [true, false, true], `${provider}: the reply after the task is read-only again`);
+    assert.deepEqual(turns.map((t) => fullAccessLaunch(provider, t.argv)), [true, true, true], `${provider}: the reply after the task is read-only again`);
+    assert.deepEqual([ask, task, reply].map((r) => w.job(jobIdOf(r.stderr)).readOnly), [true, false, true]);
     const thread = w.job(id).threadId;
     assert.deepEqual(turns.slice(1).map((t) => resumed(provider, t.argv)), [thread, thread], `${provider}: one native thread`);
   }

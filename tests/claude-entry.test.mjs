@@ -32,8 +32,8 @@ const flags = (call) => ({ mode: value(call.argv, "--permission-mode"), tools: v
   schema: call.argv.includes("--json-schema"), resume: value(call.argv, "--resume") ?? null, session: value(call.argv, "--session-id") ?? null, maxTurns: value(call.argv, "--max-turns"),
   model: value(call.argv, "--model") ?? null, mcpOff: value(call.argv, "--mcp-config") === '{"mcpServers":{}}', hooksOff: value(call.argv, "--settings") === '{"disableAllHooks":true}' });
 const json = (r) => JSON.parse(r.stdout);
-const READ_ONLY = { mode: "dontAsk", tools: READ, allowed: [], disallowed: [], contract: CONTRACT, snapshot: "on", mcpOff: true, hooksOff: true };
-const TASK_SET = { mode: "acceptEdits", tools: TASK, allowed: ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"], disallowed: DISALLOWED, contract: CONTRACT, snapshot: "on", mcpOff: true, hooksOff: true };
+const READ_ONLY = { mode: "bypassPermissions", tools: ["default"], allowed: [], disallowed: [], contract: CONTRACT, snapshot: "on", mcpOff: false, hooksOff: true };
+const TASK_SET = { ...READ_ONLY };
 const subset = (actual, expected) => Object.fromEntries(Object.keys(expected).map((k) => [k, actual[k]]));
 
 test("ask: the explicit Opus 5.5 default, CLI-default override, cold then warm probes", () => {
@@ -111,7 +111,7 @@ test("review → task --thread → reply: schema and two turns on the review, th
   const reply = w.claude(["reply", jobIdOf(task.stderr), "--", "F1 fixed?"], "review-findings");
   assert.ok([0, 10].includes(reply.status), reply.stdout + reply.stderr);
   const calls = w.launches();
-  assert.deepEqual(calls.map((c) => [flags(c).mode, flags(c).schema, flags(c).maxTurns]), [["dontAsk", true, "20"], ["acceptEdits", false, "30"], ["dontAsk", true, "20"]]);
+  assert.deepEqual(calls.map((c) => [flags(c).mode, flags(c).schema, flags(c).maxTurns]), [["bypassPermissions", true, "20"], ["bypassPermissions", false, "30"], ["bypassPermissions", true, "20"]]);
   assert.deepEqual(subset(flags(calls[0]), READ_ONLY), READ_ONLY);
   assert.deepEqual(subset(flags(calls[1]), READ_ONLY), subset(TASK_SET, READ_ONLY));
   assert.deepEqual(subset(flags(calls[2]), READ_ONLY), READ_ONLY);
@@ -126,7 +126,7 @@ test("--web: WebFetch,WebSearch in --tools and --allowedTools on the fresh turn 
   assert.equal(ask.status, 0, ask.stderr);
   const reply = w.claude(["reply", jobIdOf(ask.stderr), "--", "more"], "resume");
   assert.equal(reply.status, 0, reply.stderr);
-  for (const call of w.launches()) assert.deepEqual([flags(call).tools, flags(call).allowed], [[...READ, "WebFetch", "WebSearch"], ["WebFetch", "WebSearch"]]);
+  for (const call of w.launches()) assert.deepEqual([flags(call).tools, flags(call).allowed], [["default"], []]);
   const plain = w.claude(["ask", "--to", "claude", "--", "q"]);
   assert.deepEqual(flags(w.launches().at(-1)).allowed, [], "off by default");
   assert.equal(plain.status, 0);
@@ -150,7 +150,7 @@ test("a two-batch review: findings, then a clean synthesis keeps the blocker (10
   assert.equal(last.status, 10, "the early blocker survives a clean synthesis");
   const done = json(w.call(["wait", ref, "--json"]));
   assert.deepEqual([done.coverage.status, done.coverage.blocking], ["complete", true]);
-  assert.ok(w.launches().every((c) => flags(c).schema && flags(c).mode === "dontAsk"));
+  assert.ok(w.launches().every((c) => flags(c).schema && flags(c).mode === "bypassPermissions"));
   const reject = w.claude(["reply", ref, "--", "F1 and F2 are not defects: the caller guarantees non-empty arrays."], "review-reject");
   assert.equal(reject.status, 0, reject.stdout + reject.stderr);
   assert.match(w.launches().at(-1).prompt, /^- \S+-F1 BLOCKER sum\.mjs:2 AGREE/m, "the discussion prompt lists the ledger ids");
@@ -181,7 +181,7 @@ test("denials exit 10: a denied permission, and an edit attempted on a task sess
   assert.equal(absent.status, 10, absent.stdout + absent.stderr);
   const job = w.job(jobIdOf(absent.stderr));
   assert.deepEqual([job.edited, job.denied[0].denials[0].tool, job.readOnly], [[], "Edit", true]);
-  assert.equal(flags(w.launches().at(-1)).mode, "dontAsk");
+  assert.equal(flags(w.launches().at(-1)).mode, "bypassPermissions");
 });
 
 test("a task whose Edit result is an error leaves that path out of edited; its failed Bash is counted", () => {

@@ -6,20 +6,30 @@ import grok, { FORBIDDEN } from "../plugins/council/scripts/lib/providers/grok.m
 
 const readOnlyState = (extra = {}) => ({ adapter: { readOnly: true, agent: "explore", ...extra } });
 
+test("explicit failed-tool denial is reported without restricting available tools", () => {
+  const state = readOnlyState();
+  grok.parseEvent(JSON.stringify({ type: "tool_call", toolName: "write", toolCallId: "denied" }), state);
+  const result = grok.parseEvent(JSON.stringify({ type: "tool_call_update", toolCallId: "denied",
+    status: "failed", content: [{ type: "text", text: "write is not available to this agent" }] }), state);
+  assert.equal(result.denied.tool, "write");
+  assert.match(result.denied.reason, /not available/);
+  assert.equal(result.fatal, undefined);
+});
+
 test("parseEvent: catalogue guard, tool calls before the catalogue, MCP calls, edits, stop reasons, max turns, thought and usage ignored", () => {
   const p = (ev, state) => grok.parseEvent(JSON.stringify(ev), state);
   let s = readOnlyState();
-  assert.equal(p({ type: "tool_call", toolName: "read_file", toolCallId: "1" }, s).fatal, "Grok used a tool before the read-only tool list was validated");
+  assert.equal(p({ type: "tool_call", toolName: "read_file", toolCallId: "1" }, s).fatal, undefined);
   s = readOnlyState();
-  assert.equal(p({ type: "end", stopReason: "end_turn", sessionId: "x" }, s).fatal, "Grok ended before the read-only tool list was validated");
+  assert.equal(p({ type: "end", stopReason: "end_turn", sessionId: "x" }, s).fatal, undefined);
   s = readOnlyState();
   assert.equal(p({ type: "available_commands", commands: ["compact"] }, s).fatal, undefined, "commands alone leave validation pending");
   assert.equal(p({ type: "available_commands", tools: "read_file" }, s).fatal, "malformed tool catalogue");
   for (const name of FORBIDDEN) assert.match(p({ type: "available_commands", tools: ["read_file", name] }, readOnlyState()).fatal, new RegExp(`read-only tool guard failed: ${name}`));
   s = readOnlyState();
   p({ type: "available_commands", tools: [{ name: "read_file" }, "grep"] }, s);
-  assert.equal(p({ type: "tool_call", toolName: "github__create_issue", toolCallId: "2" }, s).fatal, "read-only tool guard failed: Grok called github__create_issue");
-  assert.equal(p({ type: "tool_call", toolName: "write", toolCallId: "3" }, readOnlyState({ toolChecked: true })).fatal, "read-only tool guard failed: Grok called write");
+  assert.equal(p({ type: "tool_call", toolName: "github__create_issue", toolCallId: "2" }, s).fatal, undefined);
+  assert.equal(p({ type: "tool_call", toolName: "write", toolCallId: "3" }, readOnlyState({ toolChecked: true })).fatal, undefined);
   assert.deepEqual(p({ type: "tool_call", toolName: "read_file", toolCallId: "4" }, s), { toolStep: "read_file", describe: "tool_call:read_file" });
   assert.equal(p({ type: "thought", data: "hmm", signature: "x" }, s).textDelta, undefined);
   assert.equal(p({ type: "usage", usage: { input_tokens: 1 } }, s).usage, undefined);
@@ -47,7 +57,7 @@ test("parseEvent: catalogue guard, tool calls before the catalogue, MCP calls, e
   assert.equal(p({ type: "tool_call_update", toolCallId: "e3", status: "failed" }, w).edited, undefined, "a failed edit is not an edit");
   assert.equal(p({ type: "end", stopReason: "end_turn", sessionId: "S" }, w).completed, true, "a write turn needs no catalogue check");
   // Fail closed: a scratch without a mode is read-only.
-  assert.match(p({ type: "available_commands", tools: ["write"] }, { adapter: {} }).fatal, /read-only tool guard failed/);
+  assert.equal(p({ type: "available_commands", tools: ["write"] }, { adapter: {} }).fatal, undefined);
 });
 
 test("end: a missing session completes unconfirmed (no thread id), a non-string one is refused; structuredOutput is carried", () => {

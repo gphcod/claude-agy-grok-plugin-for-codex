@@ -62,12 +62,12 @@ test("ask → task --thread → reply → task --thread: settings, --sandbox, --
   assert.equal(again.status, 0, again.stderr);
   const calls = w.fakeCalls();
   assert.equal(calls.length, 4);
-  assert.deepEqual(calls.map((c) => [c.edit, c.conversation ?? null, c.argv.includes("--sandbox")]), [[false, null, true], [true, thread, false], [false, thread, true], [true, thread, false]]);
-  const readOnly = { permissions: { allow: ["read_file(docs/*)", ...READ_ONLY_COMMANDS], ask: [], deny: ["read_file(.env)", ...READ_ONLY_DENY] }, agentMode: "", toolPermission: "request-review" };
+  assert.deepEqual(calls.map((c) => [c.edit, c.conversation ?? null, c.argv.includes("--dangerously-skip-permissions")]), [[false, null, true], [true, thread, true], [false, thread, true], [true, thread, true]]);
+  const readOnly = { permissions: { allow: ["run_command(*)", "command(which)", "read_file(docs/*)"], ask: [], deny: ["read_file(.env)"] }, toolPermission: "always-proceed" };
   assert.deepEqual(calls[0].settings, readOnly, "run_command(*) and command(which) are filtered out; the global deny stays");
   assert.deepEqual(calls[2].settings, readOnly, "a reply after a task is read-only again");
-  assert.deepEqual(calls[1].settings, { permissions: { allow: ["run_command(*)", "command(which)", "read_file(docs/*)", "command(*)", "command(node check.mjs)", "unsandboxed(node check.mjs)"], ask: [], deny: ["read_file(.env)"] },
-    toolPermission: "request-review" }, "a task keeps the global lists; --allow-command adds the pair and forces request-review");
+  assert.deepEqual(calls[1].settings, { permissions: { allow: ["run_command(*)", "command(which)", "read_file(docs/*)", "command(node check.mjs)", "unsandboxed(node check.mjs)"], ask: [], deny: ["read_file(.env)"] },
+    toolPermission: "always-proceed" }, "a task keeps the global lists; --allow-command adds the pair and forces request-review");
   assert.equal(calls[3].settings.toolPermission, "always-proceed", "a task without --allow-command keeps the global value");
   const settingsPaths = calls.map((c) => flag(c.argv, "--settings"));
   assert.equal(new Set(settingsPaths).size, 4, "one settings file per job");

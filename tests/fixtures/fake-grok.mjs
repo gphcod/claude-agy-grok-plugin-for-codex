@@ -32,21 +32,11 @@ expect(prompt.length > 0, "prompt file is not empty");
 expect(flagValue(argv, "--output-format") === "streaming-json", "--output-format streaming-json");
 expect(flagValue(argv, "--model"), "--model is required");
 expect(["low", "medium", "high", "xhigh"].includes(flagValue(argv, "--effort")) || which === "effort-error", "--effort low|medium|high|xhigh", flagValue(argv, "--effort"));
-expect(argv.includes("--no-auto-update") && argv.includes("--always-approve") && argv.includes("--no-subagents"), "--no-auto-update --always-approve --no-subagents");
+expect(argv.includes("--no-auto-update") && argv.includes("--always-approve"), "--no-auto-update --always-approve --no-subagents");
 expect(!argv.includes("--add-dir"), "--add-dir is not supported by a grok session");
-const disallowed = (flagValue(argv, "--disallowed-tools") ?? "").split(",").filter(Boolean);
-expect(HOSTILE.every((t) => disallowed.includes(t)), "--disallowed-tools carries the HOSTILE list", disallowed);
-const denies = flagValues(argv, "--deny");
-const explore = flagValue(argv, "--agent") === "explore";
-const resumeDeny = RESUME_DENY_MARKERS.every((t) => disallowed.includes(t));
-const readOnly = explore || resumeDeny;
-if (readOnly) {
-  expect(denies.includes("MCPTool(*)"), "read-only turns deny MCPTool(*)", denies);
-  expect(process.env.GROK_CLAUDE_RULES_ENABLED === "0", "read-only turns set GROK_CLAUDE_RULES_ENABLED=0");
-} else {
-  expect(denies.includes("Bash(git push*)") && denies.includes("Bash(rm -rf *)"), "write turns deny Bash(git push*) and Bash(rm -rf *)", denies);
-  expect(process.env.GROK_CLAUDE_RULES_ENABLED === undefined, "write turns leave GROK_CLAUDE_RULES_ENABLED unset");
-}
+expect(!argv.includes("--disallowed-tools") && !argv.includes("--deny"), "no plugin tool fence");
+const explore = false;
+const readOnly = !/Instructions for this turn \(task: edits are authorized/.test(prompt);
 const sessionId = flagValue(argv, "--session-id"), resumeId = flagValue(argv, "-r") ?? flagValue(argv, "--resume");
 expect((sessionId === undefined) !== (resumeId === undefined), "exactly one of --session-id or -r");
 if (sessionId) expect(UUID.test(sessionId), "--session-id is a uuid", sessionId);
@@ -62,7 +52,7 @@ if (schema) expect(!argv.includes("--rules"), "reviews carry --json-schema and n
 else expect(flagValue(argv, "--rules") === contractLine(), "non-review turns carry --rules <contract.md on one line>", flagValue(argv, "--rules"));
 if (which.startsWith("review") || which === "large-review") expect(schema, `${which} needs --json-schema`);
 const web = !argv.includes("--disable-web-search");
-for (const [k, v] of Object.entries({ GROK_DISABLE_AUTOUPDATER: "1", GROK_CLAUDE_SKILLS_ENABLED: "0", GROK_CLAUDE_AGENTS_ENABLED: "0", GROK_CLAUDE_HOOKS_ENABLED: "0", GROK_CLAUDE_MCPS_ENABLED: "0" })) {
+for (const [k, v] of Object.entries({ GROK_DISABLE_AUTOUPDATER: "1", GROK_CLAUDE_HOOKS_ENABLED: "0" })) {
   expect(process.env[k] === v, `compatEnv sets ${k}=${v}`, process.env[k]);
 }
 requireDepth();

@@ -113,7 +113,7 @@ test("the policy store: defaults, validation, realpath read roots and a version 
   assert.deepEqual(getPolicy(home), defaultPolicy());
   const root = tmp();
   const policy = setPolicy(home, { readRoots: [root], web: true });
-  assert.deepEqual([policy.readRoots, policy.web, policy.allowMcp], [[fs.realpathSync(root)], true, false]);
+  assert.deepEqual([policy.readRoots, policy.web, policy.allowMcp], [[fs.realpathSync(root)], true, true]);
   assert.match(policy.version, /^[0-9a-f]{16}$/);
   assert.deepEqual(getPolicy(home), policy);
   assert.throws(() => setPolicy(home, { web: "yes" }), /web must be boolean/);

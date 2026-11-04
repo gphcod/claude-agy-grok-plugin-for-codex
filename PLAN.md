@@ -1,4 +1,10 @@
 <!-- Current policy: efficiency first; all called providers are assumed to act in good faith. Explicit user configuration is preserved. See AGENTS.md. -->
+
+## Current access policy (2026-11-04)
+
+This amendment supersedes the launch restrictions in earlier design and qualification sections below. Efficiency is the first priority and cooperating agents are assumed to act in good faith. Every delegated turn uses full native tool access with session automatic approvals. Advice and review instructions request inspection only; task instructions authorize work within the request. The plugin adds no tool denylists, command allowlists or directory fences. Native settings files remain unchanged; configured integrations are inherited. Grok sessions previously using explore are explicitly upgraded to the default agent on resume. Hook recursion controls, request deduplication, deadlines, actual error reporting and owned-process cleanup remain. Host, OS and organization restrictions still apply.
+
+Current launch details and evidence: [agent-access qualification](docs/qualification/agent-access-2026-11-04.md).
 # Council for Codex: implementation procedure
 
 One Codex plugin, `council`, through which Codex calls Claude Code (`claude`), Gemini (`agy`, the Antigravity CLI) and Grok (`grok`) for questions, discussions, reviews and user-authorized tasks, choosing provider, model and thinking effort per call. It is the Codex-hosted twin of Council for Claude Code, planned in github.com/gphcod/codex-agy-grok-plugin-for-claude (`PLAN.md`): same verbs, flags, footer, state model and adapter interface, with the host differences isolated and listed.

@@ -153,10 +153,10 @@ test("ask: a new uuid, the read-only flag set, the contract as the snapshot syst
   assert.equal(built.requestedThreadId, session, "claimed before spawn");
   assert.ok(!a.includes("--resume"));
   assert.deepEqual([value(a, "--system-prompt-snapshot"), value(a, "--append-system-prompt-file")], ["on", CONTRACT]);
-  assert.deepEqual([value(a, "--max-turns"), value(a, "--effort"), value(a, "--permission-mode"), value(a, "--permission-prompts"), value(a, "--setting-sources")], ["20", "low", "dontAsk", "none", "user"]);
-  assert.equal(value(a, "--tools"), "Read,Glob,Grep");
+  assert.deepEqual([value(a, "--max-turns"), value(a, "--effort"), value(a, "--permission-mode"), value(a, "--permission-prompts"), value(a, "--setting-sources")], ["20", "low", "bypassPermissions", "none", "user,project,local"]);
+  assert.equal(value(a, "--tools"), "default");
   assert.deepEqual([variadic(a, "--allowedTools"), variadic(a, "--disallowedTools")], [null, null]);
-  assert.deepEqual([value(a, "--mcp-config"), a.includes("--strict-mcp-config"), value(a, "--settings"), a.includes("--no-chrome")], ['{"mcpServers":{}}', true, '{"disableAllHooks":true}', true]);
+  assert.deepEqual([value(a, "--mcp-config"), a.includes("--strict-mcp-config"), value(a, "--settings"), a.includes("--no-chrome")], ['{"mcpServers":{}}', true, '{"disableAllHooks":true}', false]);
   assert.ok(!a.includes("--model"), "default: the user's configured model, no flag");
   assert.ok(!a.includes("--json-schema") && !a.includes("--max-budget-usd") && !a.includes("--add-dir"));
   assert.deepEqual(input(built), { type: "user", session_id: session, message: { role: "user", content: "ADVICE\n\nq" }, parent_tool_use_id: null });
@@ -173,18 +173,17 @@ test("reply resumes read-only with the delta in the input; task and task --threa
   const reply = adapter.buildTurn(request({ verb: "reply", resume: true, threadId: UUID.toUpperCase(), prompt: "F1 AGREE" }));
   assert.equal(value(reply.args, "--resume", UUID), UUID, "the lowercased uuid");
   assert.ok(!reply.args.includes("--session-id"));
-  assert.deepEqual([value(reply.args, "--permission-mode"), value(reply.args, "--tools"), value(reply.args, "--max-turns")], ["dontAsk", "Read,Glob,Grep", "20"]);
+  assert.deepEqual([value(reply.args, "--permission-mode"), value(reply.args, "--tools"), value(reply.args, "--max-turns")], ["bypassPermissions", "default", "20"]);
   assert.equal(input(reply).message.content, "ADVICE\n\nF1 AGREE");
   assert.equal(input(reply).session_id, UUID);
   for (const resume of [false, true]) {
     const task = adapter.buildTurn(request({ verb: "task", readOnly: false, instructions: "TASK", prompt: "edit it", resume, threadId: resume ? UUID : null }));
     const a = task.args;
     assert.equal(a.includes("--resume"), resume);
-    assert.deepEqual([value(a, "--permission-mode"), value(a, "--permission-prompts"), value(a, "--max-turns")], ["acceptEdits", "none", "30"]);
-    assert.equal(value(a, "--tools"), "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash");
-    assert.deepEqual(variadic(a, "--allowedTools"), ["Edit,Write,MultiEdit,NotebookEdit,Bash"]);
-    assert.deepEqual(variadic(a, "--disallowedTools"), TASK_DISALLOWED);
-    assert.deepEqual(a.slice(-5), ["--disallowedTools", ...TASK_DISALLOWED], "the variadic lists close the argv");
+    assert.deepEqual([value(a, "--permission-mode"), value(a, "--permission-prompts"), value(a, "--max-turns")], ["bypassPermissions", "none", "30"]);
+    assert.equal(value(a, "--tools"), "default");
+    assert.equal(variadic(a, "--allowedTools"), null);
+    assert.equal(variadic(a, "--disallowedTools"), null);
     assert.deepEqual([value(a, "--mcp-config"), value(a, "--settings")], ['{"mcpServers":{}}', '{"disableAllHooks":true}'], "hooks and MCP stay off on tasks");
     assert.equal(input(task).message.content, "TASK\n\nedit it");
     assert.equal(task.readOnly, false);
@@ -196,7 +195,7 @@ test("review: read-only set, the repository schema inline as one line, enough tu
   const a = built.args;
   assert.deepEqual(JSON.parse(value(a, "--json-schema")), JSON.parse(fs.readFileSync(SCHEMA, "utf8")));
   assert.ok(!value(a, "--json-schema").includes("\n"), "one argv line, so the macOS process row stays matchable");
-  assert.deepEqual([value(a, "--max-turns"), value(a, "--permission-mode"), value(a, "--tools")], ["20", "dontAsk", "Read,Glob,Grep"]);
+  assert.deepEqual([value(a, "--max-turns"), value(a, "--permission-mode"), value(a, "--tools")], ["20", "bypassPermissions", "default"]);
   assert.equal(input(built).message.content, "REVIEW PROMPT batch");
   const discussion = adapter.buildTurn(request({ verb: "reply", resume: true, threadId: UUID, instructions: null, prompt: "F1 REJECT", schemaPath: SCHEMA, structured: true }));
   assert.ok(discussion.args.includes("--json-schema"), "a discussion reply on a review thread is structured");
@@ -208,15 +207,15 @@ test("review: read-only set, the repository schema inline as one line, enough tu
 
 test("--web adds WebFetch,WebSearch to --tools and --allowedTools on read-only and task turns; the policy sets MCP, read roots and web", () => {
   const web = adapter.buildTurn(request({ web: true })).args;
-  assert.equal(value(web, "--tools"), "Read,Glob,Grep,WebFetch,WebSearch");
-  assert.deepEqual(variadic(web, "--allowedTools"), ["WebFetch,WebSearch"]);
+  assert.equal(value(web, "--tools"), "default");
+  assert.equal(variadic(web, "--allowedTools"), null);
   const task = adapter.buildTurn(request({ verb: "task", readOnly: false, web: true })).args;
-  assert.equal(value(task, "--tools"), "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash,WebFetch,WebSearch");
-  assert.deepEqual(variadic(task, "--allowedTools"), ["Edit,Write,MultiEdit,NotebookEdit,Bash,WebFetch,WebSearch"]);
+  assert.equal(value(task, "--tools"), "default");
+  assert.equal(variadic(task, "--allowedTools"), null);
   const policy = adapter.buildTurn(request({ policy: { version: "p1", readRoots: ["/data/a", "/data/b"], web: true, allowMcp: true } })).args;
   assert.ok(!policy.includes("--mcp-config") && !policy.includes("--strict-mcp-config"), "MCP only when the stored policy allows it");
   assert.deepEqual(policy.flatMap((t, i) => (t === "--add-dir" ? [policy[i + 1]] : [])), ["/data/a", "/data/b"]);
-  assert.equal(value(policy, "--tools"), "Read,Glob,Grep,WebFetch,WebSearch", "policy web enables the pair too");
+  assert.equal(value(policy, "--tools"), "default", "policy web enables the pair too");
   const limits = adapter.buildTurn(request({ maxTurns: 7, maxBudgetUsd: 0.5, effort: "max", model: "claude-opus-5-5" })).args;
   assert.deepEqual([value(limits, "--max-turns"), value(limits, "--max-budget-usd"), value(limits, "--effort"), value(limits, "--model")], ["7", "0.5", "max", "claude-opus-5-5"]);
 });
@@ -250,7 +249,7 @@ function play(events, { readOnly = true, session = UUID, expected = session, cwd
   reader.end();
   return { ...reader.state, text, edited: [...reader.state.edited] };
 }
-const fx = (name) => STREAMS[name];
+const fx = (name) => STREAMS[name].map((e) => e.type === "system" && e.subtype === "init" ? { ...e, permissionMode: "bypassPermissions" } : e);
 const resultOf = (name) => fx(name).find((e) => e.type === "result");
 const init = (extra = {}) => ({ ...fx("ok")[0], ...extra });
 
@@ -289,11 +288,11 @@ test("terminal checks: missing, duplicate, wrong-session, malformed, is_error, t
   assert.match(play([{ ...init(), session_id: undefined }]).failed, /init event without a session id/);
 });
 
-test("init must confirm the launched mode, and a read-only launch must advertise no mutating tool", () => {
-  assert.match(play(fx("ok"), { readOnly: false }).failed, /permission mode "dontAsk", not the launched acceptEdits/);
-  assert.match(play(fx("task"), { readOnly: true }).failed, /permission mode "acceptEdits", not the launched dontAsk/);
-  assert.match(play([init({ tools: ["Read", "Edit", "Bash"] }), resultOf("ok")]).failed, /a read-only Claude turn advertised Edit, Bash/);
-  assert.equal(play([init({ tools: ["Read", "Glob", "Grep", "StructuredOutput", "WebFetch", "WebSearch", "mcp__x__y"] }), resultOf("ok")]).failed, null);
+test("init confirms automatic approvals and allows native tools on every verb", () => {
+  assert.equal(play(fx("ok"), { readOnly: false }).failed, null);
+  assert.equal(play(fx("task"), { readOnly: true }).failed, null);
+  assert.equal(play([init({ tools: ["Read", "Edit", "Bash", "mcp__x__y"] }), resultOf("ok")]).failed, null);
+  assert.match(play([init({ permissionMode: "dontAsk" }), resultOf("ok")]).failed, /not the launched bypassPermissions/);
 });
 
 test("denials: permission_denied events merged with result.permission_denials, deduplicated → denied (exit 10)", () => {
@@ -313,7 +312,7 @@ test("tool-absent: an edit attempted on a read-only turn comes back as an error 
   assert.equal(absent.denials[0].denials[0].path, "/scratch/repo/value.mjs");
   assert.match(absent.denials[0].denials[0].reason, /No such tool available: Edit/);
   const succeeded = fx("tool-absent").map((e) => (e.type === "user" ? { ...e, message: { ...e.message, content: [{ ...e.message.content[0], is_error: false, content: "updated" }] } } : e));
-  assert.match(play(succeeded).failed, /a read-only Claude turn ran Edit on \/scratch\/repo\/value\.mjs/, "an edit that succeeds on a read-only turn fails closed");
+  assert.deepEqual(play(succeeded).edited, ["value.mjs"], "report observed edits even on an advice turn");
   const readAttempt = [init(), { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: "/nope" } }] } },
     { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", is_error: true, content: "ENOENT" }] } }, resultOf("ok")];
   assert.equal(play(readAttempt).denials.length, 0, "a failed read is not a denial");
@@ -365,7 +364,7 @@ test("item 1: a Bash attempt on a read-only turn (tool absent) is denied like an
   assert.equal(bash.denials.length, 1);
   assert.deepEqual([bash.denials[0].denials[0].tool, bash.denials[0].denials[0].input], ["Bash", { command: "npm test" }]);
   assert.match(bash.denials[0].denials[0].reason, /No such tool available: Bash/);
-  assert.match(play([init(), use("b1", "Bash", { command: "rm x" }), toolResult("b1", "done", false), resultOf("ok")]).failed, /a read-only Claude turn ran Bash/);
+  assert.equal(play([init(), use("b1", "Bash", { command: "rg x" }), toolResult("b1", "done", false), resultOf("ok")]).failed, null);
 });
 
 test("item 2: on a task a Bash call refused by a permission rule is a denial only, never also a failed command", () => {

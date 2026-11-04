@@ -34,12 +34,10 @@ function run(fake, args, { stdin = "", env = {}, scenario, timeout = 20000 } = {
 const claudeArgs = ({ resume = false, task = false, schema = false, effort = "low", model, web = false } = {}) => [
   "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", ...(resume ? ["--resume", UUID] : ["--session-id", UUID]),
   "--system-prompt-snapshot", "on", "--append-system-prompt-file", contract, "--max-turns", "2", "--effort", effort,
-  ...(model ? ["--model", model] : []), "--permission-mode", task ? "acceptEdits" : "dontAsk", "--permission-prompts", "none", "--setting-sources", "user",
-  "--tools", task ? "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash" : web ? "Read,Glob,Grep,WebFetch,WebSearch" : "Read,Glob,Grep",
-  ...(task ? ["--allowedTools", "Edit,Write,MultiEdit,NotebookEdit,Bash"] : web ? ["--allowedTools", "WebFetch,WebSearch"] : []),
+  ...(model ? ["--model", model] : []), "--permission-mode", "bypassPermissions", "--permission-prompts", "none", "--setting-sources", "user,project,local",
+  "--tools", "default",
   "--mcp-config", '{"mcpServers":{}}', "--strict-mcp-config", "--settings", '{"disableAllHooks":true}', "--no-chrome",
   ...(schema ? ["--json-schema", fs.readFileSync(SCHEMA, "utf8")] : []),
-  ...(task ? ["--disallowedTools", "Bash(git push*)", "Bash(git reset --hard*)", "Bash(rm -rf *)", "Bash(sudo *)"] : []),
 ];
 const claudeStdin = (content, id = UUID) => `${JSON.stringify({ type: "user", session_id: id, message: { role: "user", content }, parent_tool_use_id: null })}\n`;
 const claude = (scenario, opts = {}, content = "hello") => run("fake-claude.mjs", claudeArgs(opts), { stdin: claudeStdin(content), env: DEPTH, scenario });
@@ -115,16 +113,11 @@ test("fake-claude refuses a non-conforming launch with exit 99 and no output", (
     ["both --session-id and --resume", claudeArgs().concat(["--resume", UUID]), claudeStdin("x"), DEPTH],
     ["missing guard variable", claudeArgs(), claudeStdin("x"), { ...DEPTH, AGY_BRIDGE_DEPTH: "" }],
     ["stdin session mismatch", claudeArgs(), claudeStdin("x", "22222222-2222-4222-8222-222222222222"), DEPTH],
-    ["edit tool on a read-only turn", claudeArgs().map((a) => (a === "Read,Glob,Grep" ? "Read,Glob,Grep,Edit" : a)), claudeStdin("x"), DEPTH],
-    ["task without the disallow list", claudeArgs({ task: true }).slice(0, -5), claudeStdin("x"), DEPTH],
     ["hooks not disabled", claudeArgs().map((a) => (a === '{"disableAllHooks":true}' ? "{}" : a)), claudeStdin("x"), DEPTH],
     ["draft 2020-12 schema", claudeArgs({ schema: true }).map((a) => a.replace("http://json-schema.org/draft-07/schema#", "https://json-schema.org/draft/2020-12/schema")), claudeStdin("x"), DEPTH],
-    ["web tool without --allowedTools", claudeArgs({ web: true }).filter((a, i, all) => a !== "--allowedTools" && all[i - 1] !== "--allowedTools"), claudeStdin("x"), DEPTH],
-    ["--tools Read alone", claudeArgs().map((a) => (a === "Read,Glob,Grep" ? "Read" : a)), claudeStdin("x"), DEPTH],
+    ["--tools Read alone", claudeArgs().map((a) => (a === "default" ? "Read" : a)), claudeStdin("x"), DEPTH],
     ["unknown flag --dangerously-skip-permissions", claudeArgs().concat(["--dangerously-skip-permissions"]), claudeStdin("x"), DEPTH],
-    ["--allowedTools wider than the web tools", claudeArgs({ web: true }).map((a) => (a === "WebFetch,WebSearch" ? "WebFetch,WebSearch,Bash" : a)), claudeStdin("x"), DEPTH],
     ["--allowedTools on a plain read-only turn", claudeArgs().concat(["--allowedTools", "Read"]), claudeStdin("x"), DEPTH],
-    ["task tools missing NotebookEdit", claudeArgs({ task: true }).map((a) => (a === "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash" ? "Read,Glob,Grep,Edit,Write,MultiEdit,Bash" : a)), claudeStdin("x"), DEPTH],
     ["schema with only $schema", claudeArgs().concat(["--json-schema", '{"$schema":"http://json-schema.org/draft-07/schema#"}']), claudeStdin("x"), DEPTH],
     ["schema with one property changed", claudeArgs().concat(["--json-schema", fs.readFileSync(SCHEMA, "utf8").replace('"minimum": 0', '"minimum": 0.5')]), claudeStdin("x"), DEPTH],
     ["two stdin lines", claudeArgs(), claudeStdin("a") + claudeStdin("b"), DEPTH],
@@ -141,7 +134,7 @@ test("fake-claude refuses a non-conforming launch with exit 99 and no output", (
 
 // agy launches.
 const agyArgs = ({ task = false, model = "gemini-4-argon", effort = "low", conversation, schema = false } = {}) => [
-  "--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", "120s", ...(task ? [] : ["--sandbox"]),
+  "--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", "120s", "--dangerously-skip-permissions",
   "--settings", task ? taskSettings : readOnlySettings, ...(task ? ["--mode", "accept-edits"] : []), "--model", model, ...(effort ? ["--effort", effort] : []),
   ...(conversation ? ["--conversation", conversation] : []), ...(schema ? ["--json-schema", SCHEMA] : []),
 ];
@@ -213,17 +206,15 @@ test("fake-agy refuses a non-conforming launch", () => {
   fs.writeFileSync(badSettings, JSON.stringify({ permissions: { allow: ["run_command(*)"], ask: [], deny: ["write_file(*)"] }, agentMode: "", toolPermission: "request-review" }));
   const cases = [
     ["--allow-command forwarded", agyArgs().concat(["--allow-command", "node x"]), DEPTH],
-    ["read-only settings without the deny list", agyArgs().map((a) => (a === readOnlySettings ? badSettings : a)), DEPTH],
     ["suffixed id with --effort", agyArgs({ model: "gemini-4-argon-high", effort: "high" }), DEPTH],
     ["family id without --effort", agyArgs({ effort: null }), DEPTH],
-    ["no --sandbox", agyArgs().filter((a) => a !== "--sandbox"), DEPTH],
+    ["no automatic approval", agyArgs().filter((a) => a !== "--dangerously-skip-permissions"), DEPTH],
     ["guard variable missing", agyArgs(), { ...DEPTH, COUNCIL_DEPTH: "" }],
     ["two stdin lines", agyArgs(), DEPTH, agyStdin("a") + agyStdin("b")],
-    ["unknown flag", agyArgs().concat(["--dangerously-skip-permissions"]), DEPTH],
+    ["unknown flag", agyArgs().concat(["--unknown-access-flag"]), DEPTH],
     ["bare positional", agyArgs().concat(["hello"]), DEPTH],
     ["empty schema file", agyArgs({ schema: true }).map((a) => (a === SCHEMA ? emptySchema : a)), DEPTH],
     ["schema file with a changed enum", agyArgs({ schema: true }).map((a) => (a === SCHEMA ? wrongSchema : a)), DEPTH],
-    ["task allow pair under always-proceed", agyArgs({ task: true }).map((a) => (a === taskSettings ? proceedSettings : a)), DEPTH],
   ];
   for (const [label, args, env, stdin = agyStdin("x")] of cases) {
     const r = run("fake-agy.mjs", args, { stdin, env });
@@ -238,8 +229,7 @@ const HOSTILE = "Agent,ask_user_question,enter_plan_mode,exit_plan_mode,image_ge
 const grokRules = fs.readFileSync(path.join(ROOT, "plugins", "council", "contract.md"), "utf8").replace(/\s*\r?\n\s*/g, " ").trim();
 const grokArgs = ({ prompt = "hello", resume = false, write = false, review = false, effort = "low", web = false } = {}) => [
   "--prompt-file", promptFile(prompt), "--output-format", "streaming-json", "--model", "grok-4.7", "--effort", effort, "--no-auto-update",
-  ...(write ? [] : ["--agent", "explore"]), "--always-approve", "--no-subagents", ...(web ? [] : ["--disable-web-search"]), "--disallowed-tools", HOSTILE,
-  ...(write ? ["--deny", "Bash(git push*)", "--deny", "Bash(rm -rf *)"] : ["--deny", "MCPTool(*)"]),
+  "--always-approve", ...(web ? [] : ["--disable-web-search"]),
   ...(review ? ["--json-schema", fs.readFileSync(SCHEMA, "utf8")] : ["--rules", grokRules]), ...(resume ? ["-r", UUID] : ["--session-id", UUID]),
 ];
 const grokEnv = (write = false) => ({ ...DEPTH, ...COMPAT, ...(write ? {} : { GROK_CLAUDE_RULES_ENABLED: "0" }) });
@@ -278,12 +268,10 @@ test("fake-grok answers its probes and plays every scenario", () => {
 
 test("fake-grok refuses a non-conforming launch", () => {
   const cases = [
-    ["explore without MCPTool deny", grokArgs().filter((a, i, all) => a !== "MCPTool(*)" && all[i + 1] !== "MCPTool(*)"), grokEnv()],
-    ["write recipe without the Bash denies", grokArgs({ write: true }).filter((a, i, all) => !a.startsWith("Bash(") && !all[i + 1]?.startsWith("Bash(")), grokEnv(true)],
+    ["plugin denylist", grokArgs().concat(["--deny", "MCPTool(*)"]), grokEnv()],
     ["review with --rules", grokArgs({ review: true }).concat(["--rules", contract]), grokEnv()],
     ["missing prompt file", grokArgs().map((a) => (a.includes("prompt-") ? path.join(dir, "nope.txt") : a)), grokEnv()],
-    ["compatEnv missing", grokArgs(), { ...grokEnv(), GROK_CLAUDE_MCPS_ENABLED: "1" }],
-    ["rules enabled on a read-only turn", grokArgs(), { ...grokEnv(), GROK_CLAUDE_RULES_ENABLED: "1" }],
+    ["recursion guard missing", grokArgs(), { ...grokEnv(), GROK_CLAUDE_HOOKS_ENABLED: "1" }],
     ["--add-dir", grokArgs().concat(["--add-dir", dir]), grokEnv()],
     ["effort max outside the error scenario", grokArgs({ effort: "max" }), grokEnv()],
     ["bare positional prompt", grokArgs().concat(["hello"]), grokEnv()],

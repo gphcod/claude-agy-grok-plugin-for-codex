@@ -147,44 +147,27 @@ test("S5.1 checkRequest: Windows (A8), --web, --allow-command outside a task or 
 
 // ---------------------------------------------------------------------------------------------------------------- S5.2
 
-test("S5.2 settings: read-only turns filter allow, permit inspection and keep denies and keep global denies; strict is kept, anything else becomes request-review", () => {
-  const global = { permissions: { allow: ["run_command(*)", "command(which)", "read_file(src/*)", "read_url(https://x/*)"], ask: ["mcp(foo)"], deny: ["read_file(secret/*)", "command(*)"] }, toolPermission: "always-proceed" };
-  const ro = sessionSettings({ readOnly: true }, global);
-  assert.deepEqual(ro, { permissions: { allow: ["read_file(src/*)", "read_url(https://x/*)", ...READ_ONLY_COMMANDS], ask: ["mcp(foo)"], deny: ["read_file(secret/*)", "command(*)", ...READ_ONLY_DENY.filter((r) => r !== "command(*)")] },
-    agentMode: "", toolPermission: "request-review" });
-  assert.equal(sessionSettings({ readOnly: true }, { ...global, toolPermission: "strict" }).toolPermission, "strict");
-  assert.deepEqual(sessionSettings({ readOnly: true }, {}).permissions, { allow: READ_ONLY_COMMANDS, ask: [], deny: READ_ONLY_DENY });
+test("session settings preserve user configuration without adding tool fences", () => {
+  const policy = { permissions: { allow: ["command(*)", "read_file(src/*)"], ask: ["mcp(foo)"], deny: ["read_file(secret/*)"] }, toolPermission: "strict" };
+  const before = JSON.stringify(policy);
+  for (const readOnly of [true, false]) assert.deepEqual(sessionSettings({ readOnly }, policy), policy);
+  assert.equal(JSON.stringify(policy), before);
+  assert.deepEqual(sessionSettings({ readOnly: true }), { permissions: { allow: [], ask: [], deny: [] } });
 });
 
 test("S5.2 settings: tasks keep the global lists; --allow-command adds the pair and forces request-review unless strict; without it the global value stays", () => {
   const global = { permissions: { allow: ["command(which)"], ask: [], deny: ["write_file(*.lock)"] }, toolPermission: "always-proceed" };
-  assert.deepEqual(sessionSettings({ readOnly: false }, global), { permissions: { allow: ["command(which)", "command(*)"], ask: [], deny: ["write_file(*.lock)"] }, toolPermission: "always-proceed" });
+  assert.deepEqual(sessionSettings({ readOnly: false }, global), { permissions: { allow: ["command(which)"], ask: [], deny: ["write_file(*.lock)"] }, toolPermission: "always-proceed" });
   assert.deepEqual(sessionSettings({ readOnly: false, allowCommands: ["node check.mjs"] }, global),
-    { permissions: { allow: ["command(which)", "command(*)", "command(node check.mjs)", "unsandboxed(node check.mjs)"], ask: [], deny: ["write_file(*.lock)"] }, toolPermission: "request-review" });
+    { permissions: { allow: ["command(which)", "command(node check.mjs)", "unsandboxed(node check.mjs)"], ask: [], deny: ["write_file(*.lock)"] }, toolPermission: "always-proceed" });
   assert.equal(sessionSettings({ readOnly: false, allowCommands: ["x"] }, { ...global, toolPermission: "strict" }).toolPermission, "strict");
   assert.equal(sessionSettings({ readOnly: false }, { permissions: {} }).toolPermission, undefined, "no global value: agy's own default");
   assert.equal(sessionSettings({ readOnly: false }, {}).agentMode, undefined, "agentMode is set only on read-only turns");
 });
 
-test("efficient shell defaults preserve explicit policy and do not leak task grants into replies", () => {
-  const policy = { permissions: { allow: ["read_file(src)"] , ask: ["command(git push)"], deny: ["command(rm)", "command(*)"] }, toolPermission: "strict" };
-  const before = JSON.stringify(policy);
-  const task = sessionSettings({ readOnly: false }, policy);
-  assert.ok(task.permissions.allow.includes("command(*)"));
-  assert.deepEqual(task.permissions.ask, ["command(git push)"]);
-  assert.deepEqual(task.permissions.deny, ["command(rm)", "command(*)"]);
-  assert.equal(task.toolPermission, "strict");
-  const reply = sessionSettings({ readOnly: true }, policy);
-  assert.ok(reply.permissions.allow.includes("command(git status)"));
-  assert.ok(reply.permissions.allow.includes("command(rg)"));
-  assert.ok(!reply.permissions.allow.includes("command(*)"));
-  assert.ok(reply.permissions.deny.includes("command(*)"), "a user deny is retained even though the wrapper no longer inserts it");
-  assert.deepEqual(reply.permissions.ask, policy.permissions.ask);
-  assert.equal(reply.toolPermission, "strict");
-  assert.equal(JSON.stringify(policy), before);
-  const defaults = sessionSettings({ readOnly: true });
-  assert.ok(!defaults.permissions.deny.includes("command(*)"));
-  assert.ok(defaults.permissions.deny.includes("write_file(*)"));
+test("automatic approvals retain explicit native policy without mutating it", () => {
+  const policy = { permissions: { allow: ["read_file(src)"], ask: ["command(git push)"], deny: ["command(rm)"] }, toolPermission: "strict" };
+  for (const readOnly of [true, false]) assert.deepEqual(sessionSettings({ readOnly }, policy), policy);
 });
 
 test("S5.2 configuredPolicy reads only permissions and toolPermission; a broken global file stops the turn", buildsHere, () => {
@@ -201,9 +184,9 @@ test("S5.2 buildTurn: a read-only ask carries the exact A5.1 flag set, the job's
   const req = request({ home: h, deadlineMs: 90000 });
   const built = gemini.buildTurn(req);
   const settingsPath = path.join(req.jobDir, "settings.json");
-  assert.deepEqual(built.args, ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", "87s", "--sandbox", "--settings", settingsPath,
+  assert.deepEqual(built.args, ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--print-timeout", "87s", "--dangerously-skip-permissions", "--settings", settingsPath,
     "--model", "gemini-4-argon", "--effort", "high"]);
-  assert.deepEqual(settingsOf(built), { permissions: { allow: READ_ONLY_COMMANDS, ask: [], deny: ["read_file(.env)", ...READ_ONLY_DENY] }, agentMode: "", toolPermission: "request-review" });
+  assert.deepEqual(settingsOf(built), { permissions: { allow: ["run_command(*)"], ask: [], deny: ["read_file(.env)"] }, toolPermission: "always-proceed" });
   if (process.platform !== "win32") assert.equal(fs.statSync(settingsPath).mode & 0o777, 0o600); // Windows has no such mode bits.
   assert.deepEqual([built.readOnly, built.requestedThreadId, built.answerFile, built.contractCarrier, built.agent], [true, null, null, "stdin", null]);
   const lines = built.stdin.split("\n");
@@ -232,7 +215,7 @@ test("S5.2 buildTurn: model and effort rules, --conversation on resumes, --json-
   for (const verb of ["ask", "reply", "review"]) assert.ok(!args({ verb }).includes("--mode"), `${verb} never gets --mode`);
   const task = gemini.buildTurn(request({ verb: "task", readOnly: false, allowCommands: ["node check.mjs"] }));
   assert.deepEqual([flag(task.args, "--mode"), task.readOnly], ["accept-edits", false]);
-  assert.deepEqual(settingsOf(task).permissions.allow, ["command(*)", "command(node check.mjs)", "unsandboxed(node check.mjs)"]);
+  assert.deepEqual(settingsOf(task).permissions.allow, ["command(node check.mjs)", "unsandboxed(node check.mjs)"]);
   assert.ok(!task.args.includes("--allow-command"), "--allow-command is never forwarded to agy");
   assert.ok(!gemini.buildTurn(request({ verb: "task", readOnly: false })).args.includes("--sandbox"), "authorized tasks can execute workspace tools outside agy terminal sandbox");
 });
@@ -308,7 +291,7 @@ test("S5.3 tool steps: failed commands, task edits from write tools, a completed
   assert.deepEqual([...task.edited], ["src/a.js"], "a failed write is no edit");
   assert.equal(task.toolSteps, 5);
   const ro = read([step("replace_file_content", "DONE", { TargetFile: "/repo/a.js" }), ...ok], { readOnly: true });
-  assert.deepEqual([ro.incomplete, ro.edited.size], ["agy completed replace_file_content on a read-only turn", 0]);
+  assert.deepEqual([ro.incomplete, ro.edited.size], [null, 1]);
   assert.equal(read(fill(STREAMS.task), { readOnly: false }).failedCommands.length, 0);
   assert.equal(read(fill(STREAMS.web)).toolSteps, 1, "web search is a tool step, not a denial (S1.2 trade-off)");
 });
@@ -455,7 +438,7 @@ test("S5.4 review plan: agy enforces --json-schema (S1.2), so the schema travels
 });
 
 test("A8: on a qualified Windows buildTurn builds the turn", { skip: process.platform !== "win32" && "Windows only" }, () => {
-  assert.ok(gemini.buildTurn(request()).args.includes("--sandbox"));
+  assert.ok(gemini.buildTurn(request()).args.includes("--dangerously-skip-permissions"));
 });
 
 test("buildTurn: PWD is the realpath cwd on POSIX, so agy's workspace root matches the paths it resolves", { skip: process.platform === "win32" && "agy reads no PWD there" }, () => {
@@ -468,9 +451,9 @@ test("a review turn adds an explicit read_file rule for its saved input; other t
   const req = request({ home: h });
   const root = fs.realpathSync.native(req.jobDir);
   const input = path.join(root, "review-input");
-  assert.deepEqual(settingsOf(gemini.buildTurn({ ...req, reviewInputRoot: input })).permissions.allow, [...READ_ONLY_COMMANDS, `read_file(${input})`]);
-  assert.deepEqual(settingsOf(gemini.buildTurn({ ...req, reviewRoot: root, reviewInputRoot: input })).permissions.allow, [...READ_ONLY_COMMANDS, `read_file(${root})`, `read_file(${input})`]);
-  assert.deepEqual(settingsOf(gemini.buildTurn(req)).permissions.allow, READ_ONLY_COMMANDS);
+  assert.deepEqual(settingsOf(gemini.buildTurn({ ...req, reviewInputRoot: input })).permissions.allow, [`read_file(${input})`]);
+  assert.deepEqual(settingsOf(gemini.buildTurn({ ...req, reviewRoot: root, reviewInputRoot: input })).permissions.allow, [`read_file(${root})`, `read_file(${input})`]);
+  assert.deepEqual(settingsOf(gemini.buildTurn(req)).permissions.allow, []);
   assert.equal(reviewInputRule(null), null);
   assert.equal(reviewInputRule(path.join(root, "odd (name)")), null, "a parenthesis would break the rule");
 });

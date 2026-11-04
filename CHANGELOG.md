@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.9 — 2026-11-04
+
+- Enforce efficiency first: delegated agents receive native tools and automatic approvals, including reads across repositories named in the request.
+- Express advice/review versus task scope in turn instructions; remove plugin tool denylists and command/directory fences. Preserve stored native settings and report actual provider failures.
+- Inherit configured integrations, upgrade legacy Grok explore sessions on resume, and retain request deduplication, deadlines and owned-process cleanup.
+- Verify cross-repository reads and fresh/resumed launch behavior; record evidence in `docs/qualification/agent-access-2026-11-04.md`.
+
 ## 1.1.8 — 2026-11-04
 
 - Pin the Claude deep tier to `claude-opus-5-5 / xhigh`, so it does not inherit the CLI default model.

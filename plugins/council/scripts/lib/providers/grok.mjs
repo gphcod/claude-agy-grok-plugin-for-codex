@@ -22,65 +22,28 @@ export const LINE_CAP = 1024 * 1024;
 const PATH_CAP = 10000;
 
 // ---- lib/recipes.mjs (grok_plugin_for_codex 1.1.0), ported whole ----
-// Grok argv per access mode. The read-only guard itself is parseEvent's check of the advertised catalogue against
-// FORBIDDEN; these flags only shape it.
-export const HOSTILE = ["Agent", "ask_user_question", "enter_plan_mode", "exit_plan_mode", "image_gen", "image_edit", "image_to_video", "reference_to_video"];
-// search_tool and use_tool are the default agent's way to MCP and other deferred tools.
-export const FORBIDDEN = ["search_replace", "write", "run_terminal_command", "spawn_subagent", "search_tool", "use_tool"];
-// For a session that has run the default agent (it has written): the verified read-only denylist. Grok 1.0.70 at
-// grok-4.6 also accepted --agent explore there; other versions were not run, so this stays.
-// Grok removes the shell only by its flag id, run_terminal_cmd; its event name is listed too.
-export const RESUME_DENY = [
-  "search_replace",
-  "write",
-  "run_terminal_cmd", "run_terminal_command",
-  "search_tool",
-  "use_tool",
-  "todo_write",
-  "monitor",
-  "workflow",
-  "scheduler_create",
-  "scheduler_delete",
-  "scheduler_list",
-  "send_feedback",
-  ...HOSTILE,
-];
-// Read-only turns also deny every MCP tool; parseEvent's guard stays the check.
-const NO_MCP = ["--deny", "MCPTool(*)"];
+// The verb defines scope in the prompt. Native tools remain available so a
+// good-faith reviewer can inspect other repositories and use ordinary commands.
+export const HOSTILE = [];
+export const FORBIDDEN = [];
+export const RESUME_DENY = [];
 
-/** `agent` is the Grok agent the turn runs; the job and thread record keep it so later turns on the session follow it. */
-export function recipe(kind, { web = false, defaultAgent = false } = {}) {
-  const common = ["--always-approve", "--no-subagents", ...(web ? [] : ["--disable-web-search"]), "--disallowed-tools"];
-  if (kind === "read-only") {
-    if (defaultAgent) return { readOnly: true, agent: "default", args: [...common, RESUME_DENY.join(","), ...NO_MCP], forbidden: FORBIDDEN };
-    return { readOnly: true, agent: "explore", args: ["--agent", "explore", ...common, HOSTILE.join(","), ...NO_MCP], forbidden: FORBIDDEN };
-  }
-  if (kind === "write") {
-    return { readOnly: false, agent: "default", args: [...common, HOSTILE.join(","), "--deny", "Bash(git push*)", "--deny", "Bash(rm -rf *)"], forbidden: [] };
-  }
-  throw new Error(`unknown recipe ${kind}`);
+export function recipe(kind, { web = false, legacyExplore = false } = {}) {
+  if (kind !== "read-only" && kind !== "write") throw new Error(`unknown recipe ${kind}`);
+  return { readOnly: kind === "read-only", agent: "default", forbidden: [],
+    args: [...(legacyExplore ? ["--agent", "default"] : []), "--always-approve"] };
 }
 
-/**
- * Child environment. Claude skills, agents, hooks and MCP stay off inside Grok (hook recursion); read-only turns also
- * skip Claude's rules directories; a task drops an inherited disabled setting so Grok's default applies. The guard
- * variables Grok's own plugins read (GROK_CODEX_DEPTH, GROK_BUILD_DEPTH) and COUNCIL_DEPTH are set here; the core adds
- * all of them (A5.1).
- */
+/** Child environment: prevent updater and hook recursion; inherit native integrations. */
 export function compatEnv(base, readOnly) {
   const env = {
     ...base,
     GROK_DISABLE_AUTOUPDATER: "1",
-    GROK_CLAUDE_SKILLS_ENABLED: "0",
-    GROK_CLAUDE_AGENTS_ENABLED: "0",
     GROK_CLAUDE_HOOKS_ENABLED: "0",
-    GROK_CLAUDE_MCPS_ENABLED: "0",
     GROK_CODEX_DEPTH: "1",
     GROK_BUILD_DEPTH: "1",
     COUNCIL_DEPTH: "1",
   };
-  if (readOnly) env.GROK_CLAUDE_RULES_ENABLED = "0";
-  else delete env.GROK_CLAUDE_RULES_ENABLED;
   return env;
 }
 
@@ -123,8 +86,6 @@ export const NORMAL_STOPS = new Set(["end_turn"]);
 export const PERMISSION_STOP = "Grok cancelled the turn (a tool needed permission headless Grok cannot ask for)";
 /** The footer hint for an end event that names no session (review Q3 ruling): the answer stands, the thread cannot be resumed. */
 export const UNCONFIRMED = "session not confirmed: start a new ask";
-// Grok names MCP tools server__tool; a read-only turn that calls one fails.
-const MCP_TOOL = /__/;
 const nameOf = (ev) => ev.toolName ?? ev.tool_name ?? ev.name ?? ev.tool?.name ?? null;
 const inputOf = (ev) => ev.rawInput ?? ev.input ?? ev.tool?.input ?? {};
 const str = (v) => (typeof v === "string" && v ? v : null);
@@ -137,7 +98,7 @@ const textOf = (ev) => (typeof ev.data === "string" ? ev.data : typeof ev.text =
 const toolName = (entry) => (typeof entry === "string" ? entry : entry?.name);
 const describeEvent = (ev) => { const tool = ev?.type === "tool_call" ? nameOf(ev) : null; return tool ? `${ev.type}:${tool}` : ev?.type ?? null; };
 
-/** The per-turn scratch: the lifecycle seeds `readOnly` and `agent`; a missing mode is read-only (fail closed). */
+/** Per-turn bookkeeping for observed tool calls. */
 function scratch(state) {
   const s = state.adapter ??= {};
   s.calls ??= new Map();
@@ -221,8 +182,8 @@ export default {
   },
   buildTurn(request) {
     const readOnly = request.readOnly !== false && request.verb !== "task";
-    // Grok keeps a session's agent: once a session ran the default agent (a task), later read-only turns on it use RESUME_DENY.
-    const plan = recipe(readOnly ? "read-only" : "write", { web: Boolean(request.web), defaultAgent: readOnly && request.resume && request.agent === "default" });
+    // Upgrade legacy explore sessions to the default native agent on resume.
+    const plan = recipe(readOnly ? "read-only" : "write", { web: Boolean(request.web), legacyExplore: request.resume && request.agent !== "default" });
     const thread = request.resume ? request.threadId : randomUUID();
     const session = request.resume ? ["-r", thread] : ["--session-id", thread];
     const promptFile = path.join(request.jobDir, "prompt.md");
@@ -242,7 +203,6 @@ export default {
     try { ev = JSON.parse(line); } catch { return null; } // GROKX: a non-JSON line is not an event
     if (typeof ev?.type !== "string") return null;
     const s = scratch(state);
-    const readOnly = s.readOnly !== false;
     const describe = describeEvent(ev);
     switch (ev.type) {
       case "available_commands": {
@@ -252,13 +212,10 @@ export default {
         const names = ev.tools.map(toolName);
         if (names.some((n) => typeof n !== "string" || !n)) return { fatal: "malformed tool catalogue entry" };
         s.toolChecked = true;
-        const bad = readOnly ? names.filter((n) => FORBIDDEN.includes(n)) : [];
-        return bad.length ? { fatal: `read-only tool guard failed: ${bad.join(", ")}` } : { describe };
+        return { describe };
       }
       case "tool_call": {
-        if (readOnly && !s.toolChecked) return { fatal: "Grok used a tool before the read-only tool list was validated" };
         const name = nameOf(ev);
-        if (readOnly && typeof name === "string" && (FORBIDDEN.includes(name) || MCP_TOOL.test(name))) return { fatal: `read-only tool guard failed: Grok called ${name}` };
         if (s.calls.size >= PATH_CAP) return { fatal: "too many open tool calls in event stream" };
         s.calls.set(idOf(ev), { name, path: inputPath(ev) });
         return { toolStep: name ?? "tool", describe };
@@ -267,6 +224,14 @@ export default {
         const id = idOf(ev);
         const call = s.calls.get(id);
         if (call && !call.path && EDIT_TOOLS.has(call.name)) call.path = updatePath(ev);
+        if (ev.status === "failed") {
+          const reason = (typeof ev.content === "string" ? ev.content : Array.isArray(ev.content)
+            ? ev.content.map((part) => part?.text ?? "").join(" ") : "").slice(0, 2000);
+          if (/permission denied|not (?:available|allowed)|approval required|user.configured deny/i.test(reason)) {
+            s.calls.delete(id);
+            return { denied: { tool: call?.name ?? "tool", reason }, describe };
+          }
+        }
         const edited = ev.status === "completed" && EDIT_TOOLS.has(call?.name) && call.path ? call.path : null;
         // A status of null (or none) is a progress update; only a named status other than these ends the call.
         if (typeof ev.status === "string" && ev.status !== "pending" && ev.status !== "in_progress") s.calls.delete(id);
@@ -277,7 +242,6 @@ export default {
         return data ? { textDelta: data, describe } : { describe };
       }
       case "end": {
-        if (readOnly && !s.toolChecked) return { fatal: "Grok ended before the read-only tool list was validated" };
         const returned = ev.sessionId ?? ev.session_id ?? null;
         // A different session id fails in the core reader; a non-string one is refused here.
         if (returned !== null && (typeof returned !== "string" || !returned)) return { fatal: `Grok answered on session ${JSON.stringify(returned)}` };

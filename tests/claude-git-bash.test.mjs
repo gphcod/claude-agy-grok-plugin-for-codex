@@ -47,10 +47,10 @@ test("a normal Windows PATH, a set value, a missing bash.exe, no git and other p
 const request = (env, extra = {}) => ({ verb: "ask", prompt: "q", instructions: "ADVICE", contractPath: path.join(PLUGIN_ROOT, "contract.md"), model: null, effort: "low", resume: false, threadId: null, env,
   schemaPath: null, structured: false, web: false, maxTurns: null, maxBudgetUsd: null, policy: { readRoots: [], web: false, allowMcp: false }, ...extra });
 
-test("only a task's child gets the variable; every other verb's environment is unchanged", () => {
+test("every delegated turn can use the native Git Bash shell", () => {
   const l = layout([path.join("mingw64", "bin")]);
   try {
-    for (const verb of ["ask", "reply", "review"]) assert.equal(adapter.buildTurn(request(l.env, { verb, ...(verb === "reply" ? { resume: true, threadId: UUID } : {}) })).env.CLAUDE_CODE_GIT_BASH_PATH, undefined, verb);
+    for (const verb of ["ask", "reply", "review"]) assert.equal(adapter.buildTurn(request(l.env, { verb, ...(verb === "reply" ? { resume: true, threadId: UUID } : {}) })).env.CLAUDE_CODE_GIT_BASH_PATH, process.platform === "win32" ? l.bash : undefined, verb);
     const task = adapter.buildTurn(request(l.env, { verb: "task" })).env.CLAUDE_CODE_GIT_BASH_PATH;
     assert.equal(task, process.platform === "win32" ? l.bash : undefined);
   } finally { l.done(); }
@@ -60,7 +60,7 @@ function play(events, readOnly = false) {
   let text = "";
   const reader = createReader(adapter, { cwd: "/scratch/repo", expectedThreadId: UUID, onText: (t) => { text += t; } });
   Object.assign(reader.state.adapter, { readOnly, agent: null });
-  for (const e of events) reader.feed(`${JSON.stringify(e).replaceAll("<SESSION>", UUID).replaceAll("<SCRATCH>", "/scratch")}\n`);
+  for (const e of events) reader.feed(`${JSON.stringify(e.type === "system" && e.subtype === "init" ? { ...e, permissionMode: "bypassPermissions" } : e).replaceAll("<SESSION>", UUID).replaceAll("<SCRATCH>", "/scratch")}\n`);
   reader.end();
   return { ...reader.state, text };
 }

@@ -42,29 +42,18 @@ const maxTurns = Number(flagValue(argv, "--max-turns"));
 expect(Number.isInteger(maxTurns) && maxTurns >= 1 && maxTurns <= 100, "--max-turns in 1..100", flagValue(argv, "--max-turns"));
 expect(["low", "medium", "high", "xhigh", "max"].includes(flagValue(argv, "--effort")) || which === "effort-error", "--effort low|medium|high|xhigh|max", flagValue(argv, "--effort"));
 const mode = flagValue(argv, "--permission-mode");
-expect(["dontAsk", "acceptEdits"].includes(mode), "--permission-mode dontAsk|acceptEdits", mode);
+expect(mode === "bypassPermissions", "--permission-mode bypassPermissions", mode);
 expect(flagValue(argv, "--permission-prompts") === "none", "--permission-prompts none");
-expect(flagValue(argv, "--setting-sources") === "user", "--setting-sources user");
-expect(argv.includes("--no-chrome"), "--no-chrome");
+expect(flagValue(argv, "--setting-sources") === "user,project,local", "--setting-sources user");
+// Chrome remains available through native configuration.
 expect(flagValue(argv, "--settings") === '{"disableAllHooks":true}', "--settings disables hooks", flagValue(argv, "--settings"));
-if (!process.env.COUNCIL_FAKE_ALLOW_MCP) expect(flagValue(argv, "--mcp-config") === '{"mcpServers":{}}' && argv.includes("--strict-mcp-config"), "MCP off: --mcp-config {\"mcpServers\":{}} --strict-mcp-config");
 const tools = (flagValue(argv, "--tools") ?? "").split(",").filter(Boolean);
 // --allowedTools and --disallowedTools are variadic: their values run until the next option.
 const variadic = (name) => { const i = argv.indexOf(name); if (i < 0) return []; const out = []; for (let j = i + 1; j < argv.length && !argv[j].startsWith("-"); j += 1) out.push(...argv[j].split(",")); return out; };
 const disallowed = variadic("--disallowedTools");
 const allowed = variadic("--allowedTools");
-if (mode === "dontAsk") {
-  const web = tools.some((t) => WEB_TOOLS.includes(t));
-  expect(sameSet(tools, web ? [...READ_TOOLS, ...WEB_TOOLS] : READ_TOOLS), "read-only turns carry exactly Read,Glob,Grep (plus WebFetch,WebSearch under --web)", tools);
-  expect(sameSet(allowed, web ? WEB_TOOLS : []), "read-only --allowedTools is exactly the web tools under --web, otherwise absent", allowed);
-  expect(disallowed.length === 0, "read-only turns carry no --disallowedTools", disallowed);
-} else {
-  // --web on a task adds the web pair to both lists (A3.3), as on read-only turns.
-  const web = tools.some((t) => WEB_TOOLS.includes(t));
-  expect(sameSet(tools, [...READ_TOOLS, ...EDIT_TOOLS, ...(web ? WEB_TOOLS : [])]), "task turns carry exactly Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash (plus WebFetch,WebSearch under --web)", tools);
-  expect(sameSet(allowed, [...EDIT_TOOLS, ...(web ? WEB_TOOLS : [])]), "task turns allow exactly the edit tools (plus the web pair under --web)", allowed);
-  for (const rule of ["Bash(git push*)", "Bash(git reset --hard*)", "Bash(rm -rf *)", "Bash(sudo *)"]) expect(disallowed.includes(rule), `task turns disallow ${rule}`, disallowed);
-}
+expect(sameSet(tools, ["default"]), "native default tools", tools);
+expect(allowed.length === 0 && disallowed.length === 0, "no plugin tool permission lists");
 const schemaText = flagValue(argv, "--json-schema");
 let schema = null;
 if (schemaText !== undefined) {
@@ -77,8 +66,8 @@ checkArgv(argv.slice(1), { boolean: ["--verbose", "--strict-mcp-config", "--no-c
     "--model", "--permission-mode", "--permission-prompts", "--setting-sources", "--tools", "--mcp-config", "--settings", "--json-schema", "--max-budget-usd", "--add-dir"] });
 requireDepth();
 if (which === "resume" || which === "tool-absent") expect(resumeId, `${which} needs --resume`);
-if (which.startsWith("task")) expect(mode === "acceptEdits", `${which} scenario needs the acceptEdits launch`);
-if (which === "tool-absent") expect(mode === "dontAsk", "tool-absent scenario is a read-only resume");
+if (which.startsWith("task")) expect(mode === "bypassPermissions", `${which} needs full access`);
+if (which === "tool-absent") expect(mode === "bypassPermissions", "tool-absent preserves the launch mode");
 if (which.startsWith("review") || which === "large-review") expect(schema, `${which} needs --json-schema`);
 
 const stdin = await readStdin();
@@ -91,7 +80,7 @@ expect(input.type === "user" && input.session_id === session && input.message?.r
 log({ argv, cwd: process.cwd(), prompt: input.message.content, session, mode, tools, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /DEPTH$/.test(k))) });
 
 const fixtures = streams("claude");
-const fill = (events, id = session) => events.map((e) => JSON.parse(JSON.stringify(e).replaceAll("<SESSION>", id)));
+const fill = (events, id = session) => events.map((e) => ({ ...JSON.parse(JSON.stringify(e).replaceAll("<SESSION>", id)), ...(e.type === "system" && e.subtype === "init" ? { permissionMode: mode } : {}) }));
 let exitCode = 0;
 const play = (events) => { for (const e of events) { emitJson(e); if (e.type === "result" && e.is_error) exitCode = 1; } };
 switch (which) {

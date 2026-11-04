@@ -31,7 +31,7 @@ test("ask: a new read-only thread with the advice instructions, the text as prom
   assert.equal(r.deadlineMs, 14400 * 1000, "the default execution deadline reaches the adapter (agy --print-timeout, A3.3)");
   assert.equal(r.cwd, fs.realpathSync(w.workspace));
   assert.equal(path.dirname(r.jobDir), path.join(fs.realpathSync(w.home), "jobs"));
-  assert.deepEqual([r.policy.web, r.policy.allowMcp, r.policy.readRoots], [false, false, []]);
+  assert.deepEqual([r.policy.web, r.policy.allowMcp, r.policy.readRoots], [false, true, []]);
   assert.ok(r.envKeys > 0);
   for (const name of DEPTH_VARIABLES) assert.equal(w.fakeCalls().at(-1).depth[name], "1", `the entry adds ${name} to the adapter's environment`);
 });

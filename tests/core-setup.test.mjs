@@ -47,9 +47,9 @@ test("setup --set stores a validated policy under the state root; a bad policy e
   fs.writeFileSync(file, JSON.stringify({ readRoots: [w.dir], web: true }));
   const r = w.call(["setup", "--to", "null", "--set", file]);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /^policy [0-9a-f]{16} stored: read roots 1, web true, MCP false\n/);
+  assert.match(r.stdout, /^policy [0-9a-f]{16} stored: read roots 1, web true, MCP true\n/);
   const stored = JSON.parse(fs.readFileSync(path.join(w.home, "policy.json"), "utf8"));
-  assert.deepEqual([stored.readRoots, stored.web, stored.allowMcp], [[fs.realpathSync(w.dir)], true, false]);
+  assert.deepEqual([stored.readRoots, stored.web, stored.allowMcp], [[fs.realpathSync(w.dir)], true, true]);
   fs.writeFileSync(file, JSON.stringify({ hooks: true }));
   assert.equal(w.call(["setup", "--set", file]).status, 1, "an unknown policy field is refused");
   assert.equal(w.call(["setup", "--set", path.join(w.dir, "missing.json")]).status, 2);

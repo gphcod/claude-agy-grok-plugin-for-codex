@@ -34,18 +34,18 @@ test("ask: explore recipe, prompt file with the advice instructions, --rules con
   assert.match(footerOf(r.stdout), /^council grok ok · job [a-z0-9]{16} · grok-4\.7\/low · \d+s · round 1\/9$/);
   const call = w.launches().at(-1);
   assert.equal(w.mismatches().length, 0);
-  assert.deepEqual([call.agent, call.readOnly, call.web], ["explore", true, false]);
+  assert.deepEqual([call.agent, call.readOnly, call.web], ["default", true, true]);
   assert.equal(flag(call.argv, "--rules"), CONTRACT_LINE);
   assert.equal(flag(call.argv, "--model"), "grok-4.7");
-  assert.ok(call.argv.includes("--no-auto-update") && call.argv.includes("--disable-web-search"));
-  assert.equal(flag(call.argv, "--disallowed-tools"), HOSTILE.join(","));
+  assert.ok(call.argv.includes("--no-auto-update") && !call.argv.includes("--disable-web-search"));
+  assert.equal(flag(call.argv, "--disallowed-tools"), undefined);
   assert.match(flag(call.argv, "--session-id"), UUID);
   assert.equal(call.argv.includes("-r"), false);
   assert.match(call.prompt, /^Instructions for this turn \(advice, read-only\)[\s\S]*\n\nReply with pong$/);
-  assert.equal(call.env.GROK_CLAUDE_RULES_ENABLED, "0");
+  assert.equal(call.env.GROK_CLAUDE_RULES_ENABLED, undefined);
   for (const name of ["COUNCIL_DEPTH", "CLAUDE_PLUGIN_CODEX_DEPTH", "GROK_CODEX_DEPTH", "GROK_BUILD_DEPTH", "AGY_BRIDGE_DEPTH"]) assert.equal(call.env[name], "1", name);
   const job = w.job(jobIdOf(r.stderr));
-  assert.deepEqual([job.threadId, job.agent, job.model, job.cost], [flag(call.argv, "--session-id"), "explore", "grok-4.7", 0.016236]);
+  assert.deepEqual([job.threadId, job.agent, job.model, job.cost], [flag(call.argv, "--session-id"), "default", "grok-4.7", 0.016236]);
   assert.equal(job.modelObserved, undefined, "end.modelUsage's grok-4.7-build is never reported as the model");
   assert.equal(job.promptFile, flag(call.argv, "--prompt-file"));
 });
@@ -60,7 +60,7 @@ test("ask → task --thread → reply → task --thread: -r on the session, the 
   assert.equal(task.status, 0, task.stdout + task.stderr);
   let call = w.launches().at(-1);
   assert.deepEqual([flag(call.argv, "-r"), call.agent, call.readOnly, call.argv.includes("--agent")], [session, "default", false, false]);
-  assert.ok(call.argv.includes("Bash(git push*)") && call.argv.includes("Bash(rm -rf *)"));
+  assert.ok(!call.argv.includes("--deny"));
   assert.equal(flag(call.argv, "--model"), "grok-4.7", "task --thread inherits the thread's model");
   assert.match(call.prompt, /^Instructions for this turn \(task: edits are authorized/);
   assert.equal(call.env.GROK_CLAUDE_RULES_ENABLED, undefined);
@@ -70,8 +70,8 @@ test("ask → task --thread → reply → task --thread: -r on the session, the 
   assert.equal(reply.status, 0, reply.stdout + reply.stderr);
   call = w.launches().at(-1);
   assert.deepEqual([flag(call.argv, "-r"), call.agent, call.readOnly, call.argv.includes("--agent")], [session, "default", true, false]);
-  assert.equal(flag(call.argv, "--disallowed-tools"), RESUME_DENY.join(","), "a read-only turn on a default-agent session uses RESUME_DENY");
-  assert.equal(flag(call.argv, "--deny"), "MCPTool(*)");
+  assert.equal(flag(call.argv, "--disallowed-tools"), undefined, "a read-only turn on a default-agent session uses RESUME_DENY");
+  assert.equal(flag(call.argv, "--deny"), undefined);
   assert.equal(w.job(jobIdOf(reply.stderr)).agent, "default");
   const again = w.grok(["task", "--to", "grok", "--thread", session, "--", "more"], { scenario: "resume" });
   assert.equal(again.status, 0, again.stderr);
@@ -86,7 +86,7 @@ test("a read-only reply on an explore session stays on explore; a fresh task sta
   const w = world();
   const ask = w.grok(["ask", "--to", "grok", "--", "q"]);
   w.grok(["reply", jobIdOf(ask.stderr), "--", "r"], { scenario: "resume" });
-  assert.deepEqual([w.launches().at(-1).agent, flag(w.launches().at(-1).argv, "--agent")], ["explore", "explore"]);
+  assert.deepEqual([w.launches().at(-1).agent, flag(w.launches().at(-1).argv, "--agent")], ["default", undefined]);
   const task = w.grok(["task", "--to", "grok", "--", "do it"]);
   assert.equal(task.status, 0, task.stderr);
   const call = w.launches().at(-1);
@@ -94,14 +94,12 @@ test("a read-only reply on an explore session stays on explore; a fresh task sta
   assert.match(flag(call.argv, "--session-id"), UUID);
 });
 
-test("a forbidden tool advertised on a read-only turn fails closed (exit 1) before any text", () => {
+test("native tool availability does not block advice", () => {
   const w = world();
   const r = w.grok(["ask", "--to", "grok", "--", "q"], { scenario: "denied" });
   assert.equal(r.status, 1, r.stdout);
-  assert.doesNotMatch(r.stdout, /should never be read/);
-  assert.match(footerOf(r.stdout), /^council grok failed · .* · error: read-only tool guard failed: search_replace, write, run_terminal_command/);
-  const answer = path.join(w.home, "jobs", jobIdOf(r.stderr), "answer.md");
-  assert.equal(fs.existsSync(answer) ? fs.readFileSync(answer, "utf8") : "", "");
+  assert.match(r.stdout, /ended without completing the turn/);
+  assert.doesNotMatch(r.stdout, /read-only tool guard failed/);
 });
 
 test("--web omits --disable-web-search and persists on the thread", () => {
@@ -202,7 +200,7 @@ test("review: explore, inline --json-schema equal to the repository schema, no -
   const call = w.launches().at(-1);
   assert.deepEqual(JSON.parse(flag(call.argv, "--json-schema")), SCHEMA);
   assert.equal(call.argv.includes("--rules"), false);
-  assert.deepEqual([call.agent, call.readOnly], ["explore", true]);
+  assert.deepEqual([call.agent, call.readOnly], ["default", true]);
   assert.match(call.prompt, /^Instructions for this turn \(structured code review, read-only\)/);
   assert.match(call.prompt, /\+# changed/);
   assert.equal(call.cwd, fs.realpathSync(w.workspace));

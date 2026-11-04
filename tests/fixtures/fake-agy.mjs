@@ -25,9 +25,9 @@ if (argv[0] === "models") { log({ probe: "models", argv }); process.stdout.write
 expect(flagValue(argv, "--input-format") === "stream-json" && flagValue(argv, "--output-format") === "stream-json", "stream-json in and out");
 expect(argv.includes("--disable-slash-commands"), "--disable-slash-commands");
 expect(/^\d+(\.\d+)?s$/.test(flagValue(argv, "--print-timeout") ?? ""), "--print-timeout <n>s", flagValue(argv, "--print-timeout"));
-expect(argv.includes("--sandbox") === (flagValue(argv, "--mode") !== "accept-edits"), "--sandbox only on inspection turns");
+expect(!argv.includes("--sandbox"), "no plugin sandbox");
 expect(!argv.includes("--allow-command"), "--allow-command is a council flag, never forwarded to agy");
-expect(!argv.includes("--dangerously-skip-permissions"), "never --dangerously-skip-permissions");
+expect(argv.includes("--dangerously-skip-permissions"), "automatic permission approval");
 const settingsPath = flagValue(argv, "--settings");
 expect(fileExists(settingsPath), "--settings names an existing file", settingsPath);
 let settings;
@@ -35,16 +35,6 @@ try { settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")); } catch { mi
 const edit = flagValue(argv, "--mode") === "accept-edits";
 expect(flagValue(argv, "--mode") === undefined || edit, "--mode is accept-edits or absent", flagValue(argv, "--mode"));
 const deny = settings.permissions?.deny ?? [], allow = settings.permissions?.allow ?? [];
-if (!edit) {
-  for (const rule of READ_ONLY_DENY) expect(deny.includes(rule), `read-only settings deny ${rule}`, deny);
-  expect(allow.every((r) => /^(read_file|read_url)\(.*\)$/.test(r) || /^command\((git (status|diff|log|show|blame|grep|rev-parse|ls-files)|ls|pwd|cat|head|tail|wc|grep|rg|find)\)$/.test(r)), "read-only allow list holds reads and inspection commands", allow);
-  expect(settings.agentMode === "" && ["strict", "request-review"].includes(settings.toolPermission), "read-only settings: agentMode \"\" and toolPermission strict|request-review", settings);
-} else {
-  // Tasks keep the user's global lists (a global write_file(*)/edit_file(*) deny stays and the scenario carries the
-  // denial). A task with --allow-command (the command(X)/unsandboxed(X) pair) must run under request-review or strict.
-  const pair = allow.some((r) => /^unsandboxed\(.+\)$/.test(r));
-  if (pair) expect(["request-review", "strict"].includes(settings.toolPermission), "a task with an allow pair sets toolPermission request-review (or keeps strict)", settings.toolPermission);
-}
 const model = flagValue(argv, "--model");
 expect(model, "--model is required");
 const suffix = /-(low|medium|high)$/.exec(model)?.[1];
@@ -62,7 +52,7 @@ if (schemaPath !== undefined) {
 }
 if (which.startsWith("review") || which === "large-review") expect(schemaPath, `${which} needs --json-schema`);
 if (which === "task") expect(edit, "task scenario needs --mode accept-edits");
-checkArgv(argv, { boolean: ["--sandbox", "--disable-slash-commands"],
+checkArgv(argv, { boolean: ["--sandbox", "--disable-slash-commands", "--dangerously-skip-permissions"],
   value: ["--input-format", "--output-format", "--print-timeout", "--settings", "--mode", "--model", "--effort", "--conversation", "--json-schema", "--add-dir"] });
 requireDepth();
 

@@ -37,7 +37,7 @@ test("the four prompt templates and the standing contract exist; every template 
   assert.match(contract, /^<council_contract version="1">/);
   assert.match(contract, /arrive with the input; follow them for that turn only/, "the standing contract is mode-neutral: per-turn instructions travel in the input");
   for (const text of [contract, loadTemplate("advice"), loadTemplate("task")]) assert.doesNotMatch(text, /\{\{/);
-  assert.match(loadTemplate("task"), /Never run `git push`, `git reset --hard`, `rm -rf`/);
+  assert.match(loadTemplate("task"), /Complete the requested work within its authorized scope/);
   for (const name of ["review", "adversarial-review"]) {
     const placeholders = [...loadTemplate(name).matchAll(/\{\{([A-Z_]+)\}\}/g)].map((m) => m[1]).sort();
     assert.deepEqual(placeholders, ["PRIOR_FINDINGS", "REVIEW_INPUT", "SCHEMA", "TARGET_LABEL", "UNSUPPORTED", "USER_FOCUS"], name);

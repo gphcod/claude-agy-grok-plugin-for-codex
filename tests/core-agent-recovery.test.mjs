@@ -42,7 +42,7 @@ async function replyArgs(w, options, jobId = null, plan = null) {
 }
 function assertDefaultAgent(args, why) {
   assert.equal(args.includes("--agent"), false, `${why}: explore is not requested of a session that ran the default agent`);
-  assert.equal(args[args.indexOf("--disallowed-tools") + 1], RESUME_DENY.join(","), why);
+  assert.equal(args.includes("--disallowed-tools"), false, why);
 }
 
 test("the window: recovered and then pruned, a reply by native id stays on the default agent", async () => {
@@ -193,11 +193,11 @@ test("a delayed second canceller cannot regress the record, whichever job it hol
   }
 });
 
-test("reading a thread writes nothing, and a healthy explore thread stays on explore", async () => {
+test("reading a thread writes nothing, and a legacy explore thread upgrades to default on its next launch", async () => {
   const w = world();
   record(w);
   const args = await replyArgs(w, { thread: THREAD, to: "grok" });
-  assert.equal(args[args.indexOf("--agent") + 1], "explore");
+  assert.equal(args[args.indexOf("--agent") + 1], "default");
   assert.equal(fs.existsSync(marker(w)), false);
 });
 

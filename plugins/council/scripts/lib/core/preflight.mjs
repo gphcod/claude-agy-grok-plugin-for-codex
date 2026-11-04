@@ -168,7 +168,7 @@ export async function runPreflight({ home, provider, launcher, descriptors, env 
 }
 
 // Policy (A3.2 `setup --set`): the Claude policy (read roots, web, MCP) stored under the state root as policy.json.
-export const defaultPolicy = () => ({ version: "default-v1", readRoots: [], web: false, allowMcp: false });
+export const defaultPolicy = () => ({ version: "default-v1", readRoots: [], web: false, allowMcp: true });
 export const policyFile = (home) => path.join(home, "policy.json");
 export function getPolicy(home) {
   const stored = readJson(policyFile(home));
